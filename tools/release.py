@@ -188,7 +188,9 @@ def write_manifest(setup: Path, url: str, notes: str, key,
 def cmd_publish(args) -> None:
     repo = _repo_from_config()
     key = _load_key()
-    gh = shutil.which("gh")
+    gh = shutil.which("gh") or next((str(p) for p in (
+        Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "GitHub CLI" / "gh.exe",
+        Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "GitHub CLI" / "gh.exe") if p.exists()), None)
     if not gh:
         sys.exit("The GitHub CLI isn't installed: winget install -e --id GitHub.cli")
     if subprocess.run(["git", "status", "--porcelain"], cwd=ROOT, capture_output=True, text=True).stdout.strip():
