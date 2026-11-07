@@ -257,3 +257,78 @@ def test_legacy_database_is_renamed(isolated_home):
     assert db_path() == isolated_home / "dielify.db" and not old.exists()
     with connect() as conn:
         assert conn.execute("SELECT name FROM sqlite_master WHERE name = 'marker'").fetchone()
+
+
+
+def test_split_video_title():
+    from dielify.yt_adapter import split_video_title
+    assert split_video_title("Vance Joy - Riptide", "VanceJoyVEVO") == ("Vance Joy", "Riptide")
+    assert split_video_title("Queen – Bohemian Rhapsody (Official Video Remastered)", "Queen Official") == \
+        ("Queen", "Bohemian Rhapsody (Official Video Remastered)")
+    assert split_video_title("Tame Impala - The Less I Know The Better (Official Video)", "tameimpalaVEVO") == \
+        ("Tame Impala", "The Less I Know The Better")
+    assert split_video_title("Riptide", "VanceJoyVEVO") == ("VanceJoy", "Riptide")
+
+
+def test_get_track_falls_back_to_video_details():
+    from dielify.yt_adapter import YTMusicAdapter
+
+    class FakeYT:
+        def get_watch_playlist(self, videoId, limit):
+            return {"tracks": [{"videoId": "other", "title": "Unrelated"}]}
+
+        def get_song(self, video_id):
+            return {"videoDetails": {"title": "Vance Joy - Riptide", "author": "VanceJoyVEVO",
+                                     "lengthSeconds": "204",
+                                     "thumbnail": {"thumbnails": [{"url": "https://i.ytimg.com/vi/x/hq.jpg",
+                                                                   "width": 480, "height": 360}]}}}
+
+    a = YTMusicAdapter.__new__(YTMusicAdapter)
+    a._yt = FakeYT()
+    a._pace = lambda: None
+    info = a.get_track("1h8OI3ZlacI")
+    assert (info.title, info.artists, info.duration_s, info.is_video) == ("Riptide", ["Vance Joy"], 204, True)
+
+
+
+def test_backup_and_restore(tmp_path, monkeypatch):
+    import zipfile
+    from dielify import backup, library, settings as settings_mod
+    from dielify.paths import app_data_dir
+    s = settings_mod.load()
+    s.library_root = str(tmp_path / "music")
+    settings_mod.save(s)
+    with library.connect() as conn:
+        conn.execute("INSERT INTO device_tokens (username, device_name, token_hash, created_at) "
+                     "VALUES ('u', 'phone', 'h1', 1)")
+    store = app_data_dir() / "server_users"
+    store.mkdir(parents=True, exist_ok=True)
+    (store / "pixel.dpapi").write_bytes(b"encrypted")
+
+    folder = tmp_path / "backups"
+    first = backup.make_backup(folder)
+    with zipfile.ZipFile(first) as z:
+        assert {"README.txt", "dielify.db", "settings.json", "server_users/pixel.dpapi"} <= set(z.namelist())
+
+    # damage the data, then restore
+    with library.connect() as conn:
+        conn.execute("DELETE FROM device_tokens")
+    (store / "pixel.dpapi").unlink()
+    safety = backup.restore(first)
+    assert safety.exists() and safety != first
+    with library.connect() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM device_tokens").fetchone()[0] == 1
+    assert (store / "pixel.dpapi").read_bytes() == b"encrypted"
+
+
+def test_backup_keeps_the_newest(tmp_path, monkeypatch):
+    from dielify import backup
+    monkeypatch.setattr(backup, "KEEP", 3)
+    folder = tmp_path / "b"
+    folder.mkdir()
+    for i in range(5):
+        (folder / f"{backup.PREFIX}2026-01-0{i + 1}_000000.zip").write_bytes(b"x")
+    backup.make_backup(folder)
+    names = [p.name for p in backup.backups(folder)]
+    assert len(names) == 3 and names[0] == f"{backup.PREFIX}2026-01-04_000000.zip"
+    assert not backup.is_due(folder)

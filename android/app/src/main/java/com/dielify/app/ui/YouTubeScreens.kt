@@ -25,11 +25,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.DownloadForOffline
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.VerticalAlignTop
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
@@ -141,9 +144,14 @@ fun ItemRow(vm: AppViewModel, item: Item, onClick: () -> Unit = { vm.openItem(it
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                 if (item.isSong && item.libraryTrackId != null) DropdownMenuItem(
                     text = { Text("Play") }, onClick = { menu = false; vm.openItem(item) })
-                if (item.type != "artist" && item.libraryTrackId == null) DropdownMenuItem(
-                    text = { Text(if (item.isSong) "Download" else "Download all") },
-                    onClick = { menu = false; vm.download(item) })
+                if (item.type != "artist" && item.libraryTrackId == null) {
+                    DropdownMenuItem(
+                        text = { Text(if (item.isSong) "Download next" else "Download all next") },
+                        onClick = { menu = false; vm.download(item, next = true) })
+                    DropdownMenuItem(
+                        text = { Text(if (item.isSong) "Download (back of the line)" else "Download all") },
+                        onClick = { menu = false; vm.download(item, next = false) })
+                }
                 if (item.isSong) DropdownMenuItem(
                     text = { Text("Similar songs") },
                     onClick = { menu = false; vm.open(Screen.SimilarPage(item.id, item.title)) })
@@ -310,6 +318,17 @@ fun YtCollectionScreen(vm: AppViewModel, name: String, key: String, load: suspen
                                     Icon(Icons.Filled.PlayArrow, null); Text("Play downloaded")
                                 }
                             }
+                            if (have.isNotEmpty()) {
+                                val saved by vm.savedSongs.collectAsStateWithLifecycle()
+                                val notSaved = have.filter { it !in saved }
+                                Spacer(Modifier.height(8.dp))
+                                if (notSaved.isEmpty()) Text("Downloaded songs are all on this phone",
+                                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                                else OutlinedButton(onClick = { vm.saveLibraryToPhone(notSaved) }) {
+                                    Icon(Icons.Filled.DownloadForOffline, null); Spacer(Modifier.width(8.dp))
+                                    Text("Save ${notSaved.size} downloaded on phone")
+                                }
+                            }
                         }
                     }
                     items(c.tracks, key = { "t" + it.id }) { t ->
@@ -402,8 +421,11 @@ fun DownloadsScreen(vm: AppViewModel) {
                 item { Section("Waiting in line") }
                 items(waiting, key = { "w${it.id}" }) { d ->
                     val pos = waiting.indexOf(d) + 1
-                    DownloadRow(d, onCancel = { scope.launch { cancel(vm, d); tick++ } }) {
-                        SmallText("#$pos · in about ${minutes(pos * pace)}" +
+                    DownloadRow(
+                        d, onCancel = { scope.launch { cancel(vm, d); tick++ } },
+                        onMoveUp = if (pos > 1 && !d.next) ({ scope.launch { moveUp(vm, d); tick++ } }) else null,
+                    ) {
+                        SmallText("#$pos · in about ${minutes(pos * pace)}" + (if (d.next) " · next" else "") +
                             (d.error?.let { " · $it" } ?: ""))
                     }
                 }
@@ -425,6 +447,10 @@ fun DownloadsScreen(vm: AppViewModel) {
             }
         }
     }
+}
+
+private suspend fun moveUp(vm: AppViewModel, d: Download) {
+    try { vm.server.moveDownloadNext(d.id) } catch (e: ApiError) { vm.messages.tryEmit(e.message ?: "Couldn't move it") }
 }
 
 private suspend fun cancel(vm: AppViewModel, d: Download) {
@@ -457,6 +483,7 @@ private fun DownloadRow(
     d: Download,
     onCancel: (() -> Unit)? = null,
     onClick: (() -> Unit)? = null,
+    onMoveUp: (() -> Unit)? = null,
     details: @Composable () -> Unit,
 ) {
     Row(
@@ -483,6 +510,7 @@ private fun DownloadRow(
             SmallText(listOfNotNull(d.artist, d.album).joinToString(" · "))
             details()
         }
+        if (onMoveUp != null) IconButton(onClick = onMoveUp) { Icon(Icons.Filled.VerticalAlignTop, "Download this next") }
         if (onCancel != null) IconButton(onClick = onCancel) { Icon(Icons.Filled.Close, "Cancel") }
     }
 }

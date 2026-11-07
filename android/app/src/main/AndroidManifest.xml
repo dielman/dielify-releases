@@ -8,6 +8,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- In-app updates: hand a downloaded update to Android's installer (you confirm it). -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!-- No backups: the sign-in token must not leave the phone. -->
     <application
@@ -46,8 +48,19 @@
         <!-- Cover pictures for Android Auto / system media controls (read-only, images only). -->
         <provider
             android:name=".playback.ArtProvider"
-            android:authorities="com.dielify.app.art"
+            android:authorities="${applicationId}.art"
             android:exported="true" />
+
+        <!-- Downloaded updates, shared only with Android's installer. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.updates"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/update_paths" />
+        </provider>
 
         <!-- Android Auto: this is a media app. -->
         <meta-data

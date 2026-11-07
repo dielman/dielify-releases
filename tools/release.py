@@ -6,6 +6,13 @@
     .venv\\Scripts\\python tools\\release.py configure OWNER/REPO   where updates are published
     .venv\\Scripts\\python tools\\release.py publish --notes "What's new"
 
+Phone app (signed with its own Android key, also kept in %LOCALAPPDATA%\\Dielify-release):
+    .venv\\Scripts\\python tools\\release.py android-keygen           once
+    .venv\\Scripts\\python tools\\release.py android-export-key FILE  back it up (asks for a password)
+    .venv\\Scripts\\python tools\\release.py android-import-key FILE  restore it on a new PC
+    .venv\\Scripts\\python tools\\release.py android-build            dist\\Dielify-<version>.apk
+`publish` also builds and uploads the phone app once android-keygen has been run.
+
 The private key never enters the repository: it lives in %LOCALAPPDATA%\\Dielify-release,
 encrypted for this Windows user (DPAPI). The app only contains the public key.
 `publish` needs the GitHub CLI (`gh`), signed in to the account that owns OWNER/REPO.
@@ -35,10 +42,43 @@ from Cryptodome.Signature import eddsa  # noqa: E402
 from dielify import __version__  # noqa: E402
 from dielify.credstore import _dpapi  # noqa: E402
 
-KEY_DIR = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local") / "Dielify-release"
+# Beside the project (never inside it, so never in git), and NOT under AppData: the Claude
+# desktop app redirects AppData for programs it starts, so keys made there were invisible
+# to Josh's own terminal. DIELIFY_RELEASE_DIR overrides.
+KEY_DIR = Path(os.environ.get("DIELIFY_RELEASE_DIR") or ROOT.parent / "dielify-release-keys")
+OLD_KEY_DIR = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local") / "Dielify-release"
 KEY_FILE = KEY_DIR / "signing-key.dpapi"
 ENTROPY = b"dielify-release-signing-key"
 CONFIG = ROOT / "src" / "dielify" / "update_config.py"
+ANDROID_KEYSTORE = KEY_DIR / "android-release.jks"
+ANDROID_PASSWORD = KEY_DIR / "android-keystore-password.dpapi"
+ANDROID_ENTROPY = b"dielify-android-keystore"
+ANDROID_DIR = ROOT / "android"
+STUDIO_JBR = Path(r"C:\Program Files\Android\Android Studio\jbr")
+
+
+def _move_old_keys() -> None:
+    """One-time move from the old AppData location."""
+    if OLD_KEY_DIR.is_dir() and not (KEY_DIR.is_dir() and any(KEY_DIR.iterdir())):
+        KEY_DIR.mkdir(parents=True, exist_ok=True)
+        for f in OLD_KEY_DIR.iterdir():
+            if f.is_file() and not (KEY_DIR / f.name).exists():
+                shutil.copy2(f, KEY_DIR / f.name)
+        print(f"Moved the release keys from {OLD_KEY_DIR} to {KEY_DIR}")
+
+
+def cmd_check_keys(args) -> None:
+    """Can this Windows user, in this window, unlock the keys?"""
+    _move_old_keys()
+    print(f"Keys folder: {KEY_DIR}")
+    for label, fn in (("PC update-signing key", _load_key), ("Android signing key", _android_password)):
+        try:
+            fn()
+            print(f"  {label}: OK")
+        except SystemExit as e:
+            print(f"  {label}: missing ({e})")
+        except Exception as e:
+            print(f"  {label}: CAN'T UNLOCK ({type(e).__name__}: {e})")
 
 
 def _set_config(name: str, value: str) -> None:
@@ -90,6 +130,7 @@ def cmd_export_key(args) -> None:
     key = _load_key()
     pem = key.export_key(format="PEM", passphrase=_ask_password(True),
                          protection="PBKDF2WithHMAC-SHA512AndAES256-CBC")
+    Path(args.file).parent.mkdir(parents=True, exist_ok=True)
     Path(args.file).write_text(pem, encoding="utf-8")
     print(f"Backup written to {args.file}. Keep it (and its password) somewhere safe, not in the project.")
 
@@ -118,11 +159,26 @@ def _repo_from_config() -> str:
     return m.group(1)
 
 
-def write_manifest(setup: Path, url: str, notes: str, key) -> tuple[Path, Path]:
-    data = json.dumps({
+def version_code(version: str = __version__) -> int:
+    """Same rule as android/app/build.gradle.kts: 0.6.0 -> 600."""
+    code = 0
+    for part in version.split("."):
+        code = code * 100 + int(part)
+    return code
+
+
+def write_manifest(setup: Path, url: str, notes: str, key,
+                   apk: Path | None = None, apk_url: str | None = None) -> tuple[Path, Path]:
+    manifest = {
         "version": __version__, "url": url, "sha256": hashlib.sha256(setup.read_bytes()).hexdigest(),
         "size": setup.stat().st_size, "notes": notes, "published": date.today().isoformat(),
-    }, indent=2).encode()
+    }
+    if apk is not None:
+        manifest["android"] = {
+            "version": __version__, "version_code": version_code(), "url": apk_url,
+            "sha256": hashlib.sha256(apk.read_bytes()).hexdigest(), "size": apk.stat().st_size,
+        }
+    data = json.dumps(manifest, indent=2).encode()
     man, sig = setup.with_name("manifest.json"), setup.with_name("manifest.json.sig")
     man.write_bytes(data)
     sig.write_text(base64.b64encode(eddsa.new(key, "rfc8032").sign(data)).decode(), encoding="ascii")
@@ -132,7 +188,9 @@ def write_manifest(setup: Path, url: str, notes: str, key) -> tuple[Path, Path]:
 def cmd_publish(args) -> None:
     repo = _repo_from_config()
     key = _load_key()
-    gh = shutil.which("gh")
+    gh = shutil.which("gh") or next((str(p) for p in (
+        Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "GitHub CLI" / "gh.exe",
+        Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "GitHub CLI" / "gh.exe") if p.exists()), None)
     if not gh:
         sys.exit("The GitHub CLI isn't installed: winget install -e --id GitHub.cli")
     if subprocess.run(["git", "status", "--porcelain"], cwd=ROOT, capture_output=True, text=True).stdout.strip():
@@ -142,12 +200,107 @@ def cmd_publish(args) -> None:
     setup = ROOT / "dist" / f"Dielify-setup-{__version__}.exe"
     tag = f"v{__version__}"
     url = f"https://github.com/{repo}/releases/download/{tag}/{setup.name}"
-    man, sig = write_manifest(setup, url, args.notes, key)
+    apk = None
+    if ANDROID_KEYSTORE.exists():
+        apk = ROOT / "dist" / f"Dielify-{__version__}.apk"
+        if not args.skip_build or not apk.exists():
+            apk = build_android()
+    apk_url = f"https://github.com/{repo}/releases/download/{tag}/{apk.name}" if apk else None
+    man, sig = write_manifest(setup, url, args.notes, key, apk, apk_url)
     print(f"Signed manifest for {__version__}: {man}")
-    subprocess.run([gh, "release", "create", tag, str(setup), str(man), str(sig), "--repo", repo,
+    files = [str(setup), str(man), str(sig)] + ([str(apk)] if apk else [])
+    subprocess.run([gh, "release", "create", tag, *files, "--repo", repo,
                     "--title", f"Dielify {__version__}", "--notes", args.notes or f"Dielify {__version__}"],
                    check=True)
     print(f"Published {tag}. Installed copies will offer it within a day (or via Check for updates).")
+
+
+# --- the phone app -------------------------------------------------------------------
+
+def _android_password() -> str:
+    if not (ANDROID_KEYSTORE.exists() and ANDROID_PASSWORD.exists()):
+        sys.exit(f"No Android signing key at {ANDROID_KEYSTORE}. Run `release.py android-keygen` "
+                 "(or `android-import-key` from your backup).")
+    return _dpapi(ANDROID_PASSWORD.read_bytes(), ANDROID_ENTROPY, protect=False).decode()
+
+
+def _keytool() -> str:
+    exe = STUDIO_JBR / "bin" / "keytool.exe"
+    return str(exe) if exe.exists() else (shutil.which("keytool") or sys.exit("keytool not found (install Android Studio)"))
+
+
+def cmd_android_keygen(args) -> None:
+    if ANDROID_KEYSTORE.exists() and not args.force:
+        sys.exit("An Android signing key already exists. A new one means phones can't update "
+                 "(they must uninstall and reinstall). If you really mean it: android-keygen --force")
+    import secrets
+    KEY_DIR.mkdir(parents=True, exist_ok=True)
+    ANDROID_KEYSTORE.unlink(missing_ok=True)
+    password = secrets.token_urlsafe(24)
+    env = {**os.environ, "DIELIFY_KS_PW": password}
+    subprocess.run([_keytool(), "-genkeypair", "-keystore", str(ANDROID_KEYSTORE), "-storetype", "PKCS12",
+                    "-alias", "dielify", "-keyalg", "RSA", "-keysize", "4096", "-validity", "36500",
+                    "-dname", "CN=Dielify", "-storepass:env", "DIELIFY_KS_PW", "-keypass:env", "DIELIFY_KS_PW"],
+                   check=True, env=env, capture_output=True)
+    ANDROID_PASSWORD.write_bytes(_dpapi(password.encode(), ANDROID_ENTROPY, protect=True))
+    print(f"Android signing key created: {ANDROID_KEYSTORE} (its password is stored encrypted next to it).")
+    print("Now back it up: release.py android-export-key E:\\somewhere-safe\\dielify-android-key.backup")
+
+
+def _backup_cipher(password: str, salt: bytes):
+    from Cryptodome.Cipher import AES
+    from Cryptodome.Protocol.KDF import scrypt
+    return AES, scrypt(password.encode(), salt, 32, N=2 ** 17, r=8, p=1)
+
+
+def cmd_android_export_key(args) -> None:
+    pw = _android_password()
+    blob = json.dumps({"keystore": base64.b64encode(ANDROID_KEYSTORE.read_bytes()).decode(),
+                       "password": pw}).encode()
+    salt = os.urandom(16)
+    AES, key = _backup_cipher(_ask_password(True), salt)
+    c = AES.new(key, AES.MODE_GCM)
+    data, tag = c.encrypt_and_digest(blob)
+    Path(args.file).parent.mkdir(parents=True, exist_ok=True)
+    Path(args.file).write_text(json.dumps({
+        "dielify-android-key": 1, "salt": base64.b64encode(salt).decode(),
+        "nonce": base64.b64encode(c.nonce).decode(), "tag": base64.b64encode(tag).decode(),
+        "data": base64.b64encode(data).decode()}), encoding="utf-8")
+    print(f"Backup written to {args.file}. Keep it (and its password) somewhere safe, not in the project.")
+
+
+def cmd_android_import_key(args) -> None:
+    f = json.loads(Path(args.file).read_text(encoding="utf-8"))
+    AES, key = _backup_cipher(_ask_password(False), base64.b64decode(f["salt"]))
+    c = AES.new(key, AES.MODE_GCM, nonce=base64.b64decode(f["nonce"]))
+    try:
+        blob = json.loads(c.decrypt_and_verify(base64.b64decode(f["data"]), base64.b64decode(f["tag"])))
+    except ValueError:
+        sys.exit("Wrong password (or the backup file is damaged).")
+    KEY_DIR.mkdir(parents=True, exist_ok=True)
+    ANDROID_KEYSTORE.write_bytes(base64.b64decode(blob["keystore"]))
+    ANDROID_PASSWORD.write_bytes(_dpapi(blob["password"].encode(), ANDROID_ENTROPY, protect=True))
+    print(f"Android signing key restored to {ANDROID_KEYSTORE}")
+
+
+def build_android() -> Path:
+    """Build the signed release app into dist\\Dielify-<version>.apk."""
+    pw = _android_password()
+    env = {**os.environ, "DIELIFY_KEYSTORE": str(ANDROID_KEYSTORE), "DIELIFY_KEYSTORE_PASSWORD": pw}
+    if STUDIO_JBR.exists():
+        env["JAVA_HOME"] = str(STUDIO_JBR)
+    subprocess.run([str(ANDROID_DIR / "gradlew.bat"), "assembleRelease", "--console=plain", "-q"],
+                   cwd=ANDROID_DIR, env=env, check=True)
+    built = ANDROID_DIR / "app" / "build" / "outputs" / "apk" / "release" / "app-release.apk"
+    out = ROOT / "dist" / f"Dielify-{__version__}.apk"
+    out.parent.mkdir(exist_ok=True)
+    shutil.copyfile(built, out)
+    print(f"Phone app built: {out} ({out.stat().st_size // 1_000_000} MB)")
+    return out
+
+
+def cmd_android_build(args) -> None:
+    build_android()
 
 
 def main() -> None:
@@ -169,7 +322,20 @@ def main() -> None:
     pub.add_argument("--notes", default="", help="what's new, shown in the app")
     pub.add_argument("--skip-build", action="store_true", help="use the installer already in dist\\")
     pub.set_defaults(fn=cmd_publish)
+    ak = sub.add_parser("android-keygen")
+    ak.add_argument("--force", action="store_true")
+    ak.set_defaults(fn=cmd_android_keygen)
+    ae = sub.add_parser("android-export-key")
+    ae.add_argument("file")
+    ae.set_defaults(fn=cmd_android_export_key)
+    ai = sub.add_parser("android-import-key")
+    ai.add_argument("file")
+    ai.set_defaults(fn=cmd_android_import_key)
+    sub.add_parser("android-build").set_defaults(fn=cmd_android_build)
+    sub.add_parser("check-keys", help="check the release keys can be unlocked here").set_defaults(fn=cmd_check_keys)
     args = p.parse_args()
+    if args.fn is not cmd_check_keys:
+        _move_old_keys()
     args.fn(args)
 
 

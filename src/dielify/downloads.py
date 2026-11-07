@@ -27,6 +27,7 @@ FINISHED = ("done", "failed", "cancelled")
 MAX_ATTEMPTS = 3
 RETRY_DELAYS_S = (30, 120)  # wait before the 2nd and 3rd attempt
 SIGNIN_CHECK_S = 600        # re-confirm the YouTube sign-in at most this often
+NEXT_ORDER = "CASE WHEN priority > 0 THEN 0 ELSE 1 END, priority, id"  # "next" first, in order
 SIGNIN_WAIT_S = 300         # while signed out (or offline), check again this often, ONCE
                             # per profile, not once per waiting download
 
@@ -94,9 +95,14 @@ class DownloadQueue:
     # --- requests ------------------------------------------------------------------
 
     def enqueue(self, profile: str, items: list[YTItem], request_type: str,
-                request_title: str | None = None, requested_by: str | None = None) -> list[dict]:
+                request_title: str | None = None, requested_by: str | None = None,
+                next_up: bool = False) -> list[dict]:
         """Queue songs/videos. Ones already in the library, or already queued, aren't
-        downloaded twice."""
+        downloaded twice. next_up: put them ahead of everything else that's waiting
+        (after earlier "next" requests); an already-waiting song is moved up too."""
+        # priority = when it was marked "next" (ms); 0 = normal. "Next" ones go first, in
+        # the order they were marked.
+        priority = int(time.time() * 1000) if next_up else 0
         lib = Library(profile, settings_mod.load().profile_library(profile))
         in_library = lib.video_ids()
         request_id = uuid.uuid4().hex[:12]
@@ -113,19 +119,22 @@ class DownloadQueue:
                     "SELECT id FROM downloads WHERE profile = ? AND video_id = ? AND status IN "
                     "('queued', 'downloading', 'processing')", (profile, item.id)).fetchone()
                 if existing:
+                    if next_up:
+                        conn.execute("UPDATE downloads SET priority = ? WHERE id = ? AND priority = 0",
+                                     (priority, existing["id"]))
                     ids.append(existing["id"])
                     continue
                 done = item.id in in_library
                 ids.append(conn.execute(
                     "INSERT INTO downloads (profile, video_id, title, artist, album, request_id, "
                     "request_type, request_title, requested_by, status, progress, track_id, "
-                    "not_before, error, created_at, updated_at) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    "not_before, error, created_at, updated_at, priority) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (profile, item.id, item.title, ", ".join(item.artists) or None, item.album,
                      request_id, request_type, request_title or item.title, requested_by,
                      "done" if done else "queued", 1.0 if done else 0.0,
                      in_library.get(item.id), 0.0 if done else hold_until,
-                     None if done else hold_reason, now, now)).lastrowid)
+                     None if done else hold_reason, now, now, priority)).lastrowid)
         self._wake.set()
         return [j for j in (self.get(profile, i) for i in ids) if j]
 
@@ -135,7 +144,7 @@ class DownloadQueue:
         finished_only / everything: newest first."""
         if active_only:
             where = " AND status IN ('queued', 'downloading', 'processing')"
-            order = "CASE status WHEN 'queued' THEN 1 ELSE 0 END, id"  # same order as _next_job
+            order = f"CASE status WHEN 'queued' THEN 1 ELSE 0 END, {NEXT_ORDER}"  # as _next_job
         else:
             where = " AND status IN ('done', 'failed', 'cancelled')" if finished_only else ""
             order = "id DESC"
@@ -160,6 +169,14 @@ class DownloadQueue:
             row = conn.execute("SELECT * FROM downloads WHERE id = ? AND profile = ?",
                                (job_id, profile)).fetchone()
         return dict(row) if row else None
+
+    def move_next(self, profile: str, job_id: int) -> dict | None:
+        """Move a waiting download to the front of the line."""
+        with connect() as conn:
+            conn.execute("UPDATE downloads SET priority = ? WHERE id = ? AND profile = ? AND "
+                         "status = 'queued' AND priority = 0", (int(time.time() * 1000), job_id, profile))
+        self._wake.set()
+        return self.get(profile, job_id)
 
     def cancel(self, profile: str, job_id: int) -> dict | None:
         job = self.get(profile, job_id)
@@ -196,7 +213,7 @@ class DownloadQueue:
         now = time.time()
         with connect() as conn:
             row = conn.execute("SELECT * FROM downloads WHERE status = 'queued' AND not_before <= ? "
-                               "ORDER BY id LIMIT 1", (now,)).fetchone()
+                               f"ORDER BY {NEXT_ORDER} LIMIT 1", (now,)).fetchone()
             later = conn.execute("SELECT MIN(not_before) FROM downloads WHERE status = 'queued'"
                                  ).fetchone()[0]
         wait = max(1.0, (later or now + 60) - now)

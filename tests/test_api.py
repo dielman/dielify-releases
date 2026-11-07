@@ -59,6 +59,10 @@ class FakeYT:
     def playlist(self, playlist_id, limit=200):
         return YTItem("playlist", playlist_id, "Mix"), [item("s3"), item("s1")]
 
+    def my_playlists(self):
+        return [YTItem("playlist", "LM", "Liked Music", subtitle="42 songs"),
+                YTItem("playlist", "PLmine", "Road trip", subtitle="165 songs")]
+
 
 class FakeDownloader:
     """Download side of the adapter: real audio files, optional slowness/failures."""
@@ -369,3 +373,32 @@ def test_active_list_is_in_download_order_with_totals():
             c.delete(f"/api/downloads/{i}", headers=h)
         fin = c.get("/api/downloads", params={"finished": True}, headers=h).json()["downloads"]
         assert [d["id"] for d in fin] == ids[::-1]              # finished: newest first
+
+
+def test_download_next_jumps_the_queue():
+    with make_client(FakeDownloader(slow=True)) as c:
+        h = login(c)
+        ids = [c.post("/api/downloads", headers=h, json={"type": "song", "id": v}).json()["downloads"][0]["id"]
+               for v in ("s1", "s2", "s3")]
+        nxt = c.post("/api/downloads", headers=h, json={"type": "song", "id": "s4", "next": True}).json()
+        n4 = nxt["downloads"][0]["id"]
+        assert nxt["downloads"][0]["next"] is True
+        order = [d["id"] for d in c.get("/api/downloads", params={"active": True}, headers=h).json()["downloads"]]
+        running = order[0]
+        assert order[1] == n4 and order.index(n4) < order.index(ids[2])   # ahead of the older waiting ones
+        moved = c.post(f"/api/downloads/{ids[2]}/next", headers=h).json()  # move an existing one up
+        assert moved["next"] is True
+        order = [d["id"] for d in c.get("/api/downloads", params={"active": True}, headers=h).json()["downloads"]]
+        assert order[:3] == [running, n4, ids[2]]                          # earlier "next" stays first
+        assert c.post("/api/downloads/99999/next", headers=h).status_code == 404
+        for i in ids + [n4]:
+            c.delete(f"/api/downloads/{i}", headers=h)
+
+
+def test_my_playlists():
+    with make_client(FakeDownloader()) as c:
+        h = login(c)
+        items = c.get("/api/yt/my-playlists", headers=h).json()["items"]
+        assert [(i["id"], i["title"], i["subtitle"]) for i in items] == [
+            ("LM", "Liked Music", "42 songs"), ("PLmine", "Road trip", "165 songs")]
+        assert c.get("/api/yt/my-playlists").status_code == 401

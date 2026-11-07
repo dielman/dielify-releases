@@ -30,8 +30,9 @@ class Settings:
     # "auto" = this PC's home-network and Tailscale addresses (+ localhost), or a
     # comma-separated list of IPs. Never all interfaces, never a public address.
     server_bind: str = "auto"
-    offline: bool = False
-    keep_awake: bool = False       # stop Windows sleeping when idle, so phones can reach it          # True = never contact YouTube; the library still plays
+    offline: bool = False          # True = never contact YouTube; the library still plays
+    keep_awake: bool = False       # stop Windows sleeping when idle, so phones can reach it
+    backup_folder: str = ""        # daily backups of Dielify's data go here; "" = off
 
     def __post_init__(self) -> None:
         if not self.library_root:

@@ -108,10 +108,18 @@ async function viewLibrary(tab = libTab) {
   try {
     await refreshStatus();
     const tabs = h("div", { class: "tabs" },
-      ["albums", "artists", "recent"].map((t) => h("button", { class: t === tab ? "active" : "", onclick: () => viewLibrary(t) },
-        { albums: "Albums", artists: "Artists", recent: "Recently played" }[t])));
+      ["albums", "artists", "playlists", "recent"].map((t) => h("button", { class: t === tab ? "active" : "", onclick: () => viewLibrary(t) },
+        { albums: "Albums", artists: "Artists", playlists: "Playlists", recent: "Recently played" }[t])));
     let body;
-    if (tab === "artists") {
+    if (tab === "playlists") {
+      show(welcome(), h("h1", {}, "Library"), tabs, h("p", { class: "muted" }, "Loading your YouTube Music playlists…"));
+      const { items } = await api("/api/yt/my-playlists");
+      body = items.length
+        ? [h("p", { class: "muted small" }, "Your playlists on YouTube Music. Open one to download the songs you don't have yet."),
+           h("div", { class: "grid" }, items.map((it) => ytCard(it, "library")))]
+        : empty("No playlists on your YouTube Music account.");
+      if (view !== "library" || libTab !== "playlists") return;
+    } else if (tab === "artists") {
       const { artists } = await api("/api/library/artists");
       body = artists.length ? h("div", { class: "grid" }, artists.map(artistCard)) : empty();
     } else {
@@ -199,10 +207,10 @@ async function viewDiscover() {
   } catch (e) { failed(e); }
 }
 
-function ytCard(item) {
+function ytCard(item, from = "discover") {
   const sub = item.artists.length ? item.artists.join(", ") : item.subtitle || "";
   const open = () => {
-    if (item.type === "album" || item.type === "playlist") return viewCollection(item.type, item.id);
+    if (item.type === "album" || item.type === "playlist") return viewCollection(item.type, item.id, from);
     if (item.type === "song" || item.type === "video") return songActions(item);
   };
   return h("div", { class: "card", onclick: open, title: `${item.title}${sub ? " — " + sub : ""}` },
@@ -228,19 +236,25 @@ async function requestDownload(body) {
   } catch (e) { toast(e.message, 6000); }
 }
 
-async function viewCollection(type, id) {
+async function viewCollection(type, id, from = "discover") {
   try {
     show(h("p", { class: "muted" }, "Loading…"));
     const { info, tracks } = await api(`/api/yt/${type}/${encodeURIComponent(id)}`);
     const missing = tracks.filter((t) => !t.library_track_id).length;
-    show(h("button", { onclick: () => go("discover") }, "← Discover"),
+    const have = tracks.filter((t) => t.library_track_id).map((t) => t.library_track_id);
+    const back = from === "library"
+      ? h("button", { onclick: () => { go("library"); viewLibrary("playlists"); } }, "← Playlists")
+      : h("button", { onclick: () => go("discover") }, "← Discover");
+    show(back,
       h("div", { class: "hero", style: "margin-top:16px" }, art(info.thumbnail, "♪", ""),
         h("div", {},
           h("div", { class: "muted small" }, type.toUpperCase()), h("h1", {}, info.title),
           h("div", { class: "muted" }, info.artists.join(", ") || info.subtitle || "", ` · ${tracks.length} songs`),
           h("div", { class: "row", style: "margin-top:12px" },
             h("button", { class: "primary", disabled: !missing, onclick: () => requestDownload({ type, id }) },
-              missing ? `Download ${missing === tracks.length ? "all" : missing + " missing"}` : "All in library")))),
+              missing ? `Download ${missing === tracks.length ? "all" : missing + " missing"}` : "All in library"),
+            have.length ? h("button", { onclick: async () => playList(await Promise.all(have.map((i) => api(`/api/library/tracks/${i}`))), 0) },
+              `▶ Play ${have.length} downloaded`) : null))),
       ytTrackTable(tracks));
   } catch (e) { failed(e); }
 }
@@ -308,7 +322,8 @@ async function renderDownloads(active) {
   const now = running ? [h("h2", {}, "Now"), h("div", { class: "job" }, who(running),
     h("div", { class: "bar" }, h("div", { style: `width:${Math.round(running.progress * 100)}%` })), cancel(running))] : null;
   const line = waiting.length ? [h("h2", {}, `Waiting in line (${waitingTotal})`), waiting.map((d, i) => h("div", { class: "job" },
-    who(d), h("div", { class: "small muted" }, `#${i + 1} in line · ${minutes((i + 1 + (running ? 1 : 0)) * pace)}`), cancel(d))),
+    who(d), h("div", { class: "small muted" }, `#${i + 1} in line · ${minutes((i + 1 + (running ? 1 : 0)) * pace)}`),
+    h("div", {}, d.next || i === 0 ? null : h("button", { title: "Download this next", onclick: async () => { await api(`/api/downloads/${d.id}/next`, { method: "POST" }); pollDownloads(); } }, "Move up"), cancel(d)))),
     waitingTotal > waiting.length ? h("p", { class: "muted small" }, `…and ${waitingTotal - waiting.length} more`) : null] : null;
   const done = finished.length ? [h("h2", {}, "Finished"), finished.map((d) => h("div", { class: "job" }, who(d),
     h("div", { class: `small status-${d.status}` }, label[d.status]),
@@ -409,10 +424,35 @@ async function viewSettings() {
         } }, "Remove"))),
       h("div", { class: "row", style: "margin-top:10px" }, h("button", { onclick: addPhoneUser }, "Add phone login")));
 
+    const when = (t) => new Date(t * 1000).toLocaleString();
+    const backups = h("div", { class: "panel" }, h("h2", {}, "Backups"),
+      h("p", { class: "muted small" }, "A daily copy of Dielify's own data: play counts, stars, the download list, settings and logins (the logins stay encrypted, readable only by your Windows account). Not the music itself: your music files carry their own tags. The last 14 are kept."),
+      s.backup_folder
+        ? [setting("Folder", s.backup_folder,
+            app ? h("button", { onclick: async () => {
+              const dir = await app.pick_folder();
+              if (dir) saveSettings({ backup_folder: dir }, "Backup folder changed");
+            } }, "Change…") : null,
+            h("button", { onclick: () => saveSettings({ backup_folder: "" }, "Backups off") }, "Turn off")),
+          setting("Last backup", s.last_backup_at ? when(s.last_backup_at) : "None yet",
+            h("button", { onclick: async () => {
+              try { await api("/api/desktop/backup", { method: "POST" }); toast("Backup written"); } catch (e) { toast(e.message, 6000); }
+              viewSettings();
+            } }, "Back up now")),
+          s.backup_error ? h("p", { class: "warn" }, `Last backup failed: ${s.backup_error}`) : null,
+          h("p", { class: "muted small" }, "To restore: quit Dielify (tray icon > Quit), then run dielify-cli backup restore \"<backup file>\".")]
+        : setting("Backups", "Off",
+            h("button", { class: "primary", onclick: () => saveSettings({ backup_folder: s.backup_suggested }, "Backups on") },
+              `Turn on (${s.backup_suggested})`),
+            app ? h("button", { onclick: async () => {
+              const dir = await app.pick_folder();
+              if (dir) saveSettings({ backup_folder: dir }, "Backups on");
+            } }, "Choose folder…") : null));
+
     const about = h("div", { class: "panel" }, h("h2", {}, "About"), setting("Version", `Dielify ${s.version}`),
       setting("Data folder", s.data_folder), setting("Log file", s.log_file),
       await updateSetting(setting));
-    show(h("h1", {}, "Settings"), youtube, music, windows, phones, about);
+    show(h("h1", {}, "Settings"), youtube, music, windows, phones, backups, about);
   } catch (e) { failed(e); }
 }
 

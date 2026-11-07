@@ -129,7 +129,8 @@ src/dielify/
 | 4 | Desktop GUI + Windows integration | Non-technical user installs, signs in, plays offline, no terminal | **Done** 2026-11-07 — 0.4.3 installed + working on Josh's PC; clean-PC test waived by Josh |
 | 5 | Secure remote access | Phone plays over mobile data, no router ports open | **Done** 2026-11-07 (Josh played in Symfonium over mobile data via Tailscale) |
 | 6 | Android app | Find, request and listen on the road | **Done** 2026-11-08 — closed by Josh before the car test ("assume it works"); Android Auto untested |
-| 7 | Polish + multi-user install | Second PC, second profile, backups | Not started |
+| 7 | Polish (scope set by Josh 8 Nov) | Backups to E:, signed phone release with in-app updates, download-next, playlists, music-video fix | **Done** 2026-11-08 — 0.6.0 published; phone self-update to be confirmed with the first Phase 8 release (Josh) |
+| 8 | Listening features (Josh, 8 Nov) | 1 instant play + download, 2 play history + stats, 4 two-way playlist sync, 3 Dielify-made genre/vibe playlists, 5 outside discovery | In progress (branch `phase-8`) |
 
 ## Current status
 
@@ -193,7 +194,7 @@ src/dielify/
   Found + fixed in source (not yet rebuilt): Dielify.exe vs dielify.exe clash.
 - Updater wired up and tested (`updater.py`, Settings → About → Updates); releases
   via `tools\release.py` to github.com/dielman/dielify-releases (gh signed in as
-  dielman; signing key in %LOCALAPPDATA%\Dielify-release, backed up by Josh).
+  dielman; signing key now in E:\Legit\Code\dielify-release-keys, see Phase 7).
   Published 0.4.0; 0.4.2 is the first one installed copies should update to.
 - Josh installed the app on his PC (route B, not Windows Sandbox). Found and fixed:
   1. 500s on every screen after in-app sign-in: cause never captured (windowed app
@@ -242,6 +243,26 @@ src/dielify/
 - Closed 8 Nov 2026 by Josh ("lets assume it works and progress, any issues arising later
   we can fix"). He turned on Android Auto "Unknown sources". Not verified: Android Auto
   in a car, and the full "request a new song and hear it on the road" run.
+
+**Phase 7 — in progress** (started 8 Nov 2026, branch `phase-7`; scope in Decisions log):
+- Built (0.6.0, all tests pass: 105): download next (`downloads.priority` = ms when marked
+  next, 0 = normal; phone song taps default to next; Move up on PC + phone);
+  music videos missing from YouTube Music's catalogue fall back to the video's own
+  details (`get_song`, title split "Artist - Title"); Library > Playlists (your YouTube
+  Music playlists, `/api/yt/my-playlists`); backups (`backup.py`: daily zip of db +
+  settings + DPAPI login files, keep 14, Settings > Backups, `dielify-cli backup
+  now|restore`, restore takes a non-pruning safety copy first).
+- Phone release: `tools/release.py android-keygen|android-export-key|android-import-key|
+  android-build`; keystore + DPAPI'd password in `E:\Legit\Code\dielify-release-keys` (beside the
+  repo, not in it). Both release keys were first made under %LOCALAPPDATA% from Claude's
+  shell, i.e. only in the redirected copy, invisible to Josh's terminals; moved 8 Nov
+  (`release.py check-keys` unlocks both from Josh's own terminal too). Release build 4 MB (R8), test builds are
+  `com.dielify.app.debug`. App checks the GitHub manifest's "android" entry daily,
+  verifies SHA-256, hands the APK to Android's installer. `publish` uploads the APK too.
+- 8 Nov: Josh installed PC 0.6.0 and the signed phone app (old test build uninstalled),
+  "everything's working so far". Published v0.6.0 to dielman/dielify-releases (Josh's OK;
+  installer + APK + signed manifest with "android" entry, verified online). Not yet: an
+  end-to-end phone in-app update (needs a later release, e.g. 0.6.1).
 
 ## Open questions for Josh
 
@@ -305,3 +326,17 @@ src/dielify/
   0.5.0/0.5.1 installed from dist\ locally; not published to GitHub yet.
 - 2026-11-07: Default `auto` keeps the Premium Opus stream (itag 774) over 256k AAC:
   same quality class, no re-encode. Josh can set `preferred_format m4a` for AAC.
+- 2026-11-08 (Phase 7 scope, Josh): multi-user / second PC **not needed yet** (skip). Backups:
+  daily copy of database + settings to a folder on E:. Phone app: signed release build with
+  in-app updates from the same GitHub releases. Backlog in: download next (phone requests
+  jump the queue), YouTube playlists in Library, music-video "Track not found" fix. Not in:
+  cache size limit enforcement.
+- 2026-11-08 (Phase 8 scope, Josh): order 1 -> 2 -> 4 -> 3 -> 5.
+  1. Instant play: any YouTube song plays at once (streamed through the PC with the
+     Premium sign-in) and the PC downloads it next in line ("auto-download while
+     streaming" = yes, answering the old open question).
+  2. Play history (every play: when, device, how much) + stats + recommendations.
+  4. Playlist sync: **two-way** (Dielify edits change Josh's YouTube Music playlists).
+  3. Dielify-made playlists by genre/vibe; tags from MusicBrainz (free, no account).
+  5. Outside discovery: **ListenBrainz** and **radio charts** (e.g. triple j). Not Last.fm
+     (Josh didn't pick it), not Spotify (recommendation API closed to new apps).

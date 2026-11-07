@@ -22,7 +22,9 @@ import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -48,6 +50,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.Player
 import com.dielify.app.BuildConfig
 import com.dielify.app.net.Link
+import com.dielify.app.update.UpdateState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -199,6 +202,7 @@ fun SettingsScreen(vm: AppViewModel) {
                 Text("Remove all songs from this phone")
             }
             Setting("App version", BuildConfig.VERSION_NAME)
+            UpdateSection(vm)
             OutlinedButton(
                 onClick = { signingOut = true; scope.launch { vm.signOut() } },
                 enabled = !signingOut,
@@ -208,6 +212,52 @@ fun SettingsScreen(vm: AppViewModel) {
                     "phone login's password (Dielify on the PC: Settings > Phone logins).",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+    }
+}
+
+@Composable
+private fun UpdateSection(vm: AppViewModel) {
+    val state by vm.updater.state.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    when (val s = state) {
+        UpdateState.NotSetUp -> Text(
+            "Test build: updates come over USB from the PC.",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        is UpdateState.Available -> Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Dielify ${s.release.version} is available (${formatBytes(s.release.size)})",
+                color = MaterialTheme.colorScheme.primary)
+            s.notes?.takeIf { it.isNotBlank() }?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Button(onClick = {
+                if (!vm.updater.canInstall()) {
+                    vm.messages.tryEmit("Allow Dielify to install updates, then come back and tap Update again")
+                    context.startActivity(vm.updater.openInstallPermission())
+                } else scope.launch {
+                    vm.updater.download(s.release)?.let { context.startActivity(it) }
+                }
+            }) { Text("Update") }
+        }
+        is UpdateState.Downloading -> Column {
+            Text("Downloading ${s.release.version}… ${(s.fraction * 100).toInt()}%")
+            LinearProgressIndicator(progress = { s.fraction }, modifier = Modifier.fillMaxWidth().padding(top = 4.dp))
+        }
+        else -> Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                when (s) {
+                    UpdateState.Checking -> "Checking for updates…"
+                    UpdateState.UpToDate -> "Up to date"
+                    is UpdateState.Failed -> s.message
+                    else -> ""
+                },
+                Modifier.weight(1f), style = MaterialTheme.typography.bodySmall,
+                color = if (s is UpdateState.Failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            OutlinedButton(onClick = { scope.launch { vm.updater.check(force = true) } },
+                enabled = s !is UpdateState.Checking) { Text("Check for updates") }
         }
     }
 }

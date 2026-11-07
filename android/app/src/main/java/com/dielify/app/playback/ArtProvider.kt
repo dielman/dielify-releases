@@ -5,6 +5,7 @@ import android.content.ContentValues
 import android.database.Cursor
 import android.net.Uri
 import android.os.ParcelFileDescriptor
+import com.dielify.app.BuildConfig
 import com.dielify.app.dielify
 import kotlinx.coroutines.runBlocking
 import java.io.File
@@ -58,7 +59,7 @@ class ArtProvider : ContentProvider() {
     override fun update(uri: Uri, v: ContentValues?, s: String?, a: Array<out String>?) = 0
 
     companion object {
-        const val AUTHORITY = "com.dielify.app.art"
+        const val AUTHORITY = BuildConfig.APPLICATION_ID + ".art"
         private const val SIZE = 600
         fun trackArt(id: Long): Uri = Uri.parse("content://$AUTHORITY/track/$id")
         fun albumArt(id: Long): Uri = Uri.parse("content://$AUTHORITY/album/$id")

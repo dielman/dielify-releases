@@ -78,6 +78,7 @@ class DownloadRequest(BaseModel):
     title: str | None = Field(None, description="Shown in the queue until the download starts")
     artists: list[str] = []
     album: str | None = None
+    next: bool = Field(False, description="Download before everything else that's waiting")
 
 
 class Download(BaseModel):
@@ -89,6 +90,7 @@ class Download(BaseModel):
     request_id: str
     request_type: str
     request_title: str | None
+    next: bool = Field(False, description="Asked to download before the rest of the queue")
     status: JobStatus
     progress: float = Field(description="0.0 to 1.0")
     error: str | None
@@ -96,6 +98,10 @@ class Download(BaseModel):
     track_id: int | None = Field(description="Library track, once done")
     created_at: float
     updated_at: float
+
+
+def _download_out(job: dict) -> "Download":
+    return Download(**{k: v for k, v in job.items() if k != "priority"}, next=job.get("priority", 0) > 0)
 
 
 class DownloadList(BaseModel):
@@ -318,6 +324,12 @@ def yt_search(q: str = Query(min_length=1), type: Literal["song", "video", "albu
     return ItemList(items=_items(youtube.call(s.user.profile, "search_items", q, type, limit), s.lib))
 
 
+@router.get("/yt/my-playlists", response_model=ItemList, tags=["youtube"])
+def yt_my_playlists(s: Session = Depends(session)) -> ItemList:
+    """Your own playlists on YouTube Music (open one with /yt/playlist/{id})."""
+    return ItemList(items=_items(youtube.call(s.user.profile, "my_playlists"), s.lib))
+
+
 @router.get("/yt/album/{browse_id}", response_model=Collection, tags=["youtube"])
 def yt_album(browse_id: str, s: Session = Depends(session)) -> Collection:
     info, tracks = youtube.call(s.user.profile, "album", browse_id)
@@ -345,8 +357,9 @@ def request_download(body: DownloadRequest, request: Request, s: Session = Depen
         title = info.title
         if not items:
             raise HTTPException(status.HTTP_404_NOT_FOUND, f"No downloadable tracks in that {body.type}")
-    jobs = _queue(request).enqueue(s.user.profile, items, body.type, title, s.user.name)
-    return DownloadList(downloads=[Download(**j) for j in jobs])
+    jobs = _queue(request).enqueue(s.user.profile, items, body.type, title, s.user.name,
+                                   next_up=body.next)
+    return DownloadList(downloads=[_download_out(j) for j in jobs])
 
 
 @router.get("/downloads", response_model=DownloadList, tags=["downloads"])
@@ -357,7 +370,7 @@ def list_downloads(request: Request, active: bool = False, finished: bool = Fals
     Poll every second or two to show progress."""
     q = _queue(request)
     summary = q.summary(s.user.profile)
-    return DownloadList(downloads=[Download(**j) for j in q.list(s.user.profile, active, limit, finished)],
+    return DownloadList(downloads=[_download_out(j) for j in q.list(s.user.profile, active, limit, finished)],
                         active_total=summary["active"], seconds_per_song=summary["seconds_per_song"])
 
 
@@ -366,7 +379,16 @@ def get_download(job_id: int, request: Request, s: Session = Depends(session)) -
     job = _queue(request).get(s.user.profile, job_id)
     if job is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No such download")
-    return Download(**job)
+    return _download_out(job)
+
+
+@router.post("/downloads/{job_id}/next", response_model=Download, tags=["downloads"])
+def download_next(job_id: int, request: Request, s: Session = Depends(session)) -> Download:
+    """Move a waiting download to the front of the line."""
+    job = _queue(request).move_next(s.user.profile, job_id)
+    if job is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No such download")
+    return _download_out(job)
 
 
 @router.delete("/downloads/{job_id}", response_model=Download, tags=["downloads"])
@@ -375,7 +397,7 @@ def cancel_download(job_id: int, request: Request, s: Session = Depends(session)
     job = _queue(request).cancel(s.user.profile, job_id)
     if job is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No such download")
-    return Download(**job)
+    return _download_out(job)
 
 
 # --- library (play what was downloaded) ---------------------------------------------

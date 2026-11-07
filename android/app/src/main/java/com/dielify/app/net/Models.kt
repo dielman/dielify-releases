@@ -108,6 +108,7 @@ data class DownloadRequest(
     val title: String? = null,
     val artists: List<String> = emptyList(),
     val album: String? = null,
+    val next: Boolean = false,
 )
 
 @Serializable
@@ -124,6 +125,7 @@ data class Download(
     val error: String? = null,
     val attempts: Int = 0,
     @SerialName("track_id") val trackId: Long? = null,
+    val next: Boolean = false,
 ) {
     val isActive get() = status == "queued" || status == "downloading" || status == "processing"
 }

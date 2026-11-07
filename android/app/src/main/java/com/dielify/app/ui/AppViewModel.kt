@@ -15,6 +15,7 @@ import com.dielify.app.net.Item
 import com.dielify.app.net.Track
 import com.dielify.app.playback.MediaItems
 import com.dielify.app.playback.PlaybackService
+import com.dielify.app.update.UpdateState
 import com.google.common.util.concurrent.MoreExecutors
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -60,6 +61,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val server = app.dielify.server
     private val accounts = app.dielify.accounts
     val saved = app.dielify.saved
+    val updater = app.dielify.updater
 
     /** Songs on the phone, and the ones still being copied. */
     val savedSongs = saved.songs
@@ -91,6 +93,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val lastUsername: String get() = accounts.lastUsername()
 
     init {
+        viewModelScope.launch {
+            updater.check()
+            val s = updater.state.value
+            if (s is UpdateState.Available) messages.tryEmit("Dielify ${s.release.version} is available: Settings > Update")
+        }
         val token = SessionToken(app, ComponentName(app, PlaybackService::class.java))
         val future = MediaController.Builder(app, token).buildAsync()
         future.addListener({
@@ -157,15 +164,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Set by "artist" taps so the Search tab opens with that name filled in. */
     val searchRequest = MutableStateFlow<String?>(null)
 
-    fun download(item: Item) = viewModelScope.launch {
+    /** Single songs download next by default (you usually want to hear them now);
+     *  whole albums/playlists join the back of the line unless `next` is set. */
+    fun download(item: Item, next: Boolean = item.isSong) = viewModelScope.launch {
         try {
-            val jobs = server.requestDownload(item).downloads
+            val jobs = server.requestDownload(item, next).downloads
             val already = jobs.count { it.status == "done" }
             val queued = jobs.size - already
             messages.tryEmit(
                 when {
                     queued == 0 -> "Already in your library"
-                    item.isSong -> "Downloading \"${item.title}\" on the PC"
+                    item.isSong -> "Downloading \"${item.title}\" on the PC" + if (next) " (next in line)" else ""
                     else -> "$queued ${if (queued == 1) "song" else "songs"} added to downloads" +
                         if (already > 0) " ($already already in your library)" else ""
                 }
@@ -194,6 +203,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         saved.save(todo)
         messages.tryEmit(if (todo.isEmpty()) "Already on this phone"
             else "Saving ${todo.size} ${if (todo.size == 1) "song" else "songs"} on this phone")
+    }
+
+    /** Save downloaded songs (by library id) on the phone, e.g. the downloaded part of a playlist. */
+    fun saveLibraryToPhone(trackIds: List<Long>) = viewModelScope.launch {
+        try {
+            val tracks = coroutineScope { trackIds.map { async { server.track(it) } }.awaitAll() }
+            saveToPhone(tracks)
+        } catch (e: ApiError) {
+            messages.tryEmit(e.message ?: "Couldn't save them")
+        }
     }
 
     fun removeFromPhone(ids: Collection<Long>) {

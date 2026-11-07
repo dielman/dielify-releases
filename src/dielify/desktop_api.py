@@ -57,6 +57,11 @@ class DesktopStatus(BaseModel):
     server_port: int
     addresses: list[str] = Field(description="Addresses phones can use")
     phone_users: list[PhoneUser]
+    backup_folder: str = Field("", description='"" = backups off')
+    backup_suggested: str = Field("", description="A sensible folder to offer when backups are off")
+    last_backup: str | None = None
+    last_backup_at: float | None = None
+    backup_error: str | None = None
 
 
 class DesktopChange(BaseModel):
@@ -68,6 +73,7 @@ class DesktopChange(BaseModel):
     offline: bool | None = None
     keep_awake: bool | None = None
     start_with_windows: bool | None = None
+    backup_folder: str | None = Field(None, description='"" turns backups off')
 
 
 class NewProfile(BaseModel):
@@ -124,7 +130,15 @@ def _status() -> DesktopStatus:
                        devices=[PhoneDevice(**{k: d[k] for k in ("id", "device_name", "created_at", "last_used_at")})
                                 for d in auth.list_tokens(u.name)])
              for u in auth.list_users()]
+    from . import backup
+    folder = Path(s.backup_folder) if s.backup_folder else None
+    last = backup.last_backup(folder) if folder else None
+    root = Path(s.library_root) if s.library_root else None
+    suggested = str((root.parent if root and root.parent != root else Path.home()) / "Dielify-backups")
     return DesktopStatus(
+        backup_folder=s.backup_folder, backup_suggested=suggested,
+        last_backup=str(last) if last else None, last_backup_at=last.stat().st_mtime if last else None,
+        backup_error=backup.scheduler.last_error,
         version=__version__, data_folder=str(app_data_dir()),
         log_file=str(app_data_dir() / "logs" / "server.log"),
         active_profile=s.active_profile, profiles=profiles,
@@ -153,13 +167,40 @@ def change(body: DesktopChange, s: Session = Depends(desktop_session)) -> Deskto
             root.mkdir(parents=True, exist_ok=True)
         except OSError as e:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Can't use that folder: {e}") from e
+    if changes.get("backup_folder"):
+        folder = Path(changes["backup_folder"]).expanduser()
+        if not folder.is_absolute():
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Choose a full folder path, e.g. E:\\Dielify-backups")
+        try:
+            folder.mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Can't use that folder: {e}") from e
+        changes["backup_folder"] = str(folder)
     if "active_profile" in changes and safe_name(changes["active_profile"]) != changes["active_profile"]:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Profile names: letters, digits, - and _ only")
     for key, value in changes.items():
         settings_mod.set_value(key, str(value))
+    if changes.get("backup_folder"):
+        from . import backup
+        backup.scheduler.run_once()  # first backup straight away
     if "library_root" in changes or "active_profile" in changes:
         cfg = settings_mod.load()
         Library(cfg.active_profile, cfg.profile_library()).scan()
+    return _status()
+
+
+@router.post("/backup", response_model=DesktopStatus)
+def backup_now(s: Session = Depends(desktop_session)) -> DesktopStatus:
+    from . import backup
+    cfg = settings_mod.load()
+    if not cfg.backup_folder:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Choose a backup folder first")
+    try:
+        backup.make_backup(Path(cfg.backup_folder))
+        backup.scheduler.last_error = None
+    except Exception as e:
+        backup.scheduler.last_error = f"{type(e).__name__}: {e}"
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, f"Backup failed: {e}") from e
     return _status()
 
 
