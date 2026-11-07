@@ -12,6 +12,7 @@ import base64
 import json
 import os
 import sys
+import threading
 from pathlib import Path
 
 from .paths import app_data_dir, safe_name
@@ -25,33 +26,64 @@ class CredentialError(Exception):
 
 
 # --- DPAPI via ctypes (no pywin32 dependency) ------------------------------
+# Calls are made one at a time (a lock), with argument types declared, and a failed
+# decrypt is retried once: in the installed app a read of a valid file was seen to
+# fail once and succeed a moment later.
 
-def _dpapi(data: bytes, entropy: bytes, protect: bool) -> bytes:
-    import ctypes
-    from ctypes import wintypes
+_dpapi_lock = threading.Lock()
+_api = None
 
-    class BLOB(ctypes.Structure):
-        _fields_ = [("cbData", wintypes.DWORD), ("pbData", ctypes.POINTER(ctypes.c_char))]
 
-    def to_blob(b: bytes) -> BLOB:
-        buf = ctypes.create_string_buffer(b, len(b))
-        return BLOB(len(b), ctypes.cast(buf, ctypes.POINTER(ctypes.c_char)))
+def _crypt_api():
+    global _api
+    if _api is None:
+        import ctypes
+        from ctypes import wintypes
 
-    crypt32 = ctypes.windll.crypt32
-    kernel32 = ctypes.windll.kernel32
-    CRYPTPROTECT_UI_FORBIDDEN = 0x1
-    inp, ent, out = to_blob(data), to_blob(entropy), BLOB()
-    fn = crypt32.CryptProtectData if protect else crypt32.CryptUnprotectData
-    ok = fn(ctypes.byref(inp), None, ctypes.byref(ent), None, None,
-            CRYPTPROTECT_UI_FORBIDDEN, ctypes.byref(out))
+        class BLOB(ctypes.Structure):
+            _fields_ = [("cbData", wintypes.DWORD), ("pbData", ctypes.POINTER(ctypes.c_char))]
+
+        crypt32 = ctypes.WinDLL("crypt32", use_last_error=True)
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        sig = [ctypes.POINTER(BLOB), wintypes.LPCWSTR, ctypes.POINTER(BLOB), ctypes.c_void_p,
+               ctypes.c_void_p, wintypes.DWORD, ctypes.POINTER(BLOB)]
+        protect = crypt32.CryptProtectData
+        protect.argtypes, protect.restype = sig, wintypes.BOOL
+        unprotect = crypt32.CryptUnprotectData
+        unprotect.argtypes = [ctypes.POINTER(BLOB), ctypes.c_void_p, *sig[2:]]
+        unprotect.restype = wintypes.BOOL
+        kernel32.LocalFree.argtypes, kernel32.LocalFree.restype = [ctypes.c_void_p], ctypes.c_void_p
+        _api = (ctypes, BLOB, protect, unprotect, kernel32.LocalFree)
+    return _api
+
+
+def _dpapi_once(data: bytes, entropy: bytes, protect: bool) -> bytes:
+    ctypes, BLOB, protect_fn, unprotect_fn, local_free = _crypt_api()
+    # Keep the buffers referenced until the call returns.
+    data_buf = ctypes.create_string_buffer(data, len(data))
+    ent_buf = ctypes.create_string_buffer(entropy, len(entropy))
+    inp = BLOB(len(data), ctypes.cast(data_buf, ctypes.POINTER(ctypes.c_char)))
+    ent = BLOB(len(entropy), ctypes.cast(ent_buf, ctypes.POINTER(ctypes.c_char)))
+    out = BLOB()
+    fn = protect_fn if protect else unprotect_fn
+    ok = fn(ctypes.byref(inp), None, ctypes.byref(ent), None, None, 0x1, ctypes.byref(out))
     if not ok:
         raise CredentialError(f"DPAPI {'encrypt' if protect else 'decrypt'} failed "
-                              f"(Windows error {ctypes.GetLastError()})")
+                              f"(Windows error {ctypes.get_last_error()})")
     try:
         return ctypes.string_at(out.pbData, out.cbData)
     finally:
-        kernel32.LocalFree.argtypes = [ctypes.c_void_p]
-        kernel32.LocalFree(ctypes.cast(out.pbData, ctypes.c_void_p))
+        local_free(ctypes.cast(out.pbData, ctypes.c_void_p))
+
+
+def _dpapi(data: bytes, entropy: bytes, protect: bool) -> bytes:
+    with _dpapi_lock:
+        try:
+            return _dpapi_once(data, entropy, protect)
+        except CredentialError:
+            if protect:
+                raise
+            return _dpapi_once(data, entropy, protect)  # one retry before giving up
 
 
 def _is_windows() -> bool:

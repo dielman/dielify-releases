@@ -127,8 +127,8 @@ src/dielify/
 | 2 | Library + Subsonic API | Symfonium/Ultrasonic on the home network browses and plays | **Done** 2026-11-07 (Josh played a track in Symfonium over home Wi-Fi) |
 | 3 | Discovery + request endpoints | Test client discovers, requests, watches progress, plays | **Done** 2026-11-07 (Josh's acceptance run: PASS) |
 | 4 | Desktop GUI + Windows integration | Non-technical user installs, signs in, plays offline, no terminal | **Done** 2026-11-07 — 0.4.3 installed + working on Josh's PC; clean-PC test waived by Josh |
-| 5 | Secure remote access | Phone plays over mobile data, no router ports open | Next — waiting for Josh's go-ahead |
-| 6 | Android app | Find, request and listen on the road | Not started |
+| 5 | Secure remote access | Phone plays over mobile data, no router ports open | **Done** 2026-11-07 (Josh played in Symfonium over mobile data via Tailscale) |
+| 6 | Android app | Find, request and listen on the road | Next — waiting for Josh's go-ahead |
 | 7 | Polish + multi-user install | Second PC, second profile, backups | Not started |
 
 ## Current status
@@ -264,5 +264,13 @@ src/dielify/
   (measure first; optional 2-at-a-time). Josh asked for TorBox downloads: declined
   (torrent/usenet sources = unlicensed copies). Hidden duplicate data under
   `...\Packages\Claude_*\LocalCache\Local\Dielify*` still to clean up with Josh's OK.
+- 2026-11-07 (Phase 5): Tailscale: PC `gamerig` 100.73.103.100, phone `pixel-9-pro`
+  100.93.251.98, both Private network category; Windows' own "dielify.exe" allow rule
+  (Private, any port) covers it, so no extra firewall rule. Dielify re-checks addresses
+  every 30 s (AddressWatcher) so a late Tailscale connection is picked up; keep_awake
+  setting added. Symfonium's form has separate host/port/HTTP fields: host must be the
+  bare IP. Josh's `josh` phone login file couldn't be read by the installed app (root
+  cause unknown; DPAPI wrapper made sturdier in 0.5.1); a new `pixel` login works.
+  0.5.0/0.5.1 installed from dist\ locally; not published to GitHub yet.
 - 2026-11-07: Default `auto` keeps the Premium Opus stream (itag 774) over 256k AAC:
   same quality class, no re-encode. Josh can set `preferred_format m4a` for AAC.

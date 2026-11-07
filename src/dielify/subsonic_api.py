@@ -467,7 +467,8 @@ def _authenticate(params: Params, client: str) -> auth.ServerUser:
     user = auth.get_user(name)
     if user is None or not auth.check_subsonic(user, params.get("p"), params.get("t"), params.get("s")):
         lockout.failed(client)
-        log.warning("Failed Subsonic login for user %r from %s", name, client)
+        reason = "no such user, or its login file can't be read" if user is None else "wrong password"
+        log.warning("Failed Subsonic login for user %r from %s (%s)", name, client, reason)
         raise ApiError(WRONG_LOGIN, "Wrong username or password")
     lockout.succeeded(client)
     return user

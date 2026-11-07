@@ -165,3 +165,50 @@ def test_server_starts_without_a_console(monkeypatch):
     monkeypatch.setattr(sys, "stdout", None)
     monkeypatch.setattr(sys, "stderr", None)
     server._config(DownloadQueue(adapter_factory=lambda p: FakeDownloader()))
+
+
+def test_late_address_is_picked_up(monkeypatch):
+    """Tailscale often connects after Dielify starts: the watcher must start listening
+    on the new address, without starting a second download queue."""
+    import socket as socketlib
+
+    import httpx
+
+    from dielify import server
+    with socketlib.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    s = settings.Settings(server_port=port)
+    starts = []
+
+    class CountingQueue(DownloadQueue):
+        def start(self):
+            starts.append(1)
+            super().start()
+
+    addrs = ["127.0.0.1"]
+    monkeypatch.setattr(server, "bind_addresses", lambda st: list(addrs))
+    monkeypatch.setattr(server, "_config", lambda queue=None: server.uvicorn.Config(
+        create_app(CountingQueue(adapter_factory=lambda p: FakeDownloader())), log_config=None))
+    srv = server.start_background(s, ["127.0.0.1"])
+    try:
+        assert srv.watcher.check() == []                  # nothing new yet
+        addrs.append("127.0.0.2")                          # "Tailscale connected"
+        assert srv.watcher.check() == ["127.0.0.2"]
+        for _ in range(100):
+            try:
+                r = httpx.get(f"http://127.0.0.2:{port}/api/health", timeout=1)
+                break
+            except httpx.HTTPError:
+                import time
+                time.sleep(0.05)
+        assert r.json()["status"] == "ok"
+        assert srv.watcher.check() == [] and len(starts) == 1   # no second queue
+    finally:
+        srv.watcher.stop()
+        srv.should_exit = True
+
+
+def test_keep_awake_setting(client):
+    st = client.put("/api/desktop/settings", headers=client.desk, json={"keep_awake": True}).json()
+    assert st["keep_awake"] is True and settings.load().keep_awake is True

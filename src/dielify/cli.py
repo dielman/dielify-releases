@@ -319,6 +319,11 @@ def cmd_serve(args) -> int:
     _out(f"Users: {', '.join(u.name for u in users)}.  Stop with Ctrl+C.")
     _out()
     _log_to_file()
+    import threading
+
+    from . import winint
+    threading.Thread(target=winint.keep_awake_loop, args=(lambda: settings_mod.load().keep_awake,),
+                     daemon=True).start()
     server.run(s, addrs)
     return 0
 

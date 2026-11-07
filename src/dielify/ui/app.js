@@ -379,11 +379,21 @@ async function viewSettings() {
 
     const windows = h("div", { class: "panel" }, h("h2", {}, "Windows"),
       setting("Start with Windows", s.start_with_windows ? "On: Dielify starts in the tray when you sign in" : "Off",
-        toggle("start_with_windows", s.start_with_windows, "Dielify will start with Windows", "Dielify won't start with Windows")));
+        toggle("start_with_windows", s.start_with_windows, "Dielify will start with Windows", "Dielify won't start with Windows")),
+      setting("Keep this PC awake", s.keep_awake
+        ? "On: Windows won't sleep when idle, so your phone can always reach it (the screen can still turn off)"
+        : "Off: if the PC sleeps, phones can't reach it",
+        toggle("keep_awake", s.keep_awake, "The PC will stay awake", "The PC may sleep again")));
 
     const phones = h("div", { class: "panel" }, h("h2", {}, "Phone apps"),
-      h("p", { class: "muted" }, "Phones on your home network can play your library (Symfonium, or the Dielify app later). Address: ",
-        s.addresses.length ? s.addresses.join("  or  ") : "(no home-network address found)"),
+      h("p", { class: "muted" }, "Phones can play your library (Symfonium, or the Dielify app later). Server address:"),
+      s.addresses.length
+        ? s.addresses.map((a) => h("div", { class: "setting" },
+            h("div", { class: "label" }, /^http:\/\/100\./.test(a) ? "Away from home (Tailscale)" : "On home Wi-Fi"),
+            h("div", { class: "value secret" }, a)))
+        : h("p", { class: "warn" }, "No network address found."),
+      s.addresses.some((a) => /^http:\/\/100\./.test(a)) ? null
+        : h("p", { class: "muted small" }, "Away from home: install Tailscale on this PC and your phone (see Phase 5 in the README)."),
       s.phone_users.map((u) => h("div", { class: "setting" },
         h("div", { class: "label" }, u.name),
         h("div", { class: "value" }, `plays profile ${u.profile}`,

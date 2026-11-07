@@ -86,3 +86,23 @@ def set_start_with_windows(enabled: bool) -> None:
                 winreg.DeleteValue(k, RUN_VALUE)
             except FileNotFoundError:
                 pass
+
+
+# --- keep the PC awake (setting: keep_awake) ------------------------------------------
+
+ES_SYSTEM_REQUIRED = 0x00000001
+KEEP_AWAKE_EVERY_S = 50
+
+
+def keep_awake_loop(enabled) -> None:
+    """Run forever (in a thread): while `enabled()` is true, reset Windows' idle-sleep
+    timer about once a minute so phones can reach the PC. Choosing Sleep or shutting
+    down still works, and the screen can still turn off."""
+    import time
+    while True:
+        try:
+            if enabled():
+                _kernel32.SetThreadExecutionState(ES_SYSTEM_REQUIRED)
+        except Exception:
+            pass
+        time.sleep(KEEP_AWAKE_EVERY_S)

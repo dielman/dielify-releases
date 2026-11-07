@@ -15,8 +15,8 @@ app over your home network or Tailscale.
 | 2 | Library database + Subsonic API (Symfonium/Ultrasonic) | **Done** (7 Nov 2026) |
 | 3 | Discovery + download requests | **Done** (7 Nov 2026) |
 | 4 | Desktop app, installer and automatic updates | **Done** (7 Nov 2026) |
-| 5 | Secure remote access (Tailscale) | **Next** |
-| 6 | Android app | |
+| 5 | Secure remote access (Tailscale) | **Done** (7 Nov 2026) |
+| 6 | Android app | **Next** |
 | 7 | Installer, second user, backups | |
 
 ---
@@ -289,6 +289,31 @@ It signs in, reads your home feed, finds a song similar to "Under Pressure" that
 you don't have yet, requests it, shows the download progress, and then plays it
 from the library. It ends with **PASS** when everything worked. The new song
 also shows up in Symfonium after a sync.
+
+---
+
+## Phase 5 — play from your PC anywhere (Tailscale)
+
+Tailscale makes a private, encrypted network between your own devices. Your phone
+reaches the PC from anywhere, with **no router changes and nothing open to the
+internet**: Dielify only ever listens on your home network and on Tailscale.
+
+**You need:** a Google, Microsoft or GitHub login (Tailscale is free for personal use;
+use the same login everywhere), and to click **Yes** when Windows asks during the install.
+
+1. **PC:** download from <https://tailscale.com/download/windows>, install, then click
+   the Tailscale tray icon → **Log in** and sign in. The icon should say **Connected**.
+2. **Phone:** install **Tailscale** from the Play Store, log in with the same account,
+   allow the VPN, and make sure the switch is **on**.
+3. **Dielify:** Settings → *Phone apps* shows two addresses: *On home Wi-Fi* and
+   *Away from home (Tailscale)* (starts with `http://100.`). Dielify notices Tailscale
+   by itself within 30 seconds, even if it connected after Dielify started.
+4. **Symfonium:** add the Tailscale address as a second server (same user and
+   password), or edit the existing one to use it: it works at home too.
+5. Optional: Settings → *Keep this PC awake*, so it doesn't sleep while you're out.
+
+**Phase 5 test:** turn off Wi-Fi on the phone (mobile data only, Tailscale on) and play
+a song in Symfonium.
 
 ---
 
