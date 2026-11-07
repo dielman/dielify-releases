@@ -193,6 +193,11 @@ fun SettingsScreen(vm: AppViewModel) {
                 Link.Down -> "Can't reach the PC right now"
                 Link.Unknown -> "Not yet"
             })
+            val songs by vm.savedSongs.collectAsStateWithLifecycle()
+            Setting("Saved on this phone", "${songs.size} songs · ${formatBytes(vm.saved.totalBytes())}")
+            if (songs.isNotEmpty()) OutlinedButton(onClick = { vm.saved.removeAll() }) {
+                Text("Remove all songs from this phone")
+            }
             Setting("App version", BuildConfig.VERSION_NAME)
             OutlinedButton(
                 onClick = { signingOut = true; scope.launch { vm.signOut() } },

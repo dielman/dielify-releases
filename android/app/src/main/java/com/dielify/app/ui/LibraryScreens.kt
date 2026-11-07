@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
@@ -25,6 +26,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.DownloadForOffline
+import androidx.compose.material.icons.filled.OfflinePin
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.PlayArrow
@@ -34,6 +37,8 @@ import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.SnackbarHost
@@ -176,14 +181,21 @@ fun LibraryScreen(vm: AppViewModel) {
             if (searching && query.isNotBlank()) {
                 SearchResults(vm, query.trim())
             } else {
-                val tabs = listOf("Albums", "Artists", "Recently added")
+                val tabs = listOf("Albums", "Artists", "Recent", "On phone")
+                val link by vm.server.link.collectAsStateWithLifecycle()
+                val savedCount = vm.savedSongs.collectAsStateWithLifecycle().value.size
+                LaunchedEffect(link) {
+                    // No PC? Show what's on the phone instead of an error.
+                    if (link is Link.Down && savedCount > 0) tab = 3
+                }
                 PrimaryTabRow(selectedTabIndex = tab) {
                     tabs.forEachIndexed { i, name -> Tab(tab == i, { tab = i }, text = { Text(name) }) }
                 }
                 when (tab) {
                     0 -> Loaded(vm, "albums", { vm.server.albums() }) { AlbumGrid(vm, it) }
                     1 -> Loaded(vm, "artists", { vm.server.artists() }) { ArtistList(vm, it) }
-                    else -> Loaded(vm, "recent", { vm.server.recentAlbums() }) { AlbumGrid(vm, it) }
+                    2 -> Loaded(vm, "recent", { vm.server.recentAlbums() }) { AlbumGrid(vm, it) }
+                    else -> SavedAlbums(vm)
                 }
             }
         }
@@ -309,11 +321,133 @@ fun TrackRow(vm: AppViewModel, t: Track, showArtist: Boolean, onClick: () -> Uni
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+        val saved by vm.savedSongs.collectAsStateWithLifecycle()
+        val saving by vm.savingIds.collectAsStateWithLifecycle()
+        when {
+            t.id in saved -> Icon(Icons.Filled.OfflinePin, "On this phone", Modifier.padding(end = 8.dp).size(18.dp),
+                tint = MaterialTheme.colorScheme.primary)
+            t.id in saving -> CircularProgressIndicator(Modifier.padding(end = 8.dp).size(16.dp), strokeWidth = 2.dp)
+        }
         Text(
             formatDuration(t.durationS?.toLong()), style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
+}
+
+/** "Save on phone" / "Saving 3 of 12" / "Remove from phone" for a set of songs. */
+@Composable
+fun SaveButton(vm: AppViewModel, tracks: List<Track>) {
+    val saved by vm.savedSongs.collectAsStateWithLifecycle()
+    val saving by vm.savingIds.collectAsStateWithLifecycle()
+    val have = tracks.count { it.id in saved }
+    val busy = tracks.count { it.id in saving }
+    when {
+        busy > 0 -> OutlinedButton(onClick = { vm.removeFromPhone(tracks.map { it.id }) }) {
+            CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+            Spacer(Modifier.width(8.dp)); Text("Saving on phone: $have of ${tracks.size} (tap to stop)")
+        }
+        have == tracks.size && have > 0 -> OutlinedButton(onClick = { vm.removeFromPhone(tracks.map { it.id }) }) {
+            Icon(Icons.Filled.OfflinePin, null, tint = MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.width(8.dp)); Text("On this phone · Remove")
+        }
+        else -> OutlinedButton(onClick = { vm.saveToPhone(tracks) }) {
+            Icon(Icons.Filled.DownloadForOffline, null)
+            Spacer(Modifier.width(8.dp))
+            Text(if (have == 0) "Save on phone" else "Save the other ${tracks.size - have} on phone")
+        }
+    }
+}
+
+// --- songs saved on the phone (works with no connection to the PC) ------------------------------
+
+private data class SavedAlbum(val album: String, val artist: String, val tracks: List<Track>)
+
+private fun savedAlbums(songs: Collection<com.dielify.app.saved.SavedSong>): List<SavedAlbum> =
+    songs.map { it.track }
+        .groupBy { (it.albumArtist.ifEmpty { it.artist }) to it.album }
+        .map { (k, ts) -> SavedAlbum(k.second, k.first, ts.sortedWith(compareBy({ it.trackNo ?: 999 }, { it.title }))) }
+        .sortedWith(compareBy({ it.artist.lowercase() }, { it.album.lowercase() }))
+
+@Composable
+private fun SavedAlbums(vm: AppViewModel) {
+    val songs by vm.savedSongs.collectAsStateWithLifecycle()
+    val albums = savedAlbums(songs.values)
+    if (albums.isEmpty()) {
+        Box(Modifier.fillMaxSize().padding(32.dp), Alignment.Center) {
+            Text("Nothing saved on this phone yet. Open an album and tap \"Save on phone\" to listen " +
+                "without a connection to your PC.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        return
+    }
+    LazyVerticalGrid(
+        GridCells.Adaptive(150.dp), Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        item(span = { GridItemSpan(maxLineSpan) }) {
+            Text(
+                "${songs.size} songs · ${formatBytes(vm.saved.totalBytes())} on this phone",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        items(albums, key = { it.artist + "|" + it.album }) { a ->
+            Column(Modifier.clickable { vm.open(Screen.SavedAlbumPage(a.album, a.artist)) }) {
+                Cover(vm, a.tracks.first().coverUrl, null)
+                Spacer(Modifier.height(6.dp))
+                Text(a.album, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Medium)
+                Text(
+                    "${a.artist} · ${a.tracks.size}", maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun SavedAlbumScreen(vm: AppViewModel, page: Screen.SavedAlbumPage) {
+    val songs by vm.savedSongs.collectAsStateWithLifecycle()
+    val album = savedAlbums(songs.values).firstOrNull { it.album == page.album && it.artist == page.artist }
+    Page(vm, page.album) { pad ->
+        if (album == null) {
+            Box(Modifier.padding(pad).fillMaxSize(), Alignment.Center) { Text("No longer on this phone") }
+            return@Page
+        }
+        LazyColumn(Modifier.padding(pad).fillMaxSize()) {
+            item {
+                Column(Modifier.fillMaxWidth().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Cover(vm, album.tracks.first().coverUrl, 220.dp, pixels = 600)
+                    Spacer(Modifier.height(12.dp))
+                    Text(album.album, style = MaterialTheme.typography.titleLarge)
+                    Text(album.artist, color = MaterialTheme.colorScheme.primary)
+                    Text("${album.tracks.size} songs on this phone", style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(12.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Button(onClick = { vm.play(album.tracks) }) { Icon(Icons.Filled.PlayArrow, null); Text("Play") }
+                        FilledTonalButton(onClick = { vm.play(album.tracks, shuffle = true) }) {
+                            Icon(Icons.Filled.Shuffle, null); Spacer(Modifier.width(4.dp)); Text("Shuffle")
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedButton(onClick = { vm.removeFromPhone(album.tracks.map { it.id }) }) {
+                        Text("Remove from phone")
+                    }
+                }
+            }
+            itemsIndexed(album.tracks, key = { _, t -> t.id }) { i, t ->
+                TrackRow(vm, t, showArtist = false) { vm.play(album.tracks, i) }
+            }
+        }
+    }
+}
+
+fun formatBytes(bytes: Long): String = when {
+    bytes >= 1L shl 30 -> "%.1f GB".format(bytes / (1L shl 30).toDouble())
+    bytes >= 1L shl 20 -> "%.0f MB".format(bytes / (1L shl 20).toDouble())
+    else -> "%.0f KB".format(bytes / 1024.0)
 }
 
 @Composable
@@ -350,6 +484,8 @@ fun AlbumScreen(vm: AppViewModel, page: Screen.AlbumPage) {
                                     Icon(Icons.Filled.Shuffle, null); Spacer(Modifier.width(4.dp)); Text("Shuffle")
                                 }
                             }
+                            Spacer(Modifier.height(8.dp))
+                            SaveButton(vm, detail.tracks)
                         }
                     }
                     itemsIndexed(detail.tracks, key = { _, t -> t.id }) { i, t ->

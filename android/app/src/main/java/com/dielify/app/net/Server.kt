@@ -130,6 +130,11 @@ class Server(private val context: Context, private val accounts: AccountStore) {
         return base ?: pick(acc.addresses)
     }
 
+    /** Find a working address now (used by background work before downloading). */
+    suspend fun ensureConnected() {
+        current()
+    }
+
     /** Absolute URL for a server path like "/api/library/albums/3/cover", for the UI. */
     fun url(path: String): String? {
         val b = base ?: account?.addresses?.firstNotNullOfOrNull(::parseAddress) ?: return null

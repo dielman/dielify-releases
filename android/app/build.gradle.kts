@@ -53,4 +53,5 @@ dependencies {
     implementation(libs.serialization.json)
     implementation(libs.coil.compose)
     implementation(libs.coil.okhttp)
+    implementation(libs.work)
 }

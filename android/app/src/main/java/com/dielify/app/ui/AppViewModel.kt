@@ -22,7 +22,9 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 enum class Tab(val label: String) { Library("Library"), Discover("Discover"), Search("Search"), Downloads("Downloads") }
@@ -36,6 +38,7 @@ sealed interface Screen {
     data class YtAlbumPage(val browseId: String, val name: String) : Screen
     data class YtPlaylistPage(val playlistId: String, val name: String) : Screen
     data class SimilarPage(val videoId: String, val name: String) : Screen
+    data class SavedAlbumPage(val album: String, val artist: String) : Screen
 }
 
 data class PlayerUi(
@@ -56,6 +59,11 @@ data class PlayerUi(
 class AppViewModel(app: Application) : AndroidViewModel(app) {
     val server = app.dielify.server
     private val accounts = app.dielify.accounts
+    val saved = app.dielify.saved
+
+    /** Songs on the phone, and the ones still being copied. */
+    val savedSongs = saved.songs
+    val savingIds: StateFlow<Set<Long>> = saved.pending.stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
 
     private val _account = MutableStateFlow(server.account)
     val account: StateFlow<Account?> = _account.asStateFlow()
@@ -177,6 +185,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         } catch (e: ApiError) {
             messages.tryEmit(e.message ?: "Couldn't play that")
         }
+    }
+
+    // --- saving on the phone ------------------------------------------------------------------
+
+    fun saveToPhone(tracks: List<Track>) {
+        val todo = tracks.filter { it.id !in savedSongs.value }
+        saved.save(todo)
+        messages.tryEmit(if (todo.isEmpty()) "Already on this phone"
+            else "Saving ${todo.size} ${if (todo.size == 1) "song" else "songs"} on this phone")
+    }
+
+    fun removeFromPhone(ids: Collection<Long>) {
+        saved.remove(ids)
+        messages.tryEmit("Removed from this phone")
     }
 
     suspend fun refreshDownloadCount() {

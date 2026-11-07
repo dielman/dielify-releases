@@ -83,6 +83,7 @@ fun App(vm: AppViewModel) {
             is Screen.YtAlbumPage -> YtCollectionScreen(vm, screen.name, screen.browseId) { vm.server.ytAlbum(screen.browseId) }
             is Screen.YtPlaylistPage -> YtCollectionScreen(vm, screen.name, screen.playlistId) { vm.server.ytPlaylist(screen.playlistId) }
             is Screen.SimilarPage -> SimilarScreen(vm, screen)
+            is Screen.SavedAlbumPage -> SavedAlbumScreen(vm, screen)
         }
     } }
 }

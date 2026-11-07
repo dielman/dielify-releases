@@ -12,6 +12,7 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSourceBitmapLoader
+import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.ResolvingDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
@@ -24,6 +25,7 @@ import com.dielify.app.R
 import com.dielify.app.dielify
 import com.dielify.app.net.Server
 import com.dielify.app.net.Track
+import com.dielify.app.saved.SavedSongs
 import com.dielify.app.ui.MainActivity
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
@@ -63,6 +65,16 @@ object MediaItems {
         )
         .build()
 
+    private val pathPattern = Regex("""^/api/library/tracks/(\d+)/(stream|cover)$""")
+
+    /** The phone's own copy of a song or its cover, if it has been saved. */
+    fun localFile(uri: Uri, saved: SavedSongs): java.io.File? {
+        if (uri.scheme != Server.MEDIA_SCHEME) return null
+        val m = pathPattern.find(uri.path ?: return null) ?: return null
+        val id = m.groupValues[1].toLong()
+        return if (m.groupValues[2] == "stream") saved.audioFile(id) else saved.coverFile(id)
+    }
+
     fun trackId(item: MediaItem?): Long? = item?.mediaId?.removePrefix(PREFIX)?.toLongOrNull()
 
     /** Items sent from the app's screens arrive without their URI; put it back. */
@@ -85,8 +97,12 @@ class PlaybackService : MediaSessionService() {
     override fun onCreate() {
         super.onCreate()
         val server = dielify.server
-        val dataSource = ResolvingDataSource.Factory(OkHttpDataSource.Factory(server.http)) { spec ->
-            spec.withUri(server.resolveMedia(spec.uri))
+        val saved = dielify.saved
+        // Songs saved on the phone play from the phone; everything else streams from the PC.
+        val upstream = DefaultDataSource.Factory(this, OkHttpDataSource.Factory(server.http))
+        val dataSource = ResolvingDataSource.Factory(upstream) { spec ->
+            val local = MediaItems.localFile(spec.uri, saved)
+            spec.withUri(if (local != null) Uri.fromFile(local) else server.resolveMedia(spec.uri))
         }
         val player = ExoPlayer.Builder(this)
             .setMediaSourceFactory(DefaultMediaSourceFactory(dataSource))

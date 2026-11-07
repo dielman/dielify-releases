@@ -8,17 +8,21 @@ import coil3.SingletonImageLoader
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import coil3.request.crossfade
 import com.dielify.app.net.Server
+import com.dielify.app.saved.SavedSongs
 
 class DielifyApp : Application(), SingletonImageLoader.Factory {
     lateinit var accounts: AccountStore
         private set
     lateinit var server: Server
         private set
+    lateinit var saved: SavedSongs
+        private set
 
     override fun onCreate() {
         super.onCreate()
         accounts = AccountStore(this)
         server = Server(this, accounts)
+        saved = SavedSongs(this)
     }
 
     // Cover art goes through the server's HTTP client, which adds the sign-in token

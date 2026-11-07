@@ -76,7 +76,10 @@ fun <T> Loaded(
 /** Cover art from the PC (a music note while loading or when there's none). */
 @Composable
 fun Cover(vm: AppViewModel, path: String?, size: Dp?, modifier: Modifier = Modifier, pixels: Int = 300) {
-    val url = path?.let { vm.server.url("$it?size=$pixels") }
+    // A song saved on the phone has its cover on the phone too (works with no connection).
+    val local = path?.let { Regex("^/api/library/tracks/(\\d+)/cover$").find(it) }
+        ?.let { vm.saved.coverFile(it.groupValues[1].toLong()) }
+    val url: Any? = local ?: path?.let { vm.server.url("$it?size=$pixels") }
     val shape = RoundedCornerShape(if (size == null || size > 100.dp) 8.dp else 4.dp)
     val sized = if (size == null) modifier.fillMaxWidth().aspectRatio(1f) else modifier.size(size)
     val placeholder = @Composable {
