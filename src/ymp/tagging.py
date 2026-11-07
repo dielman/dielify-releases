@@ -191,3 +191,24 @@ def read_tags(path: Path) -> dict:
                    video_id=txt(f"TXXX:{VIDEOID_TAG}"),
                    cover_bytes=len(apic.data) if apic else 0)
     return out
+
+
+def read_cover(path: Path) -> bytes | None:
+    """The embedded front cover's image bytes, or None."""
+    import mutagen
+    f = mutagen.File(path)
+    if f is None or f.tags is None:
+        return None
+    ext = path.suffix.lower()
+    if ext == ".m4a":
+        covers = f.tags.get("covr")
+        return bytes(covers[0]) if covers else None
+    if ext == ".flac":
+        return f.pictures[0].data if f.pictures else None
+    if ext in (".opus", ".ogg"):
+        blocks = f.tags.get("metadata_block_picture")
+        return Picture(base64.b64decode(blocks[0])).data if blocks else None
+    if ext == ".mp3":
+        apic = next((fr for k, fr in f.tags.items() if k.startswith("APIC")), None)
+        return apic.data if apic else None
+    return None

@@ -12,8 +12,8 @@ app over your home network or Tailscale.
 | Phase | What | Status |
 |---|---|---|
 | 1 | Command line: sign in, search, download with tags + cover art | **Done** (7 Nov 2026) |
-| 2 | Library database + Subsonic API (Symfonium/Ultrasonic) | **Next** |
-| 3 | Discovery + download requests | |
+| 2 | Library database + Subsonic API (Symfonium/Ultrasonic) | **Done** (7 Nov 2026) |
+| 3 | Discovery + download requests | **Next** |
 | 4 | Desktop app (settings, folder picker, tray icon) | |
 | 5 | Secure remote access (Tailscale) | |
 | 6 | Android app | |
@@ -158,6 +158,83 @@ Downloading the same track again is skipped (add `--overwrite` to replace it). A
 
 When that works, Phase 1 is done.
 
+## Phase 2 — play your library from a phone app (home network)
+
+ymp now keeps an index of your music and speaks the **Subsonic** protocol, so phone
+apps like **Symfonium** or **Ultrasonic** can browse and play it. For now that
+works over your home network only. Away-from-home access (Tailscale) is Phase 5.
+
+### 1. Fix the firewall (one time, needs admin)
+
+Your PC's network connection must be marked **Private** (a trusted home network).
+The firewall rule below only opens ymp's port on Private networks, and only for
+Python.
+
+Open **Terminal as administrator** (right-click Start → **Terminal (Admin)**) and
+run these three commands one at a time:
+
+```powershell
+Set-NetConnectionProfile -InterfaceAlias Ethernet -NetworkCategory Private
+```
+Marks your home Ethernet connection as Private. (Same as Settings → Network &
+internet → Ethernet → Network profile type → **Private**.)
+
+```powershell
+Remove-NetFirewallRule -DisplayName "python.exe"
+```
+Removes the broad "allow Python on **public** networks, every port" rules that
+Windows created when the server first started. ymp doesn't need them.
+
+```powershell
+New-NetFirewallRule -DisplayName "ymp server (private networks)" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 4747 -Profile Private -Program "$env:LOCALAPPDATA\Python\pythoncore-3.15-64\python.exe"
+```
+Lets phones on your home network reach ymp on port 4747, and nothing else.
+
+If Windows still shows an "allow access?" pop-up when you start the server, tick
+**only Private networks** and click **Allow**.
+
+### 2. Make a login for the phone app
+
+In your normal (non-admin) terminal, with `.venv` active:
+
+```powershell
+ymp server user add josh
+```
+
+This prints a random password **once**. Keep the terminal open until you've typed
+it into the phone app. It's a separate password just for the app, not your
+YouTube or Google password. Forgot it? `ymp server user password josh` makes a
+new one.
+
+### 3. Start the server
+
+```powershell
+ymp serve
+```
+
+It scans your music folder, then prints the address to use, for example
+`http://192.168.1.249:4747`. Leave this window open while you listen; **Ctrl+C**
+stops it. (Phase 4 turns this into a background service with a tray icon.)
+
+### 4. Connect the phone
+
+Your phone must be on the **same home network** as the PC (Wi-Fi, not mobile data).
+
+- **Symfonium:** Add media provider → **Subsonic** → server address
+  `http://192.168.1.249:4747`, user `josh`, the password from step 2. Leave other
+  options at their defaults.
+- **Ultrasonic:** Settings → Server → **+** → same address, user and password.
+
+### 5. Phase 2 acceptance test
+
+In the app, browse to **Queen → Hot Space → Under Pressure** and play it. Phase 2
+is done when that works.
+
+> The PC's address (`192.168.1.249`) is handed out by your router and can change
+> after a restart. If the app stops connecting, check the address `ymp serve`
+> prints. A router "DHCP reservation" keeps it fixed; Tailscale (Phase 5) makes
+> this a non-issue.
+
 ---
 
 ## Troubleshooting
@@ -169,6 +246,8 @@ When that works, Phase 1 is done.
 | `ffmpeg NOT FOUND` | `winget install -e --id Gyan.FFmpeg`, then reopen the terminal |
 | "YouTube rejected the saved sign-in" | Cookies expired: repeat step 5 |
 | Downloads fail after previously working | YouTube changed something. Update: `pip install -U yt-dlp ytmusicapi`, re-run `ymp doctor` and `pytest`, then pin the new versions in `pyproject.toml` |
+| Phone app can't connect | Is `ymp serve` running? Same Wi-Fi as the PC? Address matches what `ymp serve` printed? Firewall step done (Phase 2 step 1)? |
+| "Too many failed logins" | Wait 15 minutes, then check the password (or reset it: `ymp server user password josh`) |
 | Only ~130–160 kbps instead of ~256 | Check `ymp auth status`; Premium quality needs a working sign-in |
 
 ## Project layout
@@ -182,6 +261,10 @@ src/ymp/
   settings.py     settings.json in %LOCALAPPDATA%\ymp
   paths.py        app folders, Windows-safe file names
   cli.py          the `ymp` command
+  library.py      SQLite index of each profile's music (rebuildable by a scan)
+  subsonic_api.py Subsonic/OpenSubsonic API for phone apps
+  auth.py         phone-app logins, lockout after failed logins
+  server.py       web server; listens on home network/Tailscale only
 tests/            pytest suite (uses FFmpeg-generated audio; no internet needed)
 android/          Android app (Phase 6)
 docs/HANDOFF.md   original project brief
@@ -194,5 +277,10 @@ docs/HANDOFF.md   original project brief
   music folder.
 - During a download the cookies are written to a temporary file for yt-dlp and
   deleted immediately afterwards.
-- The network server (Phase 2+) will bind only to your local network and Tailscale,
-  never to the public internet.
+- The server listens only on this PC's home-network and Tailscale addresses (plus
+  localhost), never on all interfaces and never on a public address; ymp refuses
+  a `server_bind` setting that would.
+- Phone-app passwords are random and only for ymp. The Subsonic protocol means the
+  server must be able to read them back, so they're encrypted with DPAPI rather
+  than hashed. Ten wrong passwords from one device lock it out for 15 minutes.
+- The server log records which page was requested, never the login details.

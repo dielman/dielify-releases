@@ -77,4 +77,9 @@ def download_track(adapter: YTMusicAdapter, video_id: str, settings: Settings,
             existing.unlink()
         shutil.move(str(audio), final)
     log.info("Saved %s", final)
+    try:
+        from .library import Library
+        Library(profile or settings.active_profile, library).index_file(final)
+    except Exception as e:  # the file is safe on disk; a later scan picks it up
+        log.warning("Saved but not indexed (run `ymp library scan`): %s", e)
     return DownloadResult(final, info)

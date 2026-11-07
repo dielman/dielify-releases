@@ -5,6 +5,7 @@ Phase 4's GUI edits the same file through the same functions.
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import os
 import tempfile
@@ -25,6 +26,10 @@ class Settings:
     cache_limit_gb: float = 0.0    # 0 = unlimited (eviction arrives with the library)
     active_profile: str = "default"
     request_delay_s: float = 1.5   # keep traffic modest and human-like
+    server_port: int = 4747
+    # "auto" = this PC's home-network and Tailscale addresses (+ localhost), or a
+    # comma-separated list of IPs. Never all interfaces, never a public address.
+    server_bind: str = "auto"
 
     def __post_init__(self) -> None:
         if not self.library_root:
@@ -39,10 +44,38 @@ class Settings:
             raise ValueError("cache_limit_gb cannot be negative")
         if self.request_delay_s < 0:
             raise ValueError("request_delay_s cannot be negative")
+        if not 1024 <= self.server_port <= 65535:
+            raise ValueError("server_port must be between 1024 and 65535")
+        if self.server_bind != "auto":
+            for ip in self.server_bind.split(","):
+                check_bind_address(ip.strip())
 
     def profile_library(self, profile: str | None = None) -> Path:
         from .paths import safe_name
         return Path(self.library_root) / safe_name(profile or self.active_profile)
+
+
+TAILSCALE_NET = ipaddress.ip_network("100.64.0.0/10")
+
+
+def is_allowed_bind(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    """Loopback, home-network (private) or Tailscale addresses only."""
+    if ip.is_unspecified or ip.is_link_local:
+        return False
+    return ip.is_loopback or ip.is_private or ip in TAILSCALE_NET
+
+
+def check_bind_address(text: str) -> None:
+    try:
+        ip = ipaddress.ip_address(text)
+    except ValueError:
+        raise ValueError(f"server_bind: '{text}' is not an IP address") from None
+    if ip.is_unspecified:
+        raise ValueError("server_bind: refusing to listen on all interfaces (0.0.0.0 / ::). "
+                         "Use 'auto' or this PC's home-network / Tailscale address.")
+    if not is_allowed_bind(ip):
+        raise ValueError(f"server_bind: {ip} is not a private, Tailscale or loopback address; "
+                         "ymp is never exposed to the public internet.")
 
 
 def settings_path() -> Path:

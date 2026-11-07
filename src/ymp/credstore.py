@@ -63,19 +63,28 @@ def _dev_store_allowed() -> bool:
 
 # --- Public API -------------------------------------------------------------
 
-def _cred_dir() -> Path:
-    d = app_data_dir() / "credentials"
+# Stores: "credentials" = YouTube sign-ins per profile; "server_users" = logins
+# that phone apps use for the Subsonic API.
+def _cred_dir(store: str = "credentials") -> Path:
+    d = app_data_dir() / store
     d.mkdir(parents=True, exist_ok=True)
     return d
 
 
-def _cred_path(profile: str) -> Path:
-    return _cred_dir() / f"{safe_name(profile)}.dpapi"
+def _entropy(profile: str, store: str) -> bytes:
+    # Binds each file to its name and store, so files can't be swapped between them.
+    # (The YouTube store keeps the original form so existing sign-ins still open.)
+    suffix = b"" if store == "credentials" else b":" + store.encode("utf-8")
+    return _ENTROPY_PREFIX + profile.encode("utf-8") + suffix
 
 
-def save(profile: str, auth: dict) -> Path:
+def _cred_path(profile: str, store: str = "credentials") -> Path:
+    return _cred_dir(store) / f"{safe_name(profile)}.dpapi"
+
+
+def save(profile: str, auth: dict, store: str = "credentials") -> Path:
     payload = json.dumps(auth).encode("utf-8")
-    entropy = _ENTROPY_PREFIX + profile.encode("utf-8")
+    entropy = _entropy(profile, store)
     if _is_windows():
         blob = b"DPAPI1" + _dpapi(payload, entropy, protect=True)
     elif _dev_store_allowed():
@@ -85,7 +94,7 @@ def save(profile: str, auth: dict) -> Path:
             "Refusing to store credentials unencrypted on this OS. ymp's credential "
             "store uses Windows DPAPI. For local development only, set "
             "YMP_INSECURE_DEV_STORE=1.")
-    path = _cred_path(profile)
+    path = _cred_path(profile, store)
     tmp = path.with_suffix(".tmp")
     tmp.write_bytes(blob)
     if not _is_windows():
@@ -94,12 +103,12 @@ def save(profile: str, auth: dict) -> Path:
     return path
 
 
-def load(profile: str) -> dict | None:
-    path = _cred_path(profile)
+def load(profile: str, store: str = "credentials") -> dict | None:
+    path = _cred_path(profile, store)
     if not path.exists():
         return None
     blob = path.read_bytes()
-    entropy = _ENTROPY_PREFIX + profile.encode("utf-8")
+    entropy = _entropy(profile, store)
     if blob.startswith(b"DPAPI1"):
         if not _is_windows():
             raise CredentialError("These credentials were encrypted on Windows.")
@@ -113,13 +122,13 @@ def load(profile: str) -> dict | None:
     return json.loads(payload)
 
 
-def delete(profile: str) -> bool:
-    path = _cred_path(profile)
+def delete(profile: str, store: str = "credentials") -> bool:
+    path = _cred_path(profile, store)
     if path.exists():
         path.unlink()
         return True
     return False
 
 
-def list_profiles() -> list[str]:
-    return sorted(p.stem for p in _cred_dir().glob("*.dpapi"))
+def list_profiles(store: str = "credentials") -> list[str]:
+    return sorted(p.stem for p in _cred_dir(store).glob("*.dpapi"))

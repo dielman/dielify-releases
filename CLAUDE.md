@@ -52,7 +52,11 @@ src/ymp/
   settings.py     JSON settings: library root, quality, format, cache limit
   paths.py        app data dirs + Windows-safe filename handling
   cli.py          `ymp` command (Phase 1 user interface)
-  # planned: library.py (SQLite), subsonic_api.py, custom_api.py, auth.py
+  library.py      SQLite index (ymp.db); files are the truth, a scan rebuilds it
+  auth.py         server users (Subsonic logins, DPAPI store "server_users"), lockout
+  subsonic_api.py /rest/* Subsonic + OpenSubsonic, JSON and XML
+  server.py       FastAPI app + uvicorn on explicit sockets (never 0.0.0.0)
+  # planned: custom_api.py (Phase 3), device tokens in auth.py (Phase 5)
 ```
 
 ### Key technical facts (verified 7 Nov 2026)
@@ -84,15 +88,17 @@ src/ymp/
 - Credentials: `%LOCALAPPDATA%\ymp\credentials\<profile>.dpapi` (DPAPI, current
   Windows user only)
 - Music: `<library_root>\<profile>\<Artist>\<Album>\<NN Title>.<ext>`
-- Database (Phase 2): `%LOCALAPPDATA%\ymp\ymp.db`
+- Database: `%LOCALAPPDATA%\ymp\ymp.db` (tracks keyed by profile + path relative
+  to the profile folder, so moving `library_root` keeps play counts and stars)
+- Server logins: `%LOCALAPPDATA%\ymp\server_users\<name>.dpapi`
 
 ## Phases
 
 | # | Phase | Acceptance | Status |
 |---|---|---|---|
 | 1 | Server core (CLI) | CLI run produces a tagged audio file that plays in VLC with no internet | **Done** 2026-11-07 (Josh confirmed VLC offline playback) |
-| 2 | Library + Subsonic API | Symfonium/Ultrasonic on the home network browses and plays | Next — waiting for Josh's go-ahead |
-| 3 | Discovery + request endpoints | Test client discovers, requests, watches progress, plays | Not started |
+| 2 | Library + Subsonic API | Symfonium/Ultrasonic on the home network browses and plays | **Done** 2026-11-07 (Josh played a track in Symfonium over home Wi-Fi) |
+| 3 | Discovery + request endpoints | Test client discovers, requests, watches progress, plays | Next — waiting for Josh's go-ahead |
 | 4 | Desktop GUI + Windows integration | Non-technical user installs, signs in, plays offline, no terminal | Not started |
 | 5 | Secure remote access | Phone plays over mobile data, no router ports open | Not started |
 | 6 | Android app | Find, request and listen on the road | Not started |
@@ -107,7 +113,28 @@ src/ymp/
 - `pytest`: 35 pass on Windows, including a real DPAPI round-trip.
 - Acceptance passed: Josh played the file in VLC with the network off, tags and
   cover art shown.
-- Next: Phase 2 (SQLite library + Subsonic API). Do not start until Josh says go.
+
+**Phase 2 — done** (7 Nov 2026):
+- Built: library index + `ymp library scan`, auto-index after download, Subsonic
+  API (browse, folders, search3 incl. empty-query full sync, album lists, stream
+  with Range, cover art with resize, star, scrobble), server users, lockout,
+  `ymp serve` (also logs to `%LOCALAPPDATA%\ymp\logs\server.log`: each Subsonic
+  call with its parameters, never p/t/s/apiKey). 52 tests pass.
+- Verified live: a scripted client on the LAN address (192.168.1.249:4747) pinged,
+  browsed, searched, streamed the full file, seeked (HTTP 206) and got cover art;
+  wrong password rejected; server listened on 127.0.0.1 + 192.168.1.249 only; log
+  showed no tokens.
+- Security finding: Josh's Ethernet is categorised **Public**, and Windows'
+  firewall prompt created "python.exe" allow rules for Public, any port. README
+  Phase 2 step 1 has Josh switch to Private, remove those, and add a port-4747,
+  Private-only rule (admin; Claude must not change firewall settings).
+- Firewall fixed by Josh and verified: Ethernet is Private, python.exe Public rules
+  removed, only "ymp server (private networks)" (TCP 4747, Private) remains.
+- Acceptance passed: Symfonium (Subsonic API 1.13.0) synced via search3, streamed,
+  fetched cover art and scrobbled; no failed or unimplemented calls in the log.
+  It also called getAlbumInfo2, getArtistInfo2, getGenres, getBookmarks,
+  getPlaylists (all answered empty for now).
+- Next: Phase 3 (discovery + download requests). Do not start until Josh says go.
 
 ## Open questions for Josh
 
@@ -125,5 +152,10 @@ src/ymp/
   Pillow added as a dependency to square-crop non-square video thumbnails for cover
   art. Credentials refuse to save unencrypted on non-Windows unless the explicit
   dev-only env var `YMP_INSECURE_DEV_STORE=1` is set (used by tests).
+- 2026-11-07 (Phase 2): FastAPI 0.162 / Uvicorn 0.54 / Starlette 1.10 on Python 3.15.
+  Subsonic passwords are random, ymp-generated and DPAPI-encrypted (token auth
+  needs the plaintext, so hashing isn't possible). No transcoding: stream always
+  sends the original file. Port 4747. IDs are typed strings (ar-/al-/tr-).
+  Unsupported features (playlists, genres, lyrics...) return valid empty results.
 - 2026-11-07: Default `auto` keeps the Premium Opus stream (itag 774) over 256k AAC:
   same quality class, no re-encode. Josh can set `preferred_format m4a` for AAC.

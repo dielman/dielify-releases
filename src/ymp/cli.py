@@ -7,6 +7,9 @@
     ymp download VIDEO_ID ...      download by video id
     ymp get "query"                search, pick a result, download it
     ymp inspect FILE               show a file's tags
+    ymp library scan | stats       index the music folder (Phase 2)
+    ymp server user add|list|...   logins for phone apps (Subsonic)
+    ymp serve                      serve the library on the home network
 """
 
 from __future__ import annotations
@@ -227,6 +230,118 @@ def cmd_inspect(args) -> int:
     return 0
 
 
+def _library(args):
+    from .library import Library
+    s = settings_mod.load()
+    return Library(_profile(args), s.profile_library(_profile(args)))
+
+
+def cmd_library_scan(args) -> int:
+    lib = _library(args)
+    _out(f"Scanning {lib.root} …")
+    res = lib.scan()
+    _out(f"  added {res.added}, updated {res.updated}, removed {res.removed}, "
+         f"unchanged {res.unchanged}")
+    for err in res.errors:
+        _out(f"  could not read: {err}")
+    return cmd_library_stats(args)
+
+
+def cmd_library_stats(args) -> int:
+    st = _library(args).stats()
+    _out(f"Profile '{_profile(args)}': {st['tracks']} tracks, {st['albums']} albums, "
+         f"{st['artists']} artists, {st['bytes'] / 1e9:.2f} GB")
+    return 0
+
+
+def _show_new_password(user) -> None:
+    _out(f"  user:     {user.name}   (plays profile '{user.profile}')")
+    _out(f"  password: {user.password}")
+    _out("Type this password into the phone app now; ymp won't show it again.")
+    _out("(It's stored encrypted on this PC. Reset it any time with: "
+         f"ymp server user password {user.name})")
+
+
+def cmd_user_add(args) -> int:
+    from . import auth
+    _show_new_password(auth.add_user(args.name, args.profile or args.name))
+    return 0
+
+
+def cmd_user_password(args) -> int:
+    from . import auth
+    if auth.get_user(args.name) is None:
+        raise ValueError(f"No server user '{args.name}'")
+    _show_new_password(auth.set_password(args.name))
+    return 0
+
+
+def cmd_user_list(args) -> int:
+    from . import auth
+    users = auth.list_users()
+    for u in users:
+        _out(f"  {u.name:<16} profile '{u.profile}'")
+    if not users:
+        _out("No server users yet. Add one: ymp server user add josh")
+    return 0
+
+
+def cmd_user_remove(args) -> int:
+    from . import auth
+    _out(f"Removed '{args.name}'." if auth.remove_user(args.name) else f"No server user '{args.name}'.")
+    return 0
+
+
+def cmd_serve(args) -> int:
+    from . import auth, server
+    s = settings_mod.load()
+    if args.port:
+        s.server_port = args.port
+        s.validate()
+    users = auth.list_users()
+    if not users:
+        _out("No server users yet, so no phone app could sign in. First run:")
+        _out("  ymp server user add josh")
+        return 1
+    for u in users:
+        res = _library_for(u.profile).scan()
+        _out(f"Library '{u.profile}': +{res.added} ~{res.updated} -{res.removed} "
+             f"(={res.unchanged}) — {_library_for(u.profile).stats()['tracks']} tracks")
+    addrs = server.bind_addresses(s)
+    _out()
+    _out(f"ymp {__version__} serving on port {s.server_port}. In the phone app, use:")
+    for a in addrs:
+        where = "this PC only" if a.startswith("127.") else (
+            "Tailscale" if a.startswith("100.") else "home network")
+        _out(f"  http://{a}:{s.server_port}    ({where})")
+    _out(f"Users: {', '.join(u.name for u in users)}.  Stop with Ctrl+C.")
+    _out()
+    _log_to_file()
+    server.run(s, addrs)
+    return 0
+
+
+def _log_to_file() -> None:
+    """Server requests -> console and %LOCALAPPDATA%\\ymp\\logs\\server.log (no secrets)."""
+    from logging.handlers import RotatingFileHandler
+
+    from .paths import app_data_dir
+    logs = app_data_dir() / "logs"
+    logs.mkdir(exist_ok=True)
+    fh = RotatingFileHandler(logs / "server.log", maxBytes=2_000_000, backupCount=3,
+                             encoding="utf-8")
+    fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+    logging.getLogger().addHandler(fh)
+    for name in ("ymp.server", "ymp.subsonic_api"):
+        logging.getLogger(name).setLevel(logging.INFO)
+    _out(f"Log: {logs / 'server.log'}")
+
+
+def _library_for(profile: str):
+    from .library import Library
+    return Library(profile, settings_mod.load().profile_library(profile))
+
+
 # --- parser -----------------------------------------------------------------
 
 def build_parser() -> argparse.ArgumentParser:
@@ -275,6 +390,28 @@ def build_parser() -> argparse.ArgumentParser:
     i = sub.add_parser("inspect", help="show an audio file's tags")
     i.add_argument("file")
     i.set_defaults(fn=cmd_inspect)
+
+    lb = sub.add_parser("library", help="music library index").add_subparsers(dest="sub", required=True)
+    lb.add_parser("scan", help="index new, changed and removed files").set_defaults(fn=cmd_library_scan)
+    lb.add_parser("stats", help="track/album/artist counts").set_defaults(fn=cmd_library_stats)
+
+    sv = sub.add_parser("server", help="server settings").add_subparsers(dest="sub", required=True)
+    su = sv.add_parser("user", help="logins for phone apps").add_subparsers(dest="action", required=True)
+    ua = su.add_parser("add", help="create a login (prints its password once)")
+    ua.add_argument("name")
+    ua.add_argument("--profile", help="whose library it plays (default: same as name)")
+    ua.set_defaults(fn=cmd_user_add)
+    su.add_parser("list").set_defaults(fn=cmd_user_list)
+    up = su.add_parser("password", help="make a new password")
+    up.add_argument("name")
+    up.set_defaults(fn=cmd_user_password)
+    ur = su.add_parser("remove")
+    ur.add_argument("name")
+    ur.set_defaults(fn=cmd_user_remove)
+
+    sr = sub.add_parser("serve", help="serve the library to phone apps (home network/Tailscale)")
+    sr.add_argument("--port", type=int, help="override server_port for this run")
+    sr.set_defaults(fn=cmd_serve)
     return p
 
 
@@ -288,7 +425,7 @@ def main(argv: list[str] | None = None) -> int:
                         format="%(levelname)s %(name)s: %(message)s")
     try:
         return args.fn(args)
-    except (YouTubeError, credstore.CredentialError, KeyError, ValueError) as e:
+    except (YouTubeError, credstore.CredentialError, KeyError, ValueError, OSError) as e:
         _out(f"Error: {e}")
         return 2
     except KeyboardInterrupt:

@@ -16,10 +16,12 @@ dependencies = [
     "Pillow>=11,<13",
     "platformdirs>=4,<5",
     "requests>=2.32,<3",
+    "fastapi>=0.162,<1",
+    "uvicorn>=0.54,<1",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8"]
+dev = ["pytest>=8", "httpx>=0.28,<1"]
 
 [project.scripts]
 ymp = "ymp.cli:main"
