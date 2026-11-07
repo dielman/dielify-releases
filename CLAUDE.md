@@ -227,8 +227,13 @@ src/dielify/
 - **Android 17 fact:** apps targeting SDK 37 need the runtime permission
   `ACCESS_LOCAL_NETWORK` (shown as "Nearby devices") to reach LAN addresses; without it
   connections fail silently. Symfonium (older target) isn't affected.
-- Next: discovery + YouTube search + tap-to-download + downloads queue; then phone-side
-  offline saving; then Android Auto.
+- Step 2 done (Josh: "It worked"): bottom tabs; Discover (home feed + charts), YouTube
+  search, tap-to-download, album/playlist "download missing", similar songs, live queue.
+- Step 3 built (0aab1f3): "Save on phone" (WorkManager; files in app-private
+  filesDir/saved + index.json); player and covers use the phone copy first; Library
+  "On phone" tab, shown automatically when the PC can't be reached. Saving verified on
+  the Pixel; offline playback not yet tested by Josh.
+- Next: Android Auto / lock-screen polish; then Phase 6 acceptance on the road.
 
 ## Open questions for Josh
 
