@@ -284,9 +284,12 @@ def main(argv: list[str] | None = None) -> int:
     updater.on_installer_started = lambda: threading.Timer(1.5, quit_app).start()
     updater.start_background_checks()
     threading.Thread(target=winint.wait_for_show, args=(show,), daemon=True, name="dielify-show").start()
+    threading.Thread(target=winint.keep_awake_loop, args=(lambda: settings_mod.load().keep_awake,),
+                     daemon=True, name="dielify-keep-awake").start()
 
     webview.start(tray.run_detached, private_mode=False, storage_path=str(app_data_dir() / "webview"))
 
+    _app_server.watcher.stop()
     _app_server.should_exit = True
     time.sleep(0.5)
     return 0

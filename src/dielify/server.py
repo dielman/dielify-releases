@@ -171,10 +171,70 @@ def _config(queue: DownloadQueue | None = None) -> uvicorn.Config:
                           server_header=False, timeout_graceful_shutdown=SHUTDOWN_GRACE_S)
 
 
+ADDRESS_CHECK_S = 30
+
+
+class AddressWatcher:
+    """Also listen on addresses that appear after start-up. Tailscale often connects
+    after Dielify has started with Windows; without this, phones away from home could
+    never reach the PC until Dielify was restarted. Only with server_bind = "auto",
+    and only ever on loopback, home-network or Tailscale addresses."""
+
+    def __init__(self, s: Settings, app, bound: list[str]):
+        self.s, self.app, self.bound = s, app, set(bound)
+        self.extra: list[uvicorn.Server] = []
+        self._stop = threading.Event()
+
+    def start(self) -> None:
+        if self.s.server_bind == "auto":
+            threading.Thread(target=self._loop, name="dielify-addresses", daemon=True).start()
+
+    def check(self) -> list[str]:
+        added = []
+        for addr in bind_addresses(self.s):  # never 0.0.0.0, never public
+            if addr in self.bound:
+                continue
+            try:
+                sock = _listen(addr, self.s.server_port)
+            except OSError as e:
+                log.warning("Can't listen on new address %s:%d (%s)", addr, self.s.server_port, e)
+                continue
+            # Same app, its own small server; lifespan off so the download queue isn't
+            # started a second time.
+            srv = uvicorn.Server(uvicorn.Config(
+                self.app, lifespan="off", access_log=False, log_config=None, use_colors=False,
+                server_header=False, timeout_graceful_shutdown=SHUTDOWN_GRACE_S))
+            threading.Thread(target=srv.run, kwargs={"sockets": [sock]}, daemon=True,
+                             name=f"dielify-server-{addr}").start()
+            self.extra.append(srv)
+            self.bound.add(addr)
+            added.append(addr)
+            log.info("Now also listening on %s:%d", addr, self.s.server_port)
+        return added
+
+    def _loop(self) -> None:
+        while not self._stop.wait(ADDRESS_CHECK_S):
+            try:
+                self.check()
+            except Exception:
+                log.exception("Address check failed")
+
+    def stop(self) -> None:
+        self._stop.set()
+        for srv in self.extra:
+            srv.should_exit = True
+
+
 def run(s: Settings, addrs: list[str]) -> None:
     """`dielify serve`: run in the foreground until Ctrl+C."""
     sockets = _sockets(s, addrs)
-    _Server(_config()).run(sockets=sockets)
+    config = _config()
+    watcher = AddressWatcher(s, config.app, [sk.getsockname()[0] for sk in sockets])
+    watcher.start()
+    try:
+        _Server(config).run(sockets=sockets)
+    finally:
+        watcher.stop()
 
 
 def start_background(s: Settings, addrs: list[str]) -> uvicorn.Server:
@@ -194,6 +254,8 @@ def start_background(s: Settings, addrs: list[str]) -> uvicorn.Server:
         if srv.started:
             break
         time.sleep(0.05)
+    srv.watcher = AddressWatcher(s, srv.config.app, [sk.getsockname()[0] for sk in sockets])
+    srv.watcher.start()
     return srv
 
 

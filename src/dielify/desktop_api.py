@@ -52,6 +52,7 @@ class DesktopStatus(BaseModel):
     preferred_format: str
     cache_limit_gb: float
     offline: bool
+    keep_awake: bool
     start_with_windows: bool
     server_port: int
     addresses: list[str] = Field(description="Addresses phones can use")
@@ -65,6 +66,7 @@ class DesktopChange(BaseModel):
     preferred_format: Literal["auto", "m4a", "opus"] | None = None
     cache_limit_gb: float | None = Field(None, ge=0)
     offline: bool | None = None
+    keep_awake: bool | None = None
     start_with_windows: bool | None = None
 
 
@@ -127,7 +129,7 @@ def _status() -> DesktopStatus:
         log_file=str(app_data_dir() / "logs" / "server.log"),
         active_profile=s.active_profile, profiles=profiles,
         library_root=s.library_root, quality=s.quality, preferred_format=s.preferred_format,
-        cache_limit_gb=s.cache_limit_gb, offline=s.offline, start_with_windows=winint.start_with_windows(),
+        cache_limit_gb=s.cache_limit_gb, offline=s.offline, keep_awake=s.keep_awake, start_with_windows=winint.start_with_windows(),
         server_port=s.server_port,
         addresses=[f"http://{a}:{s.server_port}" for a in bind_addresses(s) if not a.startswith("127.")],
         phone_users=users)

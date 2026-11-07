@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Dielify",
-    "version": "0.4.2"
+    "version": "0.5.0"
   },
   "paths": {
     "/api/auth/login": {
@@ -474,9 +474,9 @@
             "required": false,
             "schema": {
               "type": "integer",
-              "maximum": 1000,
+              "maximum": 5000,
               "minimum": 1,
-              "default": 200,
+              "default": 5000,
               "title": "Limit"
             }
           }
@@ -2144,6 +2144,17 @@
             ],
             "title": "Offline"
           },
+          "keep_awake": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Keep Awake"
+          },
           "start_with_windows": {
             "anyOf": [
               {
@@ -2164,6 +2175,14 @@
           "version": {
             "type": "string",
             "title": "Version"
+          },
+          "data_folder": {
+            "type": "string",
+            "title": "Data Folder"
+          },
+          "log_file": {
+            "type": "string",
+            "title": "Log File"
           },
           "active_profile": {
             "type": "string",
@@ -2196,6 +2215,10 @@
             "type": "boolean",
             "title": "Offline"
           },
+          "keep_awake": {
+            "type": "boolean",
+            "title": "Keep Awake"
+          },
           "start_with_windows": {
             "type": "boolean",
             "title": "Start With Windows"
@@ -2223,6 +2246,8 @@
         "type": "object",
         "required": [
           "version",
+          "data_folder",
+          "log_file",
           "active_profile",
           "profiles",
           "library_root",
@@ -2230,6 +2255,7 @@
           "preferred_format",
           "cache_limit_gb",
           "offline",
+          "keep_awake",
           "start_with_windows",
           "server_port",
           "addresses",
