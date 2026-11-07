@@ -15,6 +15,7 @@ import com.dielify.app.net.Item
 import com.dielify.app.net.Track
 import com.dielify.app.playback.MediaItems
 import com.dielify.app.playback.PlaybackService
+import com.dielify.app.update.UpdateState
 import com.google.common.util.concurrent.MoreExecutors
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -60,6 +61,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val server = app.dielify.server
     private val accounts = app.dielify.accounts
     val saved = app.dielify.saved
+    val updater = app.dielify.updater
 
     /** Songs on the phone, and the ones still being copied. */
     val savedSongs = saved.songs
@@ -91,6 +93,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val lastUsername: String get() = accounts.lastUsername()
 
     init {
+        viewModelScope.launch {
+            updater.check()
+            val s = updater.state.value
+            if (s is UpdateState.Available) messages.tryEmit("Dielify ${s.release.version} is available: Settings > Update")
+        }
         val token = SessionToken(app, ComponentName(app, PlaybackService::class.java))
         val future = MediaController.Builder(app, token).buildAsync()
         future.addListener({

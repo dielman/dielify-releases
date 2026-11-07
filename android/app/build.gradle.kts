@@ -8,6 +8,13 @@ plugins {
 val dielifyVersion: String = Regex("""__version__ = "([^"]+)"""")
     .find(rootProject.file("../src/dielify/__init__.py").readText())!!.groupValues[1]
 
+// Where updates are published (same manifest as the PC app; written by tools/release.py).
+val manifestUrl: String = Regex("""MANIFEST_URL: str \| None = '([^']*)'""")
+    .find(rootProject.file("../src/dielify/update_config.py").readText())?.groupValues?.get(1) ?: ""
+
+// Release signing: tools/release.py passes the keystore (kept outside the project).
+val releaseKeystore: String? = System.getenv("DIELIFY_KEYSTORE")
+
 android {
     namespace = "com.dielify.app"
     compileSdk = 37
@@ -18,11 +25,29 @@ android {
         targetSdk = 37
         versionName = dielifyVersion
         versionCode = dielifyVersion.split(".").fold(0) { acc, part -> acc * 100 + part.toInt() }
+        buildConfigField("String", "MANIFEST_URL", "\"$manifestUrl\"")
+    }
+
+    signingConfigs {
+        if (releaseKeystore != null) create("release") {
+            storeFile = file(releaseKeystore)
+            storePassword = System.getenv("DIELIFY_KEYSTORE_PASSWORD")
+            keyAlias = "dielify"
+            keyPassword = System.getenv("DIELIFY_KEYSTORE_PASSWORD")
+        }
     }
 
     buildTypes {
+        debug {
+            // Test builds sit next to the real app instead of replacing it.
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-test"
+        }
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            if (releaseKeystore != null) signingConfig = signingConfigs.getByName("release")
         }
     }
 

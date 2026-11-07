@@ -44,3 +44,19 @@ def test_configure_and_public_key_written(release):
     release._set_config("MANIFEST_URL", "https://github.com/a/b/releases/latest/download/manifest.json")
     exec(release.CONFIG.read_text(encoding="utf-8"), ns)
     assert ns["MANIFEST_URL"].startswith("https://github.com/a/b/") and ns["PUBLIC_KEY_PEM"]
+
+
+def test_manifest_includes_phone_app(release, tmp_path):
+    import hashlib
+    key = ECC.generate(curve="ed25519")
+    setup = tmp_path / "Dielify-setup-0.6.0.exe"
+    setup.write_bytes(b"installer")
+    apk = tmp_path / "Dielify-0.6.0.apk"
+    apk.write_bytes(b"phone app" * 10)
+    man, sig = release.write_manifest(setup, "https://x/setup.exe", "notes", key, apk, "https://x/app.apk")
+    data = verify_manifest(man.read_bytes(), sig.read_text(), key.public_key().export_key(format="PEM"))
+    a = data["android"]
+    assert a["url"] == "https://x/app.apk" and a["size"] == 90
+    assert a["sha256"] == hashlib.sha256(apk.read_bytes()).hexdigest()
+    assert a["version_code"] == release.version_code(a["version"])
+    assert release.version_code("0.6.0") == 600 and release.version_code("1.2.3") == 10203
