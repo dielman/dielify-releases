@@ -128,7 +128,7 @@ src/dielify/
 | 3 | Discovery + request endpoints | Test client discovers, requests, watches progress, plays | **Done** 2026-11-07 (Josh's acceptance run: PASS) |
 | 4 | Desktop GUI + Windows integration | Non-technical user installs, signs in, plays offline, no terminal | **Done** 2026-11-07 — 0.4.3 installed + working on Josh's PC; clean-PC test waived by Josh |
 | 5 | Secure remote access | Phone plays over mobile data, no router ports open | **Done** 2026-11-07 (Josh played in Symfonium over mobile data via Tailscale) |
-| 6 | Android app | Find, request and listen on the road | Next — waiting for Josh's go-ahead |
+| 6 | Android app | Find, request and listen on the road | **Done** 2026-11-08 — closed by Josh before the car test ("assume it works"); Android Auto untested |
 | 7 | Polish + multi-user install | Second PC, second profile, backups | Not started |
 
 ## Current status
@@ -211,6 +211,37 @@ src/dielify/
   test (Windows Sandbox suggested) and the first in-app update (0.4.1 -> 0.4.2).
 - Size note: each update re-downloads ~172 MB (FFmpeg full build is 217 MB per exe);
   a slimmer FFmpeg build would need Josh's OK to download.
+
+**Phase 6 — in progress** (started 8 Nov 2026, branch `phase-6`):
+- Toolchain: Android Studio (JBR = Java 25) at C:\Program Files\Android\Android Studio,
+  SDK at `E:\Android\Sdk` (kept off AppData on purpose), Gradle 9.9.0 wrapper, AGP 9.5.1,
+  Kotlin 2.4.21, Compose BOM 2026.09.00, Media3 1.11.1, OkHttp 5, Coil 3. compile/target
+  SDK 37, minSdk 29. Build from Claude's shell:
+  `JAVA_HOME="/c/Program Files/Android/Android Studio/jbr" ./gradlew assembleDebug` in
+  `android/`, install with `E:\Android\Sdk\platform-toolsdb.exe install -r ...`.
+  Josh's Pixel 9 Pro (Android 17) is authorised for USB debugging.
+- Step 1 done (Josh: "It plays"): sign in with a phone login (device token encrypted by
+  the Android Keystore, backups off), auto-pick home vs Tailscale address via
+  /api/health, library albums/artists/recent/search, streaming via `dielify://server/...`
+  URIs resolved at fetch time, background playback + lock-screen controls (Media3).
+- **Android 17 fact:** apps targeting SDK 37 need the runtime permission
+  `ACCESS_LOCAL_NETWORK` (shown as "Nearby devices") to reach LAN addresses; without it
+  connections fail silently. Symfonium (older target) isn't affected.
+- Step 2 done (Josh: "It worked"): bottom tabs; Discover (home feed + charts), YouTube
+  search, tap-to-download, album/playlist "download missing", similar songs, live queue.
+- Step 3 built (0aab1f3): "Save on phone" (WorkManager; files in app-private
+  filesDir/saved + index.json); player and covers use the phone copy first; Library
+  "On phone" tab, shown automatically when the PC can't be reached. Saving verified on
+  the Pixel; offline playback not yet tested by Josh.
+- Step 3 done (Josh: "It plays offline").
+- Step 4 built: PlaybackService is a MediaLibraryService (browse tree Recently added /
+  Albums / On this phone; a song tapped in the car plays on through its album);
+  ArtProvider serves covers as content://com.dielify.app.art/{track|album}/<id> (saved
+  cover, else fetched once into cacheDir/art). Sideloaded apps only show in Android Auto
+  with AA developer settings > "Unknown sources" ticked. Not yet tested in a car.
+- Closed 8 Nov 2026 by Josh ("lets assume it works and progress, any issues arising later
+  we can fix"). He turned on Android Auto "Unknown sources". Not verified: Android Auto
+  in a car, and the full "request a new song and hear it on the road" run.
 
 ## Open questions for Josh
 

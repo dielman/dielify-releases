@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Dielify server speaks plain HTTP. Over Tailscale the connection is encrypted by
+     Tailscale itself; on home Wi-Fi it is plain HTTP (the sign-in password is sent once,
+     then a per-device token). The app only ever talks to the server addresses you enter. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>
