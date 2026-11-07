@@ -130,6 +130,7 @@ src/dielify/
 | 5 | Secure remote access | Phone plays over mobile data, no router ports open | **Done** 2026-11-07 (Josh played in Symfonium over mobile data via Tailscale) |
 | 6 | Android app | Find, request and listen on the road | **Done** 2026-11-08 — closed by Josh before the car test ("assume it works"); Android Auto untested |
 | 7 | Polish (scope set by Josh 8 Nov) | Backups to E:, signed phone release with in-app updates, download-next, playlists, music-video fix | In progress (branch `phase-7`) |
+| 8 | Listening features (Josh, 8 Nov) | 1 instant play + download, 2 play history + stats, 4 two-way playlist sync, 3 Dielify-made genre/vibe playlists, 5 outside discovery | Planned — starts after Phase 7 |
 
 ## Current status
 
@@ -330,3 +331,12 @@ src/dielify/
   in-app updates from the same GitHub releases. Backlog in: download next (phone requests
   jump the queue), YouTube playlists in Library, music-video "Track not found" fix. Not in:
   cache size limit enforcement.
+- 2026-11-08 (Phase 8 scope, Josh): order 1 -> 2 -> 4 -> 3 -> 5.
+  1. Instant play: any YouTube song plays at once (streamed through the PC with the
+     Premium sign-in) and the PC downloads it next in line ("auto-download while
+     streaming" = yes, answering the old open question).
+  2. Play history (every play: when, device, how much) + stats + recommendations.
+  4. Playlist sync: **two-way** (Dielify edits change Josh's YouTube Music playlists).
+  3. Dielify-made playlists by genre/vibe; tags from MusicBrainz (free, no account).
+  5. Outside discovery: **ListenBrainz** and **radio charts** (e.g. triple j). Not Last.fm
+     (Josh didn't pick it), not Spotify (recommendation API closed to new apps).
