@@ -278,6 +278,15 @@ src/dielify/
   sessions). Real queue checked read-only via a run_in_terminal tab (sees real AppData):
   "Champion" requested by `pixel`, marked next, downloaded first try; ~265-294 songs/hour.
   Only failure in the queue: an old Riptide VEVO video (#48, from before the 0.6.0 fix).
+- Item 2 built and published as **v0.8.0**: play history (`plays` table in library.py
+  SCHEMA, `history.py`; counts after half the song or 240 s, skips kept, grouped by
+  video id; client_id makes resends safe), `POST /api/plays` (batch), `GET /api/stats`,
+  `GET /api/discover/for-you` (on repeat / forgotten favourites / more like your top
+  songs via YT radio of the top seeds). Subsonic scrobbles and /played feed it. Phone:
+  PlayReporter (pending_plays.json, flushed on start and after each play), Stats screen
+  (top-bar Insights icon), For-you shelves on Discover. PC: Stats tab, heard-time
+  reporting, For-you shelves. History starts at 0.8.0 (old plays are counts only).
+  Not yet confirmed by Josh on device.
 - Idea for later: pre-resolve the next song in a list so skipping feels instant.
 
 ## Open questions for Josh
