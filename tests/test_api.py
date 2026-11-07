@@ -265,7 +265,7 @@ def test_dead_signin_waits_instead_of_downgrading(monkeypatch):
         end = time.time() + 10
         while not (job := c.get(f"/api/downloads/{job['id']}", headers=h).json())["error"] and time.time() < end:
             time.sleep(0.05)
-        assert job["status"] == "queued" and "dielify auth login" in job["error"]
+        assert job["status"] == "queued" and "Sign in" in job["error"]
         assert fake.calls == 0 and job["attempts"] == 0  # nothing downloaded at lower quality
         SignInFlips.signed_in = True  # Josh signs in again
         job = wait_done(c, h, job["id"])
@@ -332,3 +332,40 @@ def test_settings_read_and_change():
         assert r.json()["quality"] == "standard" and r.json()["cache_limit_gb"] == 20
         assert c.put("/api/settings", headers=h, json={"library_root": "C:/x"}).json()["library_root"] != "C:/x"
         assert c.put("/api/settings", headers=h, json={"quality": "ultra"}).status_code == 422
+
+
+class CountingSignedOut(FakeDownloader):
+    checks = 0
+
+    def account_name(self):
+        CountingSignedOut.checks += 1
+        raise NotSignedIn("YouTube answered as if you were signed out")
+
+
+def test_dead_signin_is_checked_once_not_per_download(monkeypatch):
+    """Regression: 71 waiting downloads each asked YouTube 'am I signed in?' about once
+    a second. Now the whole queue pauses and asks once per wait."""
+    monkeypatch.setattr(downloads, "SIGNIN_WAIT_S", 60)
+    CountingSignedOut.checks = 0
+    with make_client(CountingSignedOut()) as c:
+        h = login(c)
+        for vid in ("s1", "s2", "s3", "s1", "s2"):
+            c.post("/api/downloads", headers=h, json={"type": "song", "id": vid})
+        time.sleep(2)
+        jobs = c.get("/api/downloads", headers=h).json()["downloads"]
+        assert CountingSignedOut.checks == 1
+        assert all(j["status"] == "queued" and "sign-in" in j["error"] for j in jobs)
+
+
+def test_active_list_is_in_download_order_with_totals():
+    with make_client(FakeDownloader(slow=True)) as c:
+        h = login(c)
+        ids = [c.post("/api/downloads", headers=h, json={"type": "song", "id": v}).json()["downloads"][0]["id"]
+               for v in ("s1", "s2", "s3")]
+        r = c.get("/api/downloads", params={"active": True, "limit": 2}, headers=h).json()
+        assert [d["id"] for d in r["downloads"]] == ids[:2]   # oldest first = next to download
+        assert r["active_total"] == 3                          # the total, not just this page
+        for i in ids:
+            c.delete(f"/api/downloads/{i}", headers=h)
+        fin = c.get("/api/downloads", params={"finished": True}, headers=h).json()["downloads"]
+        assert [d["id"] for d in fin] == ids[::-1]              # finished: newest first

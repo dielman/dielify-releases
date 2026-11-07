@@ -27,7 +27,8 @@ FINISHED = ("done", "failed", "cancelled")
 MAX_ATTEMPTS = 3
 RETRY_DELAYS_S = (30, 120)  # wait before the 2nd and 3rd attempt
 SIGNIN_CHECK_S = 600        # re-confirm the YouTube sign-in at most this often
-SIGNIN_WAIT_S = 60          # while signed out, look again this often
+SIGNIN_WAIT_S = 300         # while signed out (or offline), check again this often, ONCE
+                            # per profile, not once per waiting download
 
 
 class _Cancelled(Exception):
@@ -50,6 +51,7 @@ class DownloadQueue:
         self._stop = threading.Event()
         self._cancel: set[int] = set()
         self._signin_ok: dict[str, float] = {}  # profile -> when the sign-in was last confirmed
+        self._paused: dict[str, tuple[float, str]] = {}  # profile or "*" -> (until, reason)
         self._lock = threading.Lock()
         self._thread: threading.Thread | None = None
 
@@ -83,9 +85,10 @@ class DownloadQueue:
         """A new YouTube sign-in was saved: use it, and retry waiting jobs now."""
         self._adapters.pop(profile, None)
         self._signin_ok.pop(profile, None)
+        self._paused.pop(profile, None)
         with connect() as conn:
-            conn.execute("UPDATE downloads SET not_before = 0 WHERE profile = ? AND status = 'queued'",
-                         (profile,))
+            conn.execute("UPDATE downloads SET not_before = 0, error = NULL WHERE profile = ? AND "
+                         "status = 'queued'", (profile,))
         self._wake.set()
 
     # --- requests ------------------------------------------------------------------
@@ -98,6 +101,9 @@ class DownloadQueue:
         in_library = lib.video_ids()
         request_id = uuid.uuid4().hex[:12]
         now = time.time()
+        # while the queue is paused (dead sign-in, offline), new requests wait with it
+        pauses = [p for p in (self._paused.get(profile), self._paused.get("*")) if p and p[0] > now]
+        hold_until, hold_reason = max(pauses) if pauses else (0.0, None)
         ids = []
         with connect() as conn:
             for item in items:
@@ -113,20 +119,41 @@ class DownloadQueue:
                 ids.append(conn.execute(
                     "INSERT INTO downloads (profile, video_id, title, artist, album, request_id, "
                     "request_type, request_title, requested_by, status, progress, track_id, "
-                    "created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    "not_before, error, created_at, updated_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (profile, item.id, item.title, ", ".join(item.artists) or None, item.album,
                      request_id, request_type, request_title or item.title, requested_by,
                      "done" if done else "queued", 1.0 if done else 0.0,
-                     in_library.get(item.id), now, now)).lastrowid)
+                     in_library.get(item.id), 0.0 if done else hold_until,
+                     None if done else hold_reason, now, now)).lastrowid)
         self._wake.set()
         return [j for j in (self.get(profile, i) for i in ids) if j]
 
-    def list(self, profile: str, active_only: bool = False, limit: int = 200) -> list[dict]:
-        where = " AND status IN ('queued', 'downloading', 'processing')" if active_only else ""
+    def list(self, profile: str, active_only: bool = False, limit: int = 200,
+             finished_only: bool = False) -> list[dict]:
+        """active_only: in the order they'll download (the running one first).
+        finished_only / everything: newest first."""
+        if active_only:
+            where = " AND status IN ('queued', 'downloading', 'processing')"
+            order = "CASE status WHEN 'queued' THEN 1 ELSE 0 END, id"  # same order as _next_job
+        else:
+            where = " AND status IN ('done', 'failed', 'cancelled')" if finished_only else ""
+            order = "id DESC"
         with connect() as conn:
             rows = conn.execute(f"SELECT * FROM downloads WHERE profile = ?{where} "
-                                "ORDER BY id DESC LIMIT ?", (profile, limit)).fetchall()
+                                f"ORDER BY {order} LIMIT ?", (profile, limit)).fetchall()
         return [dict(r) for r in rows]
+
+    def summary(self, profile: str) -> dict:
+        """How many are waiting, and how long a song has recently taken (for an estimate)."""
+        with connect() as conn:
+            active = conn.execute("SELECT COUNT(*) FROM downloads WHERE profile = ? AND status IN "
+                                  "('queued', 'downloading', 'processing')", (profile,)).fetchone()[0]
+            recent = [r[0] for r in conn.execute(
+                "SELECT updated_at FROM downloads WHERE profile = ? AND status = 'done' AND track_id IS NOT NULL "
+                "AND attempts > 0 ORDER BY updated_at DESC LIMIT 11", (profile,))]
+        gaps = [a - b for a, b in zip(recent, recent[1:]) if 0 < a - b < 600]
+        return {"active": active, "seconds_per_song": sum(gaps) / len(gaps) if gaps else None}
 
     def get(self, profile: str, job_id: int) -> dict | None:
         with connect() as conn:
@@ -150,6 +177,19 @@ class DownloadQueue:
         sets = ", ".join(f"{k} = ?" for k in fields)
         with connect() as conn:
             conn.execute(f"UPDATE downloads SET {sets} WHERE id = ?", (*fields.values(), job_id))
+
+    def _pause_queue(self, profile: str | None, reason: str) -> None:
+        """Hold every waiting download (of one profile, or all) for SIGNIN_WAIT_S, so a
+        dead sign-in or offline mode costs one check per wait, not one per download."""
+        until = time.time() + SIGNIN_WAIT_S
+        self._paused[profile or "*"] = (until, reason)  # also holds downloads requested meanwhile
+        sql = "UPDATE downloads SET not_before = ?, error = ?, updated_at = ? WHERE status = 'queued'"
+        args: list = [until, reason, time.time()]
+        if profile is not None:
+            sql += " AND profile = ?"
+            args.append(profile)
+        with connect() as conn:
+            conn.execute(sql, args)
 
     def _next_job(self) -> tuple[dict | None, float]:
         """The next job that's due, and how long until the next one becomes due."""
@@ -208,22 +248,25 @@ class DownloadQueue:
         if check and time.time() - self._signin_ok.get(profile, 0) > SIGNIN_CHECK_S:
             check()  # raises NotSignedIn
             self._signin_ok[profile] = time.time()
+            if self._paused.pop(profile, None):  # signed in again: drop the "waiting" notes
+                with connect() as conn:
+                    conn.execute("UPDATE downloads SET error = NULL WHERE profile = ? AND "
+                                 "status = 'queued'", (profile,))
         return adapter
 
     def _process(self, job: dict) -> None:
         job_id, profile = job["id"], job["profile"]
         if settings_mod.load().offline:
-            self._set(job_id, status="queued", not_before=time.time() + SIGNIN_WAIT_S,
-                      error="Waiting: offline mode is on. Turn it off to download.")
+            self._pause_queue(None, "Waiting: offline mode is on. Turn it off to download.")
             return
         try:
             adapter = self._confirm_signin(profile)
         except NotSignedIn as e:
             self._adapters.pop(profile, None)  # pick up a fresh sign-in next time
             self._signin_ok.pop(profile, None)
-            self._set(job_id, status="queued", not_before=time.time() + SIGNIN_WAIT_S,
-                      error=f"Waiting for YouTube sign-in on the PC (run: dielify auth login). {e}")
-            log.warning("Profile %s: YouTube sign-in not working; downloads wait. %s", profile, e)
+            self._pause_queue(profile, f"Waiting for YouTube sign-in on the PC (Settings, then Sign in). {e}")
+            log.warning("Profile %s: YouTube sign-in not working; its downloads wait %ds. %s",
+                        profile, SIGNIN_WAIT_S, e)
             return
         attempt = job["attempts"] + 1
         self._set(job_id, status="downloading", attempts=attempt, error=None, progress=0.0)
@@ -241,18 +284,16 @@ class DownloadQueue:
             log.info("Done %s -> track %s", job["video_id"], track_id)
         except Exception as e:
             if isinstance(e, Offline):  # switched offline mid-download: wait, don't count it
-                self._set(job_id, status="queued", attempts=attempt - 1, progress=0.0,
-                          not_before=time.time() + SIGNIN_WAIT_S,
-                          error="Waiting: offline mode is on. Turn it off to download.")
+                self._set(job_id, status="queued", attempts=attempt - 1, progress=0.0)
+                self._pause_queue(None, "Waiting: offline mode is on. Turn it off to download.")
             elif job_id in self._cancel or isinstance(e, _Cancelled) or "_Cancelled" in repr(e):
                 self._set(job_id, status="cancelled", error=None)
                 log.info("Cancelled %s", job["video_id"])
             elif isinstance(e, NotSignedIn):  # sign-in died mid-download: wait, don't count it
                 self._adapters.pop(profile, None)
                 self._signin_ok.pop(profile, None)
-                self._set(job_id, status="queued", attempts=attempt - 1, progress=0.0,
-                          not_before=time.time() + SIGNIN_WAIT_S,
-                          error=f"Waiting for YouTube sign-in on the PC (run: dielify auth login). {e}")
+                self._set(job_id, status="queued", attempts=attempt - 1, progress=0.0)
+                self._pause_queue(profile, f"Waiting for YouTube sign-in on the PC (Settings, then Sign in). {e}")
             elif attempt < MAX_ATTEMPTS:
                 delay = RETRY_DELAYS_S[min(attempt - 1, len(RETRY_DELAYS_S) - 1)]
                 self._set(job_id, status="queued", progress=0.0, not_before=time.time() + delay,

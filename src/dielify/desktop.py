@@ -79,61 +79,100 @@ class Bridge:
         os.startfile(folder)  # a directory: Explorer opens it, nothing runs
 
     def clear_sign_in(self) -> None:
-        """Forget the Google session kept by Dielify's windows."""
+        """Forget any Google cookies in the main window (it never needs them)."""
         self._window.clear_cookies()
 
     def sign_in(self, profile: str, fresh: bool = False) -> dict:
         if not self._signin_lock.acquire(blocking=False):
             return {"ok": False, "error": "A sign-in window is already open."}
         try:
-            return _sign_in(profile, fresh, self._window)
+            result = _run_signin_process(profile)
+            if result.get("ok"):
+                _signin_changed(profile)
+            return result
         finally:
             self._signin_lock.release()
 
 
-def _sign_in(profile: str, fresh: bool, main_window: webview.Window) -> dict:
+# --- YouTube sign-in, in its own private process ----------------------------------------
+# The sign-in window must not share cookies with anything that keeps running: Google
+# refreshes ("rotates") session cookies whenever a page using them loads, and then
+# rejects the copy Dielify saved. So sign-in runs as a separate Dielify process with a
+# private (in-memory) browser profile that disappears when the window closes: the same
+# reason the Incognito method works.
+
+def _run_signin_process(profile: str) -> dict:
+    import json
+    import subprocess
+    import tempfile
+    fd, result_path = tempfile.mkstemp(prefix="dielify-signin-", suffix=".json")
+    os.close(fd)
+    if getattr(sys, "frozen", False):
+        cmd = [sys.executable]
+    else:
+        cmd = [str(Path(sys.executable).with_name("pythonw.exe")), "-m", "dielify.desktop"]
+    try:
+        subprocess.run(cmd + ["--signin", profile, "--result", result_path], timeout=35 * 60)
+        text = Path(result_path).read_text(encoding="utf-8")
+        return json.loads(text) if text else {"ok": False, "error": None}
+    except (OSError, ValueError, subprocess.TimeoutExpired) as e:
+        return {"ok": False, "error": f"The sign-in window couldn't run: {e}"}
+    finally:
+        Path(result_path).unlink(missing_ok=True)
+
+
+def signin_main(profile: str, result_path: str) -> int:
+    """`Dielify.exe --signin PROFILE --result FILE`: one private sign-in window."""
+    import json
+    result: dict = {"ok": False, "error": None}
+    win = webview.create_window("Dielify: sign in to YouTube Music", SIGNIN_URL, width=1000, height=780)
+
+    def watch() -> None:
+        try:
+            result.update(_watch_signin(win, profile))
+        except Exception as e:  # report it rather than leave the window hanging
+            log.exception("Sign-in failed")
+            result.update(ok=False, error=f"Sign-in failed: {e}")
+        finally:
+            try:
+                win.destroy()
+            except Exception:
+                pass
+
+    webview.start(watch, private_mode=True)  # nothing is kept after the window closes
+    Path(result_path).write_text(json.dumps(result), encoding="utf-8")
+    return 0
+
+
+def _watch_signin(win: webview.Window, profile: str) -> dict:
     from .yt_adapter import YouTubeError, YTMusicAdapter, headers_from_cookies
 
-    if fresh:
-        main_window.clear_cookies()  # shared cookie store: start from a signed-out window
-    win = webview.create_window("Dielify: sign in to YouTube Music", YTM_URL if not fresh else SIGNIN_URL,
-                                width=1000, height=780)
     closed = threading.Event()
     win.events.closed += closed.set
     end = time.time() + 30 * 60
-    sent_to_signin = fresh
-    try:
-        while time.time() < end and not closed.is_set():
-            time.sleep(1)
-            try:
-                url = win.get_current_url() or ""
-                cfg = win.evaluate_js(_CONFIG_JS) if url.startswith(YTM_URL) else None
-            except Exception:
-                continue  # page loading, or window closing
-            if url.startswith(YTM_URL) and cfg and not cfg["loggedIn"] and not sent_to_signin:
-                win.load_url(SIGNIN_URL)  # not signed in yet: go to Google's sign-in page
-                sent_to_signin = True
-                continue
-            if not (cfg and cfg["loggedIn"]):
-                continue
-            if not cfg["confirmed"]:
-                win.evaluate_js(_CONFIRM_BAR_JS)
-                continue
-            cookies = {m.key: m.value for c in win.get_cookies() for m in c.values()}
-            try:
-                auth_headers = headers_from_cookies(cookies, cfg["authuser"], cfg.get("pageid"), cfg["ua"])
-                s = settings_mod.load()
-                name = YTMusicAdapter(auth=auth_headers, request_delay_s=s.request_delay_s).account_name()
-            except YouTubeError as e:
-                return {"ok": False, "error": f"YouTube didn't accept that sign-in: {e}"}
-            credstore.save(profile, auth_headers)
-            _signin_changed(profile)
-            log.info("Profile %s signed in to YouTube Music", profile)
-            return {"ok": True, "account": name}
-        return {"ok": False, "error": None if closed.is_set() else "Sign-in timed out."}
-    finally:
-        if not closed.is_set():
-            win.destroy()
+    while time.time() < end and not closed.is_set():
+        time.sleep(1)
+        try:
+            url = win.get_current_url() or ""
+            cfg = win.evaluate_js(_CONFIG_JS) if url.startswith(YTM_URL) else None
+        except Exception:
+            continue  # page loading, or window closing
+        if not (cfg and cfg["loggedIn"]):
+            continue
+        if not cfg["confirmed"]:
+            win.evaluate_js(_CONFIRM_BAR_JS)
+            continue
+        cookies = {m.key: m.value for c in win.get_cookies() for m in c.values()}
+        try:
+            auth_headers = headers_from_cookies(cookies, cfg["authuser"], cfg.get("pageid"), cfg["ua"])
+            s = settings_mod.load()
+            name = YTMusicAdapter(auth=auth_headers, request_delay_s=s.request_delay_s).account_name()
+        except YouTubeError as e:
+            return {"ok": False, "error": f"YouTube didn't accept that sign-in: {e}"}
+        credstore.save(profile, auth_headers)
+        log.info("Profile %s signed in to YouTube Music", profile)
+        return {"ok": True, "account": name}
+    return {"ok": False, "error": None if closed.is_set() else "Sign-in timed out."}
 
 
 def _signin_changed(profile: str) -> None:
@@ -182,7 +221,13 @@ def main(argv: list[str] | None = None) -> int:
     global _app_server
     p = argparse.ArgumentParser(prog="dielify-desktop")
     p.add_argument("--tray", action="store_true", help="start hidden in the tray")
+    p.add_argument("--signin", metavar="PROFILE", help=argparse.SUPPRESS)  # internal
+    p.add_argument("--result", help=argparse.SUPPRESS)
     args = p.parse_args(argv)
+    if args.signin:
+        from . import server
+        server.setup_file_logging()
+        return signin_main(args.signin, args.result)
 
     use_bundled_tools()
     if not winint.claim_single_instance():
@@ -190,7 +235,10 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     from . import server
-    server.setup_file_logging()
+    log_file = server.setup_file_logging()
+    if sys.stderr is None:  # the installed app has no console: keep its error output
+        out = open(log_file.with_name("desktop.log"), "a", encoding="utf-8", buffering=1)
+        sys.stdout = sys.stderr = out
     s = settings_mod.load()
     token = auth.enable_desktop_token()
     try:
@@ -224,6 +272,9 @@ def main(argv: list[str] | None = None) -> int:
             w.destroy()
 
     window.events.closing += on_closing
+    # Earlier versions signed in inside this window's cookie store; those Google
+    # cookies kept rotating and spoiled the saved sign-in. This window needs none.
+    window.events.loaded += lambda: window.clear_cookies()
     tray = _make_tray(show, quit_app)
 
     from .updater import updater

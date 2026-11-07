@@ -100,6 +100,8 @@ class Download(BaseModel):
 
 class DownloadList(BaseModel):
     downloads: list[Download]
+    active_total: int | None = Field(None, description="All waiting + running downloads (not just this page)")
+    seconds_per_song: float | None = Field(None, description="Recent pace, for a time estimate")
 
 
 class LoginRequest(BaseModel):
@@ -348,11 +350,15 @@ def request_download(body: DownloadRequest, request: Request, s: Session = Depen
 
 
 @router.get("/downloads", response_model=DownloadList, tags=["downloads"])
-def list_downloads(request: Request, active: bool = False, limit: int = Query(200, ge=1, le=1000),
-                   s: Session = Depends(session)) -> DownloadList:
-    """Newest first. Poll this (every second or two) to show progress."""
-    return DownloadList(downloads=[Download(**j) for j in
-                                   _queue(request).list(s.user.profile, active, limit)])
+def list_downloads(request: Request, active: bool = False, finished: bool = False,
+                   limit: int = Query(200, ge=1, le=1000), s: Session = Depends(session)) -> DownloadList:
+    """active=true: running + waiting, in the order they'll download. finished=true:
+    done/failed/cancelled, newest first. Neither: everything, newest first.
+    Poll every second or two to show progress."""
+    q = _queue(request)
+    summary = q.summary(s.user.profile)
+    return DownloadList(downloads=[Download(**j) for j in q.list(s.user.profile, active, limit, finished)],
+                        active_total=summary["active"], seconds_per_song=summary["seconds_per_song"])
 
 
 @router.get("/downloads/{job_id}", response_model=Download, tags=["downloads"])

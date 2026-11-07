@@ -182,12 +182,24 @@ src/dielify/
   then Inno Setup -> dist\Dielify-setup-<ver>.exe, ~172 MB with FFmpeg + Deno in
   {app}\bin). Silent install/uninstall tested OK, data kept. Version is 0.4.0.
   Found + fixed in source (not yet rebuilt): Dielify.exe vs dielify.exe clash.
-- Written, NOT yet wired up or tested: `updater.py` (Ed25519-signed manifest, SHA-256
-  + size check, silent install with /RESTARTAPP=1) and `update_config.py` (empty).
-- Next: /api/desktop/update endpoints + Settings UI + desktop quit hook; updater tests;
-  `tools\release.py` (keygen with DPAPI-stored key + backup export, configure, publish
-  via gh); rebuild; GitHub account/repo + `gh` setup steps for Josh; then Josh's
-  no-terminal install test (consider Windows Sandbox for a clean PC).
+- Updater wired up and tested (`updater.py`, Settings → About → Updates); releases
+  via `tools\release.py` to github.com/dielman/dielify-releases (gh signed in as
+  dielman; signing key in %LOCALAPPDATA%\Dielify-release, backed up by Josh).
+  Published 0.4.0; 0.4.2 is the first one installed copies should update to.
+- Josh installed the app on his PC (route B, not Windows Sandbox). Found and fixed:
+  1. 500s on every screen after in-app sign-in: cause never captured (windowed app
+     discarded uvicorn errors). Now logged: uvicorn loggers -> server.log, request
+     crashes logged, stderr -> logs\desktop.log.
+  2. Sign-in went stale: sign-in window shared the main window's cookie store, whose
+     music.youtube.com image loads rotated the cookies. Now sign-in runs in its own
+     process with a private (in-memory) profile; main window clears cookies on load.
+  3. Queue hammered YouTube (~1 sign-in check/s with 71 waiting): now one check per
+     SIGNIN_WAIT_S (300 s) per profile; new requests join the pause.
+  4. Downloads screen looked dead (newest-first list): now Now / Waiting in line (in
+     download order, positions + ETA from recent pace) / Finished.
+- Known: some music *videos* fail with "Track ... not found" (get_track uses the
+  watch playlist); fix next. Remaining for Phase 4: Josh's clean no-terminal install
+  test (Windows Sandbox suggested) and the first in-app update (0.4.1 -> 0.4.2).
 - Size note: each update re-downloads ~172 MB (FFmpeg full build is 217 MB per exe);
   a slimmer FFmpeg build would need Josh's OK to download.
 

@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Dielify",
-    "version": "0.1.0"
+    "version": "0.4.2"
   },
   "paths": {
     "/api/auth/login": {
@@ -556,7 +556,7 @@
           "downloads"
         ],
         "summary": "List Downloads",
-        "description": "Newest first. Poll this (every second or two) to show progress.",
+        "description": "active=true: running + waiting, in the order they'll download. finished=true:\ndone/failed/cancelled, newest first. Neither: everything, newest first.\nPoll every second or two to show progress.",
         "operationId": "list_downloads_api_downloads_get",
         "security": [
           {
@@ -572,6 +572,16 @@
               "type": "boolean",
               "default": false,
               "title": "Active"
+            }
+          },
+          {
+            "name": "finished",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Finished"
             }
           },
           {
@@ -1704,6 +1714,85 @@
         }
       }
     },
+    "/api/desktop/update": {
+      "get": {
+        "tags": [
+          "desktop"
+        ],
+        "summary": "Update Status",
+        "operationId": "update_status_api_desktop_update_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateInfo"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/desktop/update/check": {
+      "post": {
+        "tags": [
+          "desktop"
+        ],
+        "summary": "Update Check",
+        "operationId": "update_check_api_desktop_update_check_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateInfo"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/desktop/update/install": {
+      "post": {
+        "tags": [
+          "desktop"
+        ],
+        "summary": "Update Install",
+        "description": "Download + verify, start the installer; Dielify then closes and restarts updated.",
+        "operationId": "update_install_api_desktop_update_install_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateInfo"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/health": {
       "get": {
         "tags": [
@@ -2340,6 +2429,30 @@
             },
             "type": "array",
             "title": "Downloads"
+          },
+          "active_total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Total",
+            "description": "All waiting + running downloads (not just this page)"
+          },
+          "seconds_per_song": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seconds Per Song",
+            "description": "Recent pace, for a time estimate"
           }
         },
         "type": "object",
@@ -3105,6 +3218,94 @@
           "cover_url"
         ],
         "title": "Track"
+      },
+      "UpdateInfo": {
+        "properties": {
+          "current": {
+            "type": "string",
+            "title": "Current"
+          },
+          "latest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest"
+          },
+          "available": {
+            "type": "boolean",
+            "title": "Available"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size"
+          },
+          "configured": {
+            "type": "boolean",
+            "title": "Configured"
+          },
+          "checked_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checked At"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "installing": {
+            "type": "boolean",
+            "title": "Installing"
+          }
+        },
+        "type": "object",
+        "required": [
+          "current",
+          "latest",
+          "available",
+          "notes",
+          "size",
+          "configured",
+          "checked_at",
+          "error",
+          "installing"
+        ],
+        "title": "UpdateInfo"
       },
       "ValidationError": {
         "properties": {

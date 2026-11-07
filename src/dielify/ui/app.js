@@ -275,26 +275,49 @@ let dlTimer = null;
 async function pollDownloads() {
   clearTimeout(dlTimer);
   try {
-    const { downloads } = await api("/api/downloads?active=true");
+    const active = await api("/api/downloads?active=true&limit=300");
     const badge = $("dl-badge");
-    badge.hidden = !downloads.length; badge.textContent = downloads.length;
-    if (view === "downloads") await renderDownloads();
-    if (downloads.length || view === "downloads") dlTimer = setTimeout(pollDownloads, 1500);
+    badge.hidden = !active.active_total; badge.textContent = active.active_total;
+    if (view === "downloads") await renderDownloads(active);
+    if (active.active_total || view === "downloads") dlTimer = setTimeout(pollDownloads, 1500);
   } catch { dlTimer = setTimeout(pollDownloads, 5000); }
 }
-async function viewDownloads() { show(h("h1", {}, "Downloads"), h("p", { class: "muted" }, "Loading…")); pollDownloads(); }
-async function renderDownloads() {
-  const { downloads } = await api("/api/downloads?limit=100");
-  const label = { queued: "Waiting", downloading: "Downloading", processing: "Tagging", done: "Done", failed: "Failed", cancelled: "Cancelled" };
-  const rows = downloads.map((d) => h("div", { class: "job" },
-    h("div", {}, h("div", {}, d.title), h("div", { class: "muted small" }, d.artist || "", d.error ? h("div", { class: "warn" }, d.error) : null)),
-    d.status === "downloading" || d.status === "processing"
-      ? h("div", { class: "bar" }, h("div", { style: `width:${Math.round(d.progress * 100)}%` }))
-      : h("div", { class: `small status-${d.status}` }, label[d.status]),
-    ["queued", "downloading", "processing"].includes(d.status)
-      ? h("button", { onclick: async () => { await api(`/api/downloads/${d.id}`, { method: "DELETE" }); pollDownloads(); } }, "Cancel")
-      : d.track_id ? h("button", { onclick: async () => playList([await api(`/api/library/tracks/${d.track_id}`)], 0) }, "▶ Play") : h("span")));
-  if (view === "downloads") show(h("h1", {}, "Downloads"), rows.length ? rows : h("p", { class: "muted" }, "Nothing downloaded yet."));
+async function viewDownloads() {
+
+  show(h("h1", {}, "Downloads"), h("p", { class: "muted" }, "Loading…"));
+  pollDownloads();
+}
+const minutes = (s) => (s < 90 ? "about a minute" : s < 5400 ? `about ${Math.round(s / 60)} min` : `about ${(s / 3600).toFixed(1)} hours`);
+
+async function renderDownloads(active) {
+  const { downloads: finished } = await api("/api/downloads?finished=true&limit=40");
+  const label = { done: "Done", failed: "Failed", cancelled: "Cancelled" };
+  const running = active.downloads.find((d) => d.status === "downloading" || d.status === "processing");
+  const waiting = active.downloads.filter((d) => d.status === "queued");
+  const waitingTotal = active.active_total - (running ? 1 : 0);
+  const pace = active.seconds_per_song || 20;
+  const cancel = (d) => h("button", { onclick: async () => { await api(`/api/downloads/${d.id}`, { method: "DELETE" }); pollDownloads(); } }, "Cancel");
+  const who = (d) => h("div", {}, h("div", {}, d.title),
+    h("div", { class: "muted small" }, d.artist || "", d.error ? h("div", { class: "warn" }, d.error) : null));
+
+  const summary = active.active_total
+    ? h("p", { class: "muted" }, running ? `Downloading 1 song` : "Starting…",
+        waitingTotal ? ` · ${waitingTotal} waiting · ${minutes(active.active_total * pace)} left` : "",
+        " · one at a time, to keep your account's traffic modest")
+    : h("p", { class: "muted" }, "Nothing waiting.");
+  const now = running ? [h("h2", {}, "Now"), h("div", { class: "job" }, who(running),
+    h("div", { class: "bar" }, h("div", { style: `width:${Math.round(running.progress * 100)}%` })), cancel(running))] : null;
+  const line = waiting.length ? [h("h2", {}, `Waiting in line (${waitingTotal})`), waiting.map((d, i) => h("div", { class: "job" },
+    who(d), h("div", { class: "small muted" }, `#${i + 1} in line · ${minutes((i + 1 + (running ? 1 : 0)) * pace)}`), cancel(d))),
+    waitingTotal > waiting.length ? h("p", { class: "muted small" }, `…and ${waitingTotal - waiting.length} more`) : null] : null;
+  const done = finished.length ? [h("h2", {}, "Finished"), finished.map((d) => h("div", { class: "job" }, who(d),
+    h("div", { class: `small status-${d.status}` }, label[d.status]),
+    d.track_id ? h("button", { onclick: async () => playList([await api(`/api/library/tracks/${d.track_id}`)], 0) }, "▶ Play") : h("span")))] : null;
+
+  if (view !== "downloads") return;
+  const keep = main.scrollTop;  // re-drawn every 1.5 s: don't jump back to the top
+  show(h("h1", {}, "Downloads"), summary, now, line, done);
+  main.scrollTop = keep;
 }
 
 // --- settings --------------------------------------------------------------------------------
@@ -331,7 +354,6 @@ async function viewSettings() {
         h("button", { onclick: addProfile }, "New profile")),
       setting("Sign-in", p.youtube_signed_in ? h("span", { class: "ok" }, "Signed in ✓") : h("span", { class: "warn" }, "Not signed in"),
         h("button", { class: p.youtube_signed_in ? "" : "primary", onclick: () => signIn(false) }, p.youtube_signed_in ? "Sign in again" : "Sign in"),
-        p.youtube_signed_in ? h("button", { onclick: () => signIn(true) }, "Use another account") : null,
         p.youtube_signed_in ? h("button", { onclick: async () => {
           if (!confirm("Sign this profile out of YouTube Music on this PC?")) return;
           await api(`/api/desktop/youtube/${encodeURIComponent(s.active_profile)}`, { method: "DELETE" });

@@ -119,3 +119,14 @@ def test_ui_is_served_with_strict_policy(client):
     assert r.status_code == 200 and "<title>Dielify</title>" in r.text
     assert r.headers["content-security-policy"] == UI_CSP and "script-src 'self'" in UI_CSP
     assert client.get("/ui/app.js").status_code == 200
+
+
+def test_request_crash_is_logged(client, caplog, monkeypatch):
+    """Regression: in the installed app, a crash inside a request left no trace anywhere."""
+    def boom():
+        raise RuntimeError("kaboom")
+    monkeypatch.setattr(desktop_api, "_status", boom)
+    caplog.set_level("ERROR", logger="dielify.server")
+    with pytest.raises(RuntimeError):
+        client.get("/api/desktop/status", headers=client.desk)
+    assert "/api/desktop/status failed" in caplog.text and "kaboom" in caplog.text

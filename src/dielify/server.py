@@ -66,8 +66,12 @@ def create_app(queue: DownloadQueue | None = None) -> FastAPI:
     @app.middleware("http")
     async def access_log(request: Request, call_next):
         start = time.perf_counter()
-        response = await call_next(request)
         client = request.client.host if request.client else "?"
+        try:
+            response = await call_next(request)
+        except Exception:
+            log.exception("%s %s %s failed", client, request.method, request.url.path)
+            raise
         # path only: the query string can hold passwords and tokens
         log.info("%s %s %s %d %.0fms", client, request.method, request.url.path,
                  response.status_code, (time.perf_counter() - start) * 1000)
@@ -120,6 +124,10 @@ def setup_file_logging() -> Path:
     fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
     root = logging.getLogger()
     root.addHandler(fh)
+    # uvicorn's loggers don't pass messages up to the root, and they're where crashes
+    # inside a request are reported: send those to the file as well.
+    for name in ("uvicorn", "uvicorn.error"):
+        logging.getLogger(name).addHandler(fh)
     if root.level > logging.WARNING or root.level == logging.NOTSET:
         root.setLevel(logging.WARNING)
     for name in ("dielify.server", "dielify.subsonic_api", "dielify.downloads"):
