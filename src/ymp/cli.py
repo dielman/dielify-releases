@@ -297,7 +297,9 @@ def cmd_serve(args) -> int:
     s = settings_mod.load()
     if args.port:
         s.server_port = args.port
-        s.validate()
+    if args.bind:
+        s.server_bind = args.bind
+    s.validate()  # refuses 0.0.0.0 and public addresses
     users = auth.list_users()
     if not users:
         _out("No server users yet, so no phone app could sign in. First run:")
@@ -318,6 +320,19 @@ def cmd_serve(args) -> int:
     _out()
     _log_to_file()
     server.run(s, addrs)
+    return 0
+
+
+def cmd_openapi(args) -> int:
+    import json
+
+    from .server import create_app
+    spec = json.dumps(create_app().openapi(), indent=2, ensure_ascii=False) + "\n"
+    if args.out:
+        Path(args.out).write_text(spec, encoding="utf-8")
+        _out(f"Wrote {args.out}")
+    else:
+        sys.stdout.write(spec)
     return 0
 
 
@@ -408,9 +423,13 @@ def build_parser() -> argparse.ArgumentParser:
     ur = su.add_parser("remove")
     ur.add_argument("name")
     ur.set_defaults(fn=cmd_user_remove)
+    so = sv.add_parser("openapi", help="print or save the /api contract (OpenAPI JSON)")
+    so.add_argument("--out", help="file to write, e.g. docs/openapi.json")
+    so.set_defaults(fn=cmd_openapi)
 
     sr = sub.add_parser("serve", help="serve the library to phone apps (home network/Tailscale)")
     sr.add_argument("--port", type=int, help="override server_port for this run")
+    sr.add_argument("--bind", help="override server_bind for this run, e.g. 127.0.0.1")
     sr.set_defaults(fn=cmd_serve)
     return p
 

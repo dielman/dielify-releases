@@ -56,6 +56,67 @@ class TrackInfo:
         return ", ".join(self.artists) if self.artists else "Unknown Artist"
 
 
+ITEM_TYPES = ("song", "video", "album", "playlist", "artist")
+
+
+@dataclass
+class YTItem:
+    """Anything discovery can show: a song/video (id = videoId), album (browseId),
+    playlist (playlistId) or artist (channel id)."""
+    type: str
+    id: str
+    title: str
+    artists: list[str] = field(default_factory=list)
+    album: str | None = None
+    album_id: str | None = None
+    year: str | None = None
+    duration_s: int | None = None
+    thumbnail: str | None = None
+    subtitle: str | None = None
+
+
+@dataclass
+class Shelf:
+    title: str
+    items: list[YTItem]
+
+
+def to_item(raw: dict) -> YTItem | None:
+    """Normalise any ytmusicapi result (home, search, charts, album, playlist)."""
+    if not raw:
+        return None
+    browse = raw.get("browseId") or ""
+    artists = [a["name"] for a in raw.get("artists") or [] if a.get("name")]
+    album = raw.get("album") if isinstance(raw.get("album"), dict) else {}
+    thumb = _best_thumb(raw.get("thumbnails") or raw.get("thumbnail"))
+    if raw.get("videoId"):
+        is_song = (raw.get("resultType") == "song" or raw.get("videoType") == "MUSIC_VIDEO_TYPE_ATV"
+                   or (raw.get("videoType") is None and bool(album)))
+        return YTItem("song" if is_song else "video", raw["videoId"], raw.get("title") or raw["videoId"],
+                      artists, album.get("name"), album.get("id"), raw.get("year"),
+                      raw.get("duration_seconds") or _parse_duration(raw.get("duration") or raw.get("length")),
+                      thumb)
+    if browse.startswith("MPRE"):
+        return YTItem("album", browse, raw.get("title") or "", artists, year=raw.get("year"),
+                      thumbnail=thumb, subtitle=raw.get("type"))
+    if raw.get("playlistId") or browse.startswith("VL"):
+        author = raw.get("author")
+        if isinstance(author, list):
+            author = ", ".join(a.get("name", "") for a in author if a)
+        elif isinstance(author, dict):
+            author = author.get("name")
+        return YTItem("playlist", raw.get("playlistId") or browse[2:], raw.get("title") or "",
+                      thumbnail=thumb, subtitle=author or raw.get("description"))
+    if browse.startswith("UC"):
+        return YTItem("artist", browse, raw.get("title") or raw.get("artist") or "", thumbnail=thumb,
+                      subtitle=raw.get("subscribers"))
+    return None
+
+
+def _items(raws) -> list[YTItem]:
+    return [i for i in map(to_item, raws or []) if i]
+
+
 # --- helpers (pure functions, unit-tested) ----------------------------------
 
 def upscale_cover_url(url: str | None, size: int = 1200) -> str | None:
@@ -329,6 +390,58 @@ class YTMusicAdapter:
                 is_video=r.get("resultType") == "video",
             ))
         return out[:limit]
+
+    # --- discovery (Phase 3) -------------------------------------------------------
+
+    def _call(self, what: str, fn, *args, **kwargs):
+        self._pace()
+        try:
+            return fn(*args, **kwargs)
+        except Exception as e:
+            raise YouTubeError(f"{what} failed: {_short_error(e)}") from e
+
+    def home(self, shelves: int = 6) -> list[Shelf]:
+        """The personalised home feed: mixes, playlists, new releases..."""
+        raw = self._call("Loading the home feed", self._yt.get_home, limit=shelves)
+        return [Shelf(s.get("title") or "", _items(s.get("contents"))) for s in raw]
+
+    def charts(self, country: str = "ZZ") -> dict:
+        """Chart playlists (open with `playlist`) and top artists. ZZ = global."""
+        raw = self._call("Loading charts", self._yt.get_charts, country=country)
+        return {"country": ((raw.get("countries") or {}).get("selected") or {}).get("text") or country,
+                "countries": (raw.get("countries") or {}).get("options") or [],
+                "playlists": _items(raw.get("videos")) + _items(raw.get("songs")),
+                "artists": _items(raw.get("artists"))}
+
+    def similar(self, video_id: str, limit: int = 25) -> list[YTItem]:
+        """Songs like this one (YouTube Music's radio for it), without the song itself."""
+        raw = self._call("Loading similar songs", self._yt.get_watch_playlist,
+                         videoId=video_id, radio=True, limit=limit + 1)
+        return [i for i in _items(raw.get("tracks")) if i.id != video_id][:limit]
+
+    def search_items(self, query: str, kind: str = "song", limit: int = 20) -> list[YTItem]:
+        if kind not in ITEM_TYPES:
+            raise ValueError(f"type must be one of {ITEM_TYPES}")
+        raw = self._call("Search", self._yt.search, query, filter=kind + "s", limit=limit)
+        return _items(raw)[:limit]
+
+    def album(self, browse_id: str) -> tuple[YTItem, list[YTItem]]:
+        raw = self._call("Loading the album", self._yt.get_album, browse_id)
+        info = to_item({**raw, "browseId": browse_id}) or YTItem("album", browse_id, raw.get("title", ""))
+        tracks = _items({**t, "album": t.get("album") or {"name": raw.get("title"), "id": browse_id}}
+                        for t in raw.get("tracks") or [] if t.get("isAvailable", True))
+        for t in tracks:  # YouTube labels some album tracks as videos; on an album they're songs
+            t.type = "song"
+            t.year = t.year or raw.get("year")
+        return info, tracks
+
+    def playlist(self, playlist_id: str, limit: int = 200) -> tuple[YTItem, list[YTItem]]:
+        raw = self._call("Loading the playlist", self._yt.get_playlist, playlist_id, limit=limit)
+        info = to_item({**raw, "playlistId": playlist_id}) or YTItem("playlist", playlist_id, "")
+        tracks = _items(t for t in raw.get("tracks") or [] if t.get("isAvailable", True))
+        return info, tracks[:limit]
+
+    # --- downloading -----------------------------------------------------------------
 
     def get_track(self, video_id: str) -> TrackInfo:
         """Full metadata for tagging: album, track number, year, best cover."""

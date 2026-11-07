@@ -11,24 +11,40 @@ import ipaddress
 import logging
 import socket
 import time
+from contextlib import asynccontextmanager
 
+import uvicorn
 from fastapi import FastAPI, Request
 
 from . import __version__
+from .downloads import DownloadQueue
 from .settings import Settings, check_bind_address, is_allowed_bind
 
 log = logging.getLogger("ymp.server")
 
+SHUTDOWN_GRACE_S = 3
 
-def create_app() -> FastAPI:
+
+def create_app(queue: DownloadQueue | None = None) -> FastAPI:
+    from .custom_api import router as custom_router
     from .subsonic_api import router as subsonic_router
 
-    # Docs stay off until Phase 3 defines our own API (the Android app's contract).
-    app = FastAPI(title="ymp", version=__version__, docs_url=None, redoc_url=None,
-                  openapi_url=None)
-    app.include_router(subsonic_router)
+    queue = queue or DownloadQueue()
 
-    @app.get("/api/health")
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        queue.start()
+        yield
+        queue.stop()
+
+    # /api/openapi.json is the Android app's contract (also saved in docs/openapi.json).
+    app = FastAPI(title="ymp", version=__version__, lifespan=lifespan,
+                  docs_url="/api/docs", redoc_url=None, openapi_url="/api/openapi.json")
+    app.state.queue = queue
+    app.include_router(subsonic_router)
+    app.include_router(custom_router)
+
+    @app.get("/api/health", tags=["status"])
     def health() -> dict:
         return {"status": "ok", "version": __version__}
 
@@ -79,8 +95,6 @@ def _listen(addr: str, port: int) -> socket.socket:
 
 
 def run(s: Settings, addrs: list[str]) -> None:
-    import uvicorn
-
     sockets = []
     for a in addrs:
         try:
@@ -89,6 +103,23 @@ def run(s: Settings, addrs: list[str]) -> None:
             log.warning("Can't listen on %s:%d (%s)", a, s.server_port, e)
     if not sockets:
         raise OSError(f"Could not listen on any address (port {s.server_port} in use?)")
+    # A paused phone holds its stream open without reading, so a graceful shutdown
+    # would wait for it forever: give open connections a few seconds, then close them.
     config = uvicorn.Config(create_app(), access_log=False, log_level="warning",
-                            server_header=False)
-    uvicorn.Server(config).run(sockets=sockets)
+                            server_header=False, timeout_graceful_shutdown=SHUTDOWN_GRACE_S)
+    logging.getLogger("uvicorn.error").addFilter(_ExpectedShutdownNoise())
+    _Server(config).run(sockets=sockets)
+
+
+class _Server(uvicorn.Server):
+    def handle_exit(self, sig, frame) -> None:
+        if not self.should_exit:
+            print(f"Stopping… (open phone connections are closed within {SHUTDOWN_GRACE_S} s; "
+                  "press Ctrl+C again to stop at once)", flush=True)
+        super().handle_exit(sig, frame)
+
+
+class _ExpectedShutdownNoise(logging.Filter):
+    """Cutting off a paused phone's stream on shutdown is normal, not an error."""
+    def filter(self, record: logging.LogRecord) -> bool:
+        return "timeout graceful shutdown exceeded" not in record.getMessage()

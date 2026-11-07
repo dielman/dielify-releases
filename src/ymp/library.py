@@ -65,6 +65,39 @@ CREATE TABLE IF NOT EXISTS tracks (
 );
 CREATE INDEX IF NOT EXISTS tracks_album ON tracks(album_id);
 CREATE INDEX IF NOT EXISTS tracks_video ON tracks(profile, video_id);
+
+-- Download queue (downloads.py): one row per track.
+CREATE TABLE IF NOT EXISTS downloads (
+    id            INTEGER PRIMARY KEY,
+    profile       TEXT NOT NULL,
+    video_id      TEXT NOT NULL,
+    title         TEXT NOT NULL,
+    artist        TEXT,
+    album         TEXT,
+    request_id    TEXT NOT NULL,   -- groups the tracks of one album/playlist request
+    request_type  TEXT NOT NULL,   -- song | video | album | playlist
+    request_title TEXT,
+    requested_by  TEXT,
+    status        TEXT NOT NULL,   -- queued downloading processing done failed cancelled
+    progress      REAL NOT NULL DEFAULT 0,
+    error         TEXT,
+    attempts      INTEGER NOT NULL DEFAULT 0,
+    not_before    REAL NOT NULL DEFAULT 0,  -- retry back-off
+    track_id      INTEGER,
+    created_at    REAL NOT NULL,
+    updated_at    REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS downloads_status ON downloads(status, not_before);
+
+-- Logins for our own API (auth.py): only a hash of each token is kept.
+CREATE TABLE IF NOT EXISTS device_tokens (
+    id           INTEGER PRIMARY KEY,
+    username     TEXT NOT NULL,
+    device_name  TEXT NOT NULL,
+    token_hash   TEXT NOT NULL UNIQUE,
+    created_at   REAL NOT NULL,
+    last_used_at REAL
+);
 """
 
 CONTENT_TYPES = {".m4a": "audio/mp4", ".opus": "audio/ogg", ".ogg": "audio/ogg",
@@ -323,6 +356,15 @@ class Library:
                         "OR fold(al.name) LIKE :q) ORDER BY fold(t.artist), fold(al.name), t.track_no "
                         "LIMIT :n OFFSET :o", q=like, n=song_count, o=song_offset) if song_count else []
         return artists, albums, songs
+
+    def track_by_video(self, video_id: str) -> sqlite3.Row | None:
+        rows = self._q(self._TRACK_SELECT + " AND t.video_id = :v ORDER BY t.id LIMIT 1", v=video_id)
+        return rows[0] if rows else None
+
+    def video_ids(self) -> dict[str, int]:
+        """video id -> track id, for marking discovery results already downloaded."""
+        return {r["video_id"]: r["id"] for r in self._q(
+            "SELECT video_id, id FROM tracks WHERE profile = :p AND video_id IS NOT NULL")}
 
     def random_tracks(self, size: int) -> list[sqlite3.Row]:
         rows = self._q(self._TRACK_SELECT)

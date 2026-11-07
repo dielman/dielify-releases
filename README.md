@@ -13,8 +13,8 @@ app over your home network or Tailscale.
 |---|---|---|
 | 1 | Command line: sign in, search, download with tags + cover art | **Done** (7 Nov 2026) |
 | 2 | Library database + Subsonic API (Symfonium/Ultrasonic) | **Done** (7 Nov 2026) |
-| 3 | Discovery + download requests | **Next** |
-| 4 | Desktop app (settings, folder picker, tray icon) | |
+| 3 | Discovery + download requests | **Done** (7 Nov 2026) |
+| 4 | Desktop app (settings, folder picker, tray icon) | **Next** |
 | 5 | Secure remote access (Tailscale) | |
 | 6 | Android app | |
 | 7 | Installer, second user, backups | |
@@ -99,8 +99,16 @@ ymp config set active_profile josh
 ymp signs in with your browser session (this is currently the reliable method; the
 alternative OAuth route now needs your own Google Cloud project).
 
-1. In **Chrome or Edge**, go to <https://music.youtube.com> and make sure you're signed
-   in with your Premium account.
+**Use an Incognito window, and close it afterwards.** Your normal browser keeps
+replacing its sign-in cookies with fresh ones as you browse, and Google then
+rejects older copies, so headers copied from a normal window stop working within
+hours. Cookies from an Incognito window you close straight away are never
+replaced, so ymp's copy keeps working (typically for weeks).
+
+1. In **Chrome**, press **Ctrl+Shift+N** for a new Incognito window. (Edge:
+   **Ctrl+Shift+N** opens an InPrivate window.) Go to <https://music.youtube.com>
+   and **sign in** with your Premium account. If you use a brand account or more
+   than one channel, switch to the one you listen on.
 2. Press **F12** to open Developer Tools, then click the **Network** tab.
 3. In the filter box type `browse`, then click around YouTube Music (e.g. open
    **Library**) until a request named `browse?...` appears.
@@ -117,14 +125,19 @@ alternative OAuth route now needs your own Google Cloud project).
 ymp auth login --clipboard
 ```
 
-You should see **Signed in as &lt;your name&gt;**. The login is encrypted with Windows
+6. When it says **Signed in as &lt;your name&gt;**, **close the Incognito window**
+   (just close it; don't click "Sign out", which would end ymp's session too).
+
+The login is encrypted with Windows
 DPAPI, so only your Windows account on this PC can read it. Nothing is stored in
 plain text and nothing goes into the project folder.
 
 > These headers are your login. Don't paste them anywhere else. If you saved them to a
 > file, use `ymp auth login --file headers.txt` and then delete the file.
-> YouTube sign-ins expire after some weeks; when ymp says the login was rejected,
-> repeat this step. `ymp auth status` checks it any time.
+> YouTube sign-ins do expire eventually. `ymp auth status` checks it any time.
+> While the PC isn't signed in, download requests wait in the queue with the message
+> "Waiting for YouTube sign-in on the PC" rather than quietly downloading at lower
+> quality. Repeat this step and they carry on by themselves.
 
 ### 6. Search and download
 
@@ -235,6 +248,48 @@ is done when that works.
 > prints. A router "DHCP reservation" keeps it fixed; Tailscale (Phase 5) makes
 > this a non-issue.
 
+## Phase 3 — discovery and download requests
+
+The server now has its own API under `/api/` (the one the Android app will use in
+Phase 6):
+
+- **Discover:** your YouTube Music home feed and mixes, songs similar to a song, charts.
+- **Browse YouTube:** search songs, videos, albums, playlists and artists, and open
+  any album or playlist.
+- **Request downloads:** a song, a whole album or a playlist. The PC works through
+  the queue one track at a time, retries failures, and can cancel. Songs you
+  already have aren't downloaded again.
+- **Play:** finished downloads appear in the library straight away, for this API
+  and for Symfonium alike.
+
+Clients sign in once with the same user and password as Symfonium and get a
+**device token**; each device can be signed out separately. The full API
+description is at `http://<PC address>:4747/api/docs` while `ymp serve` runs,
+and in [`docs/openapi.json`](docs/openapi.json).
+
+### Phase 3 acceptance test
+
+1. Make sure the PC's YouTube sign-in works: `ymp auth status`. If it says
+   signed out, repeat Phase 1 step 5 (with the Incognito window).
+2. Restart the server so it runs the new code: **Ctrl+C** in the `ymp serve`
+   window, then `ymp serve` again.
+3. **Have your server password ready.** This is the password for the `josh` server
+   user that `ymp server user add josh` showed once in Phase 2, the one you typed
+   into Symfonium. It isn't your YouTube or Google password. If you no longer have
+   it, make a new one with `ymp server user password josh`. That replaces the old
+   one, so also update it in Symfonium (edit the media provider → password).
+4. In a second terminal, run the test client. It asks for that password; nothing
+   appears while you type it, which is normal:
+
+```powershell
+.venv\Scripts\python tools\acceptance_phase3.py http://127.0.0.1:4747 josh
+```
+
+It signs in, reads your home feed, finds a song similar to "Under Pressure" that
+you don't have yet, requests it, shows the download progress, and then plays it
+from the library. It ends with **PASS** when everything worked. The new song
+also shows up in Symfonium after a sync.
+
 ---
 
 ## Troubleshooting
@@ -247,6 +302,7 @@ is done when that works.
 | "YouTube rejected the saved sign-in" | Cookies expired: repeat step 5 |
 | Downloads fail after previously working | YouTube changed something. Update: `pip install -U yt-dlp ytmusicapi`, re-run `ymp doctor` and `pytest`, then pin the new versions in `pyproject.toml` |
 | Phone app can't connect | Is `ymp serve` running? Same Wi-Fi as the PC? Address matches what `ymp serve` printed? Firewall step done (Phase 2 step 1)? |
+| Downloads say "Waiting for YouTube sign-in on the PC" | The PC's YouTube sign-in has expired: repeat Phase 1 step 5 (Incognito). The queue carries on by itself |
 | "Too many failed logins" | Wait 15 minutes, then check the password (or reset it: `ymp server user password josh`) |
 | Only ~130–160 kbps instead of ~256 | Check `ymp auth status`; Premium quality needs a working sign-in |
 
@@ -265,6 +321,9 @@ src/ymp/
   subsonic_api.py Subsonic/OpenSubsonic API for phone apps
   auth.py         phone-app logins, lockout after failed logins
   server.py       web server; listens on home network/Tailscale only
+  custom_api.py   our /api: discovery, YouTube browsing, downloads, settings
+  downloads.py    download queue (saved in the database, retries, cancel)
+tools/           acceptance test clients
 tests/            pytest suite (uses FFmpeg-generated audio; no internet needed)
 android/          Android app (Phase 6)
 docs/HANDOFF.md   original project brief

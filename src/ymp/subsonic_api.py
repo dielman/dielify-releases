@@ -482,7 +482,7 @@ def _run(handler: Handler, method: str, params: Params, client: str):
     return handler(Ctx(params, user, lib))
 
 
-@router.api_route("/rest/{method}", methods=["GET", "POST"])
+@router.api_route("/rest/{method}", methods=["GET", "POST"], include_in_schema=False)
 async def dispatch(method: str, request: Request) -> Response:
     params = await _params(request)
     method = method.removesuffix(".view")

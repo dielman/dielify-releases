@@ -36,6 +36,10 @@ The full brief is `docs/HANDOFF.md`.
 - Explain Windows setup plainly.
 - Flag security concerns directly; never quietly work around them.
 - Never commit secrets, the database, or music. Never log cookies or tokens.
+- In every instruction for Josh, list what he needs **before** the step: which
+  password, which terminal (admin or not), whether `.venv` must be active (prefer
+  `.venv\Scripts\python` / `.venv\Scripts\ymp` so it doesn't matter), which
+  site/window. Don't let him discover a requirement by failing.
 
 ## Architecture
 
@@ -56,7 +60,12 @@ src/ymp/
   auth.py         server users (Subsonic logins, DPAPI store "server_users"), lockout
   subsonic_api.py /rest/* Subsonic + OpenSubsonic, JSON and XML
   server.py       FastAPI app + uvicorn on explicit sockets (never 0.0.0.0)
-  # planned: custom_api.py (Phase 3), device tokens in auth.py (Phase 5)
+  custom_api.py   /api/*: discovery, YouTube catalogue, downloads, library, settings,
+                  device-token login. Pydantic models = the Android contract;
+                  regenerate docs/openapi.json with `ymp server openapi --out ...`
+  downloads.py    persistent queue, 1 worker, 3 attempts (30s/120s back-off),
+                  cancel, holds jobs while the YouTube sign-in is dead
+  # planned (Phase 5): Tailscale binding, token management CLI, rate limits
 ```
 
 ### Key technical facts (verified 7 Nov 2026)
@@ -64,8 +73,11 @@ src/ymp/
 - **YouTube sign-in:** ytmusicapi *browser-header* auth (paste request headers from
   DevTools). Google removed ytmusicapi's shared OAuth client in Nov 2024; OAuth now
   needs a personal Google Cloud client and gives no cookies for stream access, so we
-  do not use it. Browser cookies expire after some weeks — the app must detect a
-  dead login and prompt to sign in again.
+  do not use it. **Headers must come from an Incognito window that is then closed**
+  (verified 7 Nov 2026: headers from Josh's normal Chrome went stale within hours,
+  because Chrome rotates __Secure-*PSIDTS cookies and Google invalidates old copies).
+  The queue re-checks the sign-in (≤ every 10 min) and holds jobs while it's dead,
+  because yt-dlp otherwise silently falls back to non-Premium formats (~128k).
 - **yt-dlp needs a JavaScript runtime for YouTube** (since 2025.11.12). Deno is the
   default and recommended: `winget install --id=DenoLand.Deno`. `ymp doctor` checks.
 - **Premium quality:** with Premium cookies, YouTube offers ~256 kbps Opus (itag 774,
@@ -98,8 +110,8 @@ src/ymp/
 |---|---|---|---|
 | 1 | Server core (CLI) | CLI run produces a tagged audio file that plays in VLC with no internet | **Done** 2026-11-07 (Josh confirmed VLC offline playback) |
 | 2 | Library + Subsonic API | Symfonium/Ultrasonic on the home network browses and plays | **Done** 2026-11-07 (Josh played a track in Symfonium over home Wi-Fi) |
-| 3 | Discovery + request endpoints | Test client discovers, requests, watches progress, plays | Next — waiting for Josh's go-ahead |
-| 4 | Desktop GUI + Windows integration | Non-technical user installs, signs in, plays offline, no terminal | Not started |
+| 3 | Discovery + request endpoints | Test client discovers, requests, watches progress, plays | **Done** 2026-11-07 (Josh's acceptance run: PASS) |
+| 4 | Desktop GUI + Windows integration | Non-technical user installs, signs in, plays offline, no terminal | Next — waiting for Josh's go-ahead |
 | 5 | Secure remote access | Phone plays over mobile data, no router ports open | Not started |
 | 6 | Android app | Find, request and listen on the road | Not started |
 | 7 | Polish + multi-user install | Second PC, second profile, backups | Not started |
@@ -134,7 +146,25 @@ src/ymp/
   fetched cover art and scrobbled; no failed or unimplemented calls in the log.
   It also called getAlbumInfo2, getArtistInfo2, getGenres, getBookmarks,
   getPlaylists (all answered empty for now).
-- Next: Phase 3 (discovery + download requests). Do not start until Josh says go.
+
+**Phase 3 — done** (7 Nov 2026):
+- Built: adapter discovery (home, similar = radio, charts = chart playlists + artists,
+  typed search, album, playlist) normalised to `YTItem`; download queue; device-token
+  auth (sha256-hashed, per device, revocable, die with the user); /api endpoints;
+  `tools/acceptance_phase3.py`. 67 tests pass.
+- Live run (127.0.0.1:4748, temp user, real YouTube): discovered "Somebody To Love"
+  via Under Pressure's radio, requested, progress, done, streamed + Range. PASS.
+- Found during it: Josh's saved sign-in had gone stale (normal-window cookies), so
+  that download silently came out at 126 kbps Opus (itag 251) instead of Premium.
+  Fixed: queue holds jobs until the sign-in works; README now says Incognito.
+- Also fixed: Ctrl+C hung `ymp serve` while a paused phone held a stream open;
+  graceful shutdown now caps at 3 s (`timeout_graceful_shutdown`).
+- Acceptance passed (Josh, after Incognito sign-in): personalised home feed
+  ("Listen again", "Mixed for you"), discovered "Loser" (Tame Impala), queued →
+  downloading → processing → done, 264 kbps Opus (Premium), streamed + seek.
+- Still at standard quality: track 2 "Somebody To Love" (poobWJNbucs, 126 kbps).
+  Fix: `ymp download poobWJNbucs --overwrite`.
+- Next: Phase 4 (desktop GUI + Windows integration). Do not start until Josh says go.
 
 ## Open questions for Josh
 
@@ -157,5 +187,10 @@ src/ymp/
   needs the plaintext, so hashing isn't possible). No transcoding: stream always
   sends the original file. Port 4747. IDs are typed strings (ar-/al-/tr-).
   Unsupported features (playlists, genres, lyrics...) return valid empty results.
+- 2026-11-07 (Phase 3): Our API uses per-device bearer tokens (`ymp_` + 32 random
+  bytes, stored as sha256) from POST /api/auth/login with the server user's password.
+  Settings PUT allows quality/format/cache only; library_root is PC-only. Any server
+  user may change settings (roles could come in Phase 7). Downloads are one at a time.
+  /api/docs and /api/openapi.json are public on the LAN (they hold no data).
 - 2026-11-07: Default `auto` keeps the Premium Opus stream (itag 774) over 256k AAC:
   same quality class, no re-encode. Josh can set `preferred_format m4a` for AAC.

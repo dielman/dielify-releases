@@ -77,7 +77,9 @@ def list_users() -> list[ServerUser]:
 
 
 def remove_user(name: str) -> bool:
-    return credstore.delete(_check_name(name), STORE)
+    removed = credstore.delete(_check_name(name), STORE)
+    revoke_all_tokens(name)  # a removed user's devices stop working too
+    return removed
 
 
 def check_subsonic(user: ServerUser, password: str | None, token: str | None,
@@ -122,3 +124,64 @@ class Lockout:
     def succeeded(self, client: str) -> None:
         with self._lock:
             self._failures.pop(client, None)
+
+
+# --- device tokens for our own /api (the Android app, test clients) -------------
+
+TOKEN_PREFIX = "ymp_"
+
+
+def _token_hash(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def create_token(user: ServerUser, device_name: str) -> tuple[int, str]:
+    """A new random token for one device. Only its hash is stored; the caller shows
+    the token to the device once."""
+    from .library import connect
+    token = TOKEN_PREFIX + secrets.token_urlsafe(32)
+    with connect() as conn:
+        token_id = conn.execute(
+            "INSERT INTO device_tokens (username, device_name, token_hash, created_at) "
+            "VALUES (?, ?, ?, ?)",
+            (user.name, (device_name or "device")[:60], _token_hash(token), time.time())).lastrowid
+    return token_id, token
+
+
+def check_token(token: str) -> tuple[ServerUser, int] | None:
+    from .library import connect
+    if not token or not token.startswith(TOKEN_PREFIX):
+        return None
+    with connect() as conn:
+        row = conn.execute("SELECT id, username FROM device_tokens WHERE token_hash = ?",
+                           (_token_hash(token),)).fetchone()
+        if row is None:
+            return None
+        conn.execute("UPDATE device_tokens SET last_used_at = ? WHERE id = ?", (time.time(), row["id"]))
+    user = get_user(row["username"])
+    return (user, row["id"]) if user else None
+
+
+def list_tokens(username: str | None = None) -> list[dict]:
+    from .library import connect
+    with connect() as conn:
+        sql = "SELECT id, username, device_name, created_at, last_used_at FROM device_tokens"
+        rows = (conn.execute(sql + " WHERE username = ? ORDER BY id", (username,)) if username
+                else conn.execute(sql + " ORDER BY id")).fetchall()
+    return [dict(r) for r in rows]
+
+
+def revoke_token(token_id: int, username: str | None = None) -> bool:
+    """Revoke one device. With `username`, only that user's own devices."""
+    from .library import connect
+    with connect() as conn:
+        sql, args = "DELETE FROM device_tokens WHERE id = ?", [token_id]
+        if username:
+            sql, args = sql + " AND username = ?", [token_id, username]
+        return conn.execute(sql, args).rowcount > 0
+
+
+def revoke_all_tokens(username: str) -> int:
+    from .library import connect
+    with connect() as conn:
+        return conn.execute("DELETE FROM device_tokens WHERE username = ?", (username,)).rowcount
