@@ -264,6 +264,17 @@ src/dielify/
   installer + APK + signed manifest with "android" entry, verified online). Not yet: an
   end-to-end phone in-app update (needs a later release, e.g. 0.6.1).
 
+**Phase 8 — in progress** (started 8 Nov 2026, branch `phase-8`):
+- Item 1 built and published as **v0.7.0**: instant play. `GET /api/yt/stream/{video_id}`
+  (media auth): yt-dlp `stream_info` (Premium cookies, same format rule as downloads),
+  waits for the format's `available_at` (YouTube 403s before it; yt-dlp also sleeps),
+  relays with Range, caches the address 30 min, re-resolves once on 403/410; the first
+  request queues the download next in line; library songs are served from the file.
+  Phone: song taps play the list from that song (`yt-<videoId>` media ids); PC app the
+  same. First play ~7 s (lookup + wait), seeks ~0.1 s. Not yet confirmed by Josh on
+  device; phone self-update 0.6.0 -> 0.7.0 is the Phase 7 update test.
+- Idea for later: pre-resolve the next song in a list so skipping feels instant.
+
 ## Open questions for Josh
 
 - Default audio quality/format (currently `auto`: best available, ~256k Opus with
