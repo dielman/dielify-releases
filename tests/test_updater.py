@@ -138,3 +138,9 @@ def test_offline_mode_and_unconfigured_never_check(key, monkeypatch):
 def test_development_copy_never_runs_an_installer(tmp_path):
     with pytest.raises(UpdateError, match="installed app"):
         upd._launch_installer(tmp_path / "x.exe")
+
+
+def test_update_session_retries_dropped_connections():
+    from dielify.updater import _session
+    adapter = _session().get_adapter("https://github.com/x")
+    assert adapter.max_retries.total == 3 and "GET" in adapter.max_retries.allowed_methods

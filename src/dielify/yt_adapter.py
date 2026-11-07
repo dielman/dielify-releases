@@ -385,7 +385,8 @@ class YTMusicAdapter:
             self._yt = YTMusic(auth=auth, language=language) if auth else YTMusic(language=language)
         except Exception as e:  # ytmusicapi rejects malformed auth here
             raise NotSignedIn(f"The saved sign-in isn't usable: {_short_error(e)}") from e
-        self._http = requests.Session()
+        from .httpclient import retrying_session
+        self._http = retrying_session()
 
     # Gentle pacing so traffic looks like a person, not a bot.
     def _pace(self) -> None:

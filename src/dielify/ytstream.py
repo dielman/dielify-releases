@@ -15,6 +15,7 @@ from typing import Callable, Iterator
 
 import requests
 
+from .httpclient import retrying_session
 from .yt_adapter import StreamInfo
 
 log = logging.getLogger(__name__)
@@ -46,7 +47,7 @@ class StreamCache:
 
 
 cache = StreamCache()
-_http = requests.Session()
+_http = retrying_session()
 
 
 def open_upstream(info: StreamInfo, range_header: str | None) -> requests.Response:

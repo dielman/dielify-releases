@@ -82,10 +82,15 @@ def verify_manifest(manifest: bytes, signature_b64: str, public_key_pem: str) ->
     return data
 
 
+def _session() -> requests.Session:
+    from .httpclient import retrying_session
+    return retrying_session()
+
+
 class Updater:
     def __init__(self, http: requests.Session | None = None,
                  run_installer: Callable[[Path], None] | None = None):
-        self.http = http or requests.Session()
+        self.http = http or _session()
         self.status = UpdateStatus(configured=configured())
         self._manifest: dict | None = None
         self._lock = threading.Lock()
