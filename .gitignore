@@ -1,0 +1,49 @@
+# --- Secrets: never commit ---
+*.cred
+*.dpapi
+browser.json
+headers*.json
+headers*.txt
+cookies*.txt
+oauth.json
+.env
+
+# --- Runtime data ---
+*.db
+*.sqlite
+*.sqlite3
+data/
+music/
+library/
+logs/
+
+# --- Audio (in case a library folder lands inside the repo) ---
+*.m4a
+*.opus
+*.webm
+*.mp3
+*.flac
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+
+# --- Android (Phase 6) ---
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+*.keystore
+*.jks
+
+# --- Editors / OS ---
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
