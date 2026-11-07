@@ -88,6 +88,57 @@ def _parse_duration(text: str | None) -> int | None:
         return None
 
 
+def _short_error(e: Exception, limit: int = 200) -> str:
+    """One-line description of an exception, with anything cookie-like masked."""
+    text = " ".join(str(e).split()) or "(no message)"
+    text = re.sub(r"(SAPISID\w*|[A-Z0-9_-]*SID\w*)[= ]\S+", r"\1=***", text)
+    return f"{type(e).__name__}: {text[:limit]}"
+
+
+def _text(node) -> str | None:
+    if isinstance(node, dict):
+        if node.get("simpleText"):
+            return node["simpleText"]
+        runs = node.get("runs") or []
+        return "".join(r.get("text", "") for r in runs) or None
+    return None
+
+
+def _find_account_name(obj) -> str | None:
+    """Find the signed-in account's name anywhere in an account-menu response."""
+    if isinstance(obj, dict):
+        header = obj.get("activeAccountHeaderRenderer")
+        if isinstance(header, dict):
+            return _text(header.get("accountName")) or _text(header.get("channelHandle")) or "(signed in)"
+        children = obj.values()
+    elif isinstance(obj, list):
+        children = obj
+    else:
+        return None
+    for child in children:
+        found = _find_account_name(child)
+        if found:
+            return found
+    return None
+
+
+# Cookies a signed-in YouTube session normally carries (names only, never values).
+_SIGNIN_COOKIES = ("SAPISID", "__Secure-3PAPISID", "SID", "HSID", "SSID", "APISID",
+                   "__Secure-1PSID", "__Secure-3PSID", "LOGIN_INFO")
+
+
+def _cookie_report(auth: dict | None) -> str:
+    """Which sign-in cookies were copied. Safe to show: no values."""
+    auth = {k.lower(): v for k, v in (auth or {}).items()}
+    jar = {p.split("=", 1)[0].strip() for p in auth.get("cookie", "").split(";") if "=" in p}
+    missing = [c for c in _SIGNIN_COOKIES if c not in jar]
+    report = (f"{len(jar)} cookies copied; sign-in cookies missing: "
+              f"{', '.join(missing) or 'none'}. x-goog-authuser={auth.get('x-goog-authuser', '?')}")
+    if "x-goog-pageid" in auth:
+        report += ", x-goog-pageid present (brand account)"
+    return report + "."
+
+
 def cookie_header_to_netscape(cookie_header: str) -> str:
     """Convert a browser `Cookie:` header to a Netscape cookie file for yt-dlp."""
     jar = SimpleCookie()
@@ -102,11 +153,69 @@ def cookie_header_to_netscape(cookie_header: str) -> str:
     return "\n".join(lines) + "\n"
 
 
+_HEADER_NAME = re.compile(r"^[A-Za-z0-9-]+$")
+
+
+def normalize_headers(raw: str) -> dict[str, str]:
+    """Read headers in any DevTools copy format into {lowercase-name: value}.
+
+    Handles Chrome/Edge raw view ("name: value"), Chrome's normal view (name and
+    value on separate lines, with or without a colon), tab-separated pairs, Windows
+    line endings, HTTP/2 pseudo-headers and Chrome's multi-line "Decoded:" block.
+    """
+    headers: dict[str, str] = {}
+    pending: str | None = None
+    in_decoded = False
+    for line in raw.replace("\r\n", "\n").replace("\r", "\n").split("\n"):
+        line = line.strip()
+        if not line:
+            continue
+        if in_decoded:  # x-client-data's decoded protobuf, ends with "}"
+            in_decoded = line != "}"
+            continue
+        if line.rstrip(":") == "Decoded":
+            in_decoded, pending = True, None
+            continue
+        if pending is not None:
+            if not pending.startswith(":"):
+                headers[pending.lower()] = line
+            pending = None
+            continue
+        if "\t" in line:
+            name, value = line.split("\t", 1)
+        elif ": " in line[1:]:
+            idx = line.index(": ", 1)
+            name, value = line[:idx], line[idx + 2:]
+        elif line.endswith(":") or _HEADER_NAME.match(line):
+            pending = line.rstrip(":")
+            continue
+        else:
+            continue
+        name = name.strip().rstrip(":")
+        if name and not name.startswith(":"):
+            headers[name.lower()] = value.strip()
+    return headers
+
+
 def parse_browser_headers(raw: str) -> dict:
     """Turn request headers copied from browser DevTools into ytmusicapi auth."""
     import ytmusicapi
+    found = normalize_headers(raw)
+    missing = [h for h in ("cookie", "x-goog-authuser") if h not in found]
+    if missing:
+        names = ", ".join(sorted(found)) or "none"
+        raise YouTubeError(
+            f"The copied headers are missing: {', '.join(missing)}. "
+            f"Header names found: {names}. Copy the Request Headers (not Response "
+            "Headers) of a music.youtube.com 'browse' request (see README, 'Sign in').")
+    site = " ".join(found.get(h, "") for h in ("x-origin", "origin", "referer", ":authority"))
+    if "youtube.com" in site and "music.youtube.com" not in site:
+        raise YouTubeError(
+            "These headers were copied from www.youtube.com. Copy them from "
+            "music.youtube.com instead (see README, 'Sign in').")
+    clean = "\n".join(f"{k}: {v}" for k, v in found.items())
     try:
-        auth = json.loads(ytmusicapi.setup(filepath=None, headers_raw=raw))
+        auth = json.loads(ytmusicapi.setup(filepath=None, headers_raw=clean))
     except Exception as e:  # ytmusicapi raises various types here
         raise YouTubeError(
             "Those headers didn't look right. Copy them from a request to "
@@ -173,10 +282,26 @@ class YTMusicAdapter:
         self._pace()
         try:
             info = self._yt.get_account_info()
-        except Exception as e:
+        except KeyError:
+            # ytmusicapi reads the name from one fixed path, which YouTube moves
+            # around. Search the raw menu instead; no account header = signed out.
+            try:
+                menu = self._yt._send_request("account/account_menu", {})
+            except Exception as e:
+                raise YouTubeError(f"Couldn't confirm the sign-in with YouTube: {_short_error(e)}") from e
+            name = _find_account_name(menu)
+            if name:
+                return name
             raise NotSignedIn(
-                "YouTube rejected the saved sign-in (cookies usually expire after a "
-                "few weeks). Run: ymp auth login") from e
+                "YouTube answered as if you were signed out, so the copied cookies "
+                "weren't accepted. " + _cookie_report(self._auth)) from None
+        except Exception as e:
+            detail = _short_error(e)
+            if re.search(r"\b(401|403)\b|sign(ed)? ?in|login", detail, re.I):
+                raise NotSignedIn(
+                    "YouTube rejected the sign-in (cookies usually expire after a few "
+                    f"weeks). Run: ymp auth login  [{detail}]") from e
+            raise YouTubeError(f"Couldn't confirm the sign-in with YouTube: {detail}") from e
         return info.get("accountName") or info.get("channelHandle") or "(signed in)"
 
     def search(self, query: str, limit: int = 10, videos: bool = False) -> list[TrackInfo]:

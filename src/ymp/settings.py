@@ -20,7 +20,7 @@ FORMATS = ("auto", "m4a", "opus")
 @dataclass
 class Settings:
     library_root: str = ""
-    quality: str = "auto"         # auto = best available (Premium: 256k AAC)
+    quality: str = "auto"         # auto = best available (Premium: ~256k Opus)
     preferred_format: str = "auto"  # auto keeps whatever is best; never re-encodes
     cache_limit_gb: float = 0.0    # 0 = unlimited (eviction arrives with the library)
     active_profile: str = "default"

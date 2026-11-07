@@ -11,8 +11,8 @@ app over your home network or Tailscale.
 
 | Phase | What | Status |
 |---|---|---|
-| 1 | Command line: sign in, search, download with tags + cover art | **Ready to test on Windows** |
-| 2 | Library database + Subsonic API (Symfonium/Ultrasonic) | Next |
+| 1 | Command line: sign in, search, download with tags + cover art | **Done** (7 Nov 2026) |
+| 2 | Library database + Subsonic API (Symfonium/Ultrasonic) | **Next** |
 | 3 | Discovery + download requests | |
 | 4 | Desktop app (settings, folder picker, tray icon) | |
 | 5 | Secure remote access (Tailscale) | |
@@ -81,11 +81,11 @@ ymp config show
 ```
 
 Use any folder you like. Each user profile gets its own subfolder inside it, laid out
-as `Artist\Album\NN Title.m4a`. Other settings:
+as `Artist\Album\NN Title.opus` (or `.m4a`). Other settings:
 
 | Setting | Values | Meaning |
 |---|---|---|
-| `quality` | `auto` (default), `high`, `standard` | `auto`/`high` = best available (256 kbps AAC with Premium); `standard` caps at ~160 kbps |
+| `quality` | `auto` (default), `high`, `standard` | `auto`/`high` = best available (with Premium: ~256 kbps Opus, or 256 kbps AAC if you prefer `m4a`); `standard` caps at ~160 kbps |
 | `preferred_format` | `auto` (default), `m4a`, `opus` | Prefer a format when both exist. Audio is never re-encoded. |
 | `active_profile` | any name, e.g. `josh` | Whose login and library folder to use |
 | `request_delay_s` | seconds, default `1.5` | Pause between YouTube requests, to keep traffic human-paced |
@@ -104,8 +104,12 @@ alternative OAuth route now needs your own Google Cloud project).
 2. Press **F12** to open Developer Tools, then click the **Network** tab.
 3. In the filter box type `browse`, then click around YouTube Music (e.g. open
    **Library**) until a request named `browse?...` appears.
-4. Click that request. In **Headers**, scroll to **Request Headers**, tick **Raw**,
-   and select and copy **everything** in that section.
+   **It must be music.youtube.com, not www.youtube.com.** Headers copied from
+   ordinary YouTube don't work, and ymp will tell you if that's what you copied.
+4. Click that request. On the right, stay on the **Headers** tab and scroll down to
+   the **Request Headers** heading. Click and drag to select every line under it,
+   from `accept:` down to the last line (usually `x-youtube-client-version`), and copy
+   with **Ctrl+C**. Leave the "Raw" switch as it is: either view works.
    (Firefox: right-click the request → **Copy Value** → **Copy Request Headers**.)
 5. Back in the terminal:
 
@@ -128,18 +132,18 @@ plain text and nothing goes into the project folder.
 ymp search under pressure queen
 ymp get under pressure queen          # shows results, you pick one, it downloads
 ymp download VIDEO_ID                 # or by the id shown in search results
-ymp inspect "D:\Music\ymp\josh\Queen\Hot Space\11 Under Pressure.m4a"
+ymp inspect "E:\Music\ymp\josh\Queen\Hot Space\11 Under Pressure (feat. David Bowie).opus"
 ```
 
-Example of a successful download:
+A real download on Josh's PC (7 Nov 2026):
 
 ```
 → VIDEO_ID
   downloading… 100%
   downloaded, tagging…
-  Queen, David Bowie — Under Pressure
-  MP4, 256 kbps, 4:08, cover 180 KB
-  D:\Music\ymp\josh\Queen\Hot Space\11 Under Pressure.m4a
+  Queen — Under Pressure (feat. David Bowie)
+  OggOpus, 251 kbps, 4:08, cover 104 KB
+  E:\Music\ymp\josh\Queen\Hot Space\11 Under Pressure (feat. David Bowie).opus
 ```
 
 Downloading the same track again is skipped (add `--overwrite` to replace it). Add
@@ -165,7 +169,7 @@ When that works, Phase 1 is done.
 | `ffmpeg NOT FOUND` | `winget install -e --id Gyan.FFmpeg`, then reopen the terminal |
 | "YouTube rejected the saved sign-in" | Cookies expired: repeat step 5 |
 | Downloads fail after previously working | YouTube changed something. Update: `pip install -U yt-dlp ytmusicapi`, re-run `ymp doctor` and `pytest`, then pin the new versions in `pyproject.toml` |
-| Only ~128 kbps instead of 256 | Check `ymp auth status`; Premium quality needs a working sign-in |
+| Only ~130–160 kbps instead of ~256 | Check `ymp auth status`; Premium quality needs a working sign-in |
 
 ## Project layout
 

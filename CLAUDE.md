@@ -64,8 +64,15 @@ src/ymp/
   dead login and prompt to sign in again.
 - **yt-dlp needs a JavaScript runtime for YouTube** (since 2025.11.12). Deno is the
   default and recommended: `winget install --id=DenoLand.Deno`. `ymp doctor` checks.
-- **Premium quality:** with Premium cookies, YouTube offers 256 kbps AAC (itag 141).
-  Otherwise best is ~160 kbps Opus (itag 251). We pass the signed-in cookies to
+- **Premium quality:** with Premium cookies, YouTube offers ~256 kbps Opus (itag 774,
+  verified live 7 Nov 2026) and 256 kbps AAC (itag 141). `auto` picked 774. Without
+  Premium the best is ~160 kbps Opus (itag 251).
+- **Sign-in headers must come from music.youtube.com.** Headers copied from
+  www.youtube.com got a signed-out response; `parse_browser_headers` rejects them
+  up front. It also normalises every DevTools copy format first, because
+  ytmusicapi's own parser fails on Windows line endings and Chrome's views.
+- **`get_account_info()` is broken** in ytmusicapi 1.12.3 (account-menu layout
+  changed). `account_name()` falls back to searching the raw menu response. We pass the signed-in cookies to
   yt-dlp via a temporary Netscape cookie file that is deleted after each download.
 - **No re-encoding:** audio is remuxed only (webm/opus -> .opus, AAC -> .m4a).
 - **Custom tag `YMP_VIDEOID`** (m4a: `----:com.ymp:videoId`) in every file so the
@@ -83,8 +90,8 @@ src/ymp/
 
 | # | Phase | Acceptance | Status |
 |---|---|---|---|
-| 1 | Server core (CLI) | CLI run produces a tagged audio file that plays in VLC with no internet | **In progress** — code + offline tests done; live run on Josh's PC pending |
-| 2 | Library + Subsonic API | Symfonium/Ultrasonic on the home network browses and plays | Not started |
+| 1 | Server core (CLI) | CLI run produces a tagged audio file that plays in VLC with no internet | **Done** 2026-11-07 (Josh confirmed VLC offline playback) |
+| 2 | Library + Subsonic API | Symfonium/Ultrasonic on the home network browses and plays | Next — waiting for Josh's go-ahead |
 | 3 | Discovery + request endpoints | Test client discovers, requests, watches progress, plays | Not started |
 | 4 | Desktop GUI + Windows integration | Non-technical user installs, signs in, plays offline, no terminal | Not started |
 | 5 | Secure remote access | Phone plays over mobile data, no router ports open | Not started |
@@ -93,17 +100,19 @@ src/ymp/
 
 ## Current status
 
-**Phase 1** — built in a cloud workspace without YouTube access, so:
-- Verified here: tagging (m4a + opus) with cover art, path layout, credential store
-  round-trip, cookie-file conversion, full download pipeline with a fake adapter,
-  CLI commands. `pytest` passes.
-- Not yet verified: live sign-in, search and download against YouTube. Josh runs
-  the Phase 1 checklist in README.md on his PC.
+**Phase 1 — done** (7 Nov 2026), on Josh's PC:
+- Verified live: sign-in (profile `josh`, DPAPI), search, and download of
+  `BaxnrepwXck` (Queen — Under Pressure) to `E:\Music\ymp\josh\Queen\Hot Space\`
+  as 252 kbps Opus with title/artist/album/year/track/video-id tags and cover art.
+- `pytest`: 35 pass on Windows, including a real DPAPI round-trip.
+- Acceptance passed: Josh played the file in VLC with the network off, tags and
+  cover art shown.
+- Next: Phase 2 (SQLite library + Subsonic API). Do not start until Josh says go.
 
 ## Open questions for Josh
 
-- Default audio quality/format (currently `auto`: best available, usually 256k AAC
-  with Premium)
+- Default audio quality/format (currently `auto`: best available, ~256k Opus with
+  Premium)
 - Auto-download while streaming, or on demand only
 - Default cache size limit and eviction behaviour (setting exists, not enforced yet)
 - Daughter's install: shared library or fully separate
@@ -116,3 +125,5 @@ src/ymp/
   Pillow added as a dependency to square-crop non-square video thumbnails for cover
   art. Credentials refuse to save unencrypted on non-Windows unless the explicit
   dev-only env var `YMP_INSECURE_DEV_STORE=1` is set (used by tests).
+- 2026-11-07: Default `auto` keeps the Premium Opus stream (itag 774) over 256k AAC:
+  same quality class, no re-encode. Josh can set `preferred_format m4a` for AAC.

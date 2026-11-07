@@ -1,6 +1,7 @@
 """Paths, settings, credential store and YouTube-adapter helpers (no network)."""
 
 import json
+import sys
 
 import pytest
 
@@ -52,12 +53,32 @@ def test_settings_rejects_bad_values():
 # --- credential store ---
 
 
-def test_credstore_refuses_plaintext_without_opt_in():
+@pytest.fixture
+def not_windows(monkeypatch):
+    """Exercise the non-Windows code path even when the tests run on Windows."""
+    monkeypatch.setattr(credstore, "_is_windows", lambda: False)
+
+
+def test_credstore_refuses_plaintext_without_opt_in(not_windows):
     with pytest.raises(credstore.CredentialError):
         credstore.save("josh", {"cookie": "SAPISID=x"})
 
 
-def test_credstore_roundtrip_dev(monkeypatch, isolated_home):
+@pytest.mark.skipif(sys.platform != "win32", reason="DPAPI is Windows-only")
+def test_credstore_roundtrip_dpapi():
+    auth = {"cookie": "SAPISID=secret; HSID=y", "x-goog-authuser": "0"}
+    path = credstore.save("josh", auth)
+    raw = path.read_bytes()
+    assert raw.startswith(b"DPAPI1") and b"SAPISID" not in raw
+    assert credstore.load("josh") == auth
+    # Bound to the profile name: another profile's entropy cannot decrypt it.
+    other = path.with_name("daughter.dpapi")
+    other.write_bytes(raw)
+    with pytest.raises(credstore.CredentialError):
+        credstore.load("daughter")
+
+
+def test_credstore_roundtrip_dev(monkeypatch, isolated_home, not_windows):
     monkeypatch.setenv("YMP_INSECURE_DEV_STORE", "1")
     auth = {"cookie": "SAPISID=secret; HSID=y", "x-goog-authuser": "0"}
     path = credstore.save("josh", auth)
@@ -68,7 +89,7 @@ def test_credstore_roundtrip_dev(monkeypatch, isolated_home):
     assert credstore.delete("josh") and credstore.load("josh") is None
 
 
-def test_credstore_dev_file_unusable_without_opt_in(monkeypatch):
+def test_credstore_dev_file_unusable_without_opt_in(monkeypatch, not_windows):
     monkeypatch.setenv("YMP_INSECURE_DEV_STORE", "1")
     credstore.save("josh", {"cookie": "a=b"})
     monkeypatch.delenv("YMP_INSECURE_DEV_STORE")
@@ -126,3 +147,58 @@ def test_parse_browser_headers_ok():
 def test_parse_browser_headers_needs_signin_cookie():
     with pytest.raises(YouTubeError):
         parse_browser_headers(RAW_HEADERS.replace("SAPISID=abc/def; __Secure-3PAPISID=abc/def; ", ""))
+
+
+# --- header parsing (all values fake) ---
+
+_HEADERS = {"accept": "*/*", "authorization": "SAPISIDHASH 1_abc",
+            "cookie": "SAPISID=fake/x; HSID=y", "x-goog-authuser": "0",
+            "x-origin": "https://music.youtube.com"}
+
+
+@pytest.mark.parametrize("fmt", ["raw", "chrome_colon", "chrome_bare", "tabs"])
+def test_parse_browser_headers_formats(fmt):
+    if fmt == "raw":
+        text = ":authority: music.youtube.com\n" + "\n".join(f"{k}: {v}" for k, v in _HEADERS.items())
+    elif fmt == "chrome_colon":
+        text = ":authority:\nmusic.youtube.com\n" + "\n".join(f"{k}:\n{v}" for k, v in _HEADERS.items())
+    elif fmt == "chrome_bare":
+        text = "\n".join(f"{k}\n{v}" for k, v in _HEADERS.items())
+    else:
+        text = "\n".join(f"{k}:\t{v}" for k, v in _HEADERS.items())
+    # Windows clipboard line endings plus Chrome's multi-line x-client-data block.
+    text = text.replace("accept:", "x-client-data:\nCIa2yQE=\nDecoded:\nmessage X {\n  // ids\n}\naccept:", 1)
+    auth = parse_browser_headers(text.replace("\n", "\r\n"))
+    assert auth["cookie"] == _HEADERS["cookie"] and auth["x-goog-authuser"] == "0"
+
+
+def test_parse_browser_headers_names_missing_without_values():
+    with pytest.raises(YouTubeError) as e:
+        parse_browser_headers("content-type: text/html\nset-cookie: SECRET=1")
+    msg = str(e.value)
+    assert "missing: cookie, x-goog-authuser" in msg and "set-cookie" in msg
+    assert "SECRET" not in msg
+
+
+def test_find_account_name_anywhere_in_menu():
+    from ymp.yt_adapter import _find_account_name
+    signed_in = {"actions": [{"popup": {"x": [{"activeAccountHeaderRenderer": {
+        "accountName": {"runs": [{"text": "Josh"}]}}}]}}]}
+    signed_out = {"actions": [{"openPopupAction": {"popup": {"multiPageMenuRenderer": {
+        "sections": [{"multiPageMenuSectionRenderer": {"items": []}}]}}}}]}
+    assert _find_account_name(signed_in) == "Josh"
+    assert _find_account_name(signed_out) is None
+
+
+def test_cookie_report_lists_names_not_values():
+    from ymp.yt_adapter import _cookie_report
+    report = _cookie_report({"Cookie": "SAPISID=topsecret; SID=alsosecret; weird=a\"b", "x-goog-authuser": "1"})
+    assert "3 cookies copied" in report and "x-goog-authuser=1" in report
+    assert "HSID" in report and "SAPISID," not in report.split("missing:")[1]
+    assert "secret" not in report
+
+
+def test_parse_browser_headers_rejects_plain_youtube():
+    text = "\n".join(f"{k}: {v}" for k, v in {**_HEADERS, "x-origin": "https://www.youtube.com"}.items())
+    with pytest.raises(YouTubeError, match="www.youtube.com"):
+        parse_browser_headers(text)
