@@ -26,6 +26,7 @@ import androidx.media3.session.MediaSession
 import com.dielify.app.R
 import com.dielify.app.dielify
 import com.dielify.app.net.Album
+import com.dielify.app.net.Item
 import com.dielify.app.net.Server
 import com.dielify.app.net.Track
 import com.dielify.app.saved.SavedSongs
@@ -50,7 +51,33 @@ object MediaItems {
 
     private fun mediaUri(path: String): Uri = Uri.parse("${Server.MEDIA_SCHEME}://server$path")
 
+    private const val YT_PREFIX = "yt-"
+
     fun streamUri(trackId: Long) = mediaUri("/api/library/tracks/$trackId/stream")
+
+    /** Any YouTube song: the PC relays it (and downloads it next in line). */
+    fun ytStreamUri(videoId: String) = mediaUri("/api/yt/stream/$videoId")
+
+    /** A song from YouTube Music lists (Discover, search, playlists, similar). */
+    fun fromItem(i: Item): MediaItem {
+        val id = i.libraryTrackId
+        return MediaItem.Builder()
+            .setMediaId(if (id != null) PREFIX + id else YT_PREFIX + i.id)
+            .setUri(if (id != null) streamUri(id) else ytStreamUri(i.id))
+            .setMediaMetadata(
+                MediaMetadata.Builder()
+                    .setTitle(i.title)
+                    .setArtist(i.artistText.ifEmpty { null })
+                    .setAlbumTitle(i.album)
+                    .setDurationMs(i.durationS?.let { it * 1000L })
+                    .setArtworkUri(if (id != null) ArtProvider.trackArt(id) else i.thumbnail?.let(Uri::parse))
+                    .setIsPlayable(true)
+                    .setIsBrowsable(false)
+                    .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
+                    .build()
+            )
+            .build()
+    }
 
     fun fromTrack(t: Track): MediaItem = MediaItem.Builder()
         .setMediaId(PREFIX + t.id)
@@ -88,6 +115,9 @@ object MediaItems {
     fun restore(item: MediaItem, known: MediaItem? = null): MediaItem {
         val base = if (item.mediaMetadata.title == null && known != null) known else item
         if (base.localConfiguration != null) return base
+        if (base.mediaId.startsWith(YT_PREFIX)) {
+            return base.buildUpon().setUri(ytStreamUri(base.mediaId.removePrefix(YT_PREFIX))).build()
+        }
         val id = trackId(base) ?: return base
         return base.buildUpon().setUri(streamUri(id)).build()
     }

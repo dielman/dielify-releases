@@ -207,11 +207,12 @@ async function viewDiscover() {
   } catch (e) { failed(e); }
 }
 
-function ytCard(item, from = "discover") {
+function ytCard(item, from, list) {  // also used as .map(ytCard): (item, index, array)
+  const origin = from === "library" ? "library" : "discover";
   const sub = item.artists.length ? item.artists.join(", ") : item.subtitle || "";
   const open = () => {
-    if (item.type === "album" || item.type === "playlist") return viewCollection(item.type, item.id, from);
-    if (item.type === "song" || item.type === "video") return songActions(item);
+    if (item.type === "album" || item.type === "playlist") return viewCollection(item.type, item.id, origin);
+    if (item.type === "song" || item.type === "video") return songActions(item, Array.isArray(list) ? list : [item]);
   };
   return h("div", { class: "card", onclick: open, title: `${item.title}${sub ? " — " + sub : ""}` },
     art(item.thumbnail, item.type === "artist" ? "👤" : "♪"),
@@ -219,12 +220,23 @@ function ytCard(item, from = "discover") {
     h("div", { class: "s" }, item.library_track_id ? "✓ In library · " : "", sub));
 }
 
-async function songActions(item) {
-  if (item.library_track_id) {
-    const t = await api(`/api/library/tracks/${item.library_track_id}`);
-    return playList([t], 0);
-  }
-  await requestDownload({ type: item.type, id: item.id, title: item.title, artists: item.artists, album: item.album });
+// A YouTube item as something the player can play: from the library if it's there,
+// otherwise relayed by Dielify from YouTube (which also downloads it next in line).
+function ytAsTrack(item) {
+  const lib = item.library_track_id;
+  return {
+    id: lib || null, title: item.title, artist: item.artists.join(", "), album: item.album || "",
+    stream_url: lib ? `/api/library/tracks/${lib}/stream` : `/api/yt/stream/${encodeURIComponent(item.id)}`,
+    cover_url: lib ? `/api/library/tracks/${lib}/cover` : null,
+    thumb: lib ? null : item.thumbnail,  // YouTube's own picture: loaded without our key
+  };
+}
+
+function songActions(item, list = [item]) {
+  const songs = list.filter((i) => i.type === "song" || i.type === "video");
+  const start = Math.max(0, songs.findIndex((i) => i.id === item.id));
+  playList(songs.map(ytAsTrack), start);
+  if (!item.library_track_id) toast(`Playing “${item.title}”, and saving it to your library`);
 }
 
 async function requestDownload(body) {
@@ -265,9 +277,9 @@ function ytTrackTable(items) {
       h("td", { class: "n" }, i + 1),
       h("td", {}, t.title, h("div", { class: "muted small" }, t.artists.join(", "), t.album ? ` · ${t.album}` : "")),
       h("td", { class: "d" }, dur(t.duration_s)),
-      h("td", { class: "a" }, t.library_track_id
-        ? h("button", { onclick: () => songActions(t) }, "▶ Play")
-        : h("button", { onclick: () => songActions(t) }, "Download"))))));
+      h("td", { class: "a" }, h("button", { onclick: () => songActions(t, items) }, "▶ Play"),
+        t.library_track_id ? null : h("button", { onclick: () => requestDownload(
+          { type: t.type, id: t.id, title: t.title, artists: t.artists, album: t.album, next: true }) }, "Download"))))));
 }
 
 async function viewYtSearch(q, type = "song") {
@@ -532,8 +544,9 @@ function playAt(i) {
   $("np-title").textContent = t.title;
   $("np-artist").textContent = `${t.artist} · ${t.album}`;
   const cover = $("np-cover");
-  cover.hidden = !t.cover_url;
+  cover.hidden = !t.cover_url && !t.thumb;
   if (t.cover_url) cover.src = media(t.cover_url, 112);
+  else if (t.thumb) cover.src = t.thumb;
   document.querySelectorAll("tr[data-track]").forEach((r) => r.classList.toggle("playing", Number(r.dataset.track) === t.id));
 }
 $("btn-play").addEventListener("click", () => {
@@ -551,7 +564,7 @@ audio.addEventListener("timeupdate", () => {
   $("t-dur").textContent = dur(d) || "0:00";
   if (!seeking && d) $("seek").value = Math.round((audio.currentTime / d) * 1000);
   // counts as played after half the song or 4 minutes (like most scrobblers)
-  if (!player.counted && d && (audio.currentTime > d / 2 || audio.currentTime > 240)) {
+  if (!player.counted && player.current.id && d && (audio.currentTime > d / 2 || audio.currentTime > 240)) {
     player.counted = true;
     api(`/api/library/tracks/${player.current.id}/played`, { method: "POST" }).catch(() => {});
   }

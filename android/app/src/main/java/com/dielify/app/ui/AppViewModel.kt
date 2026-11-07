@@ -149,16 +149,26 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     // --- YouTube Music: open, download, play ----------------------------------------------
 
-    /** Tap on a YouTube item: songs already downloaded play, other songs get downloaded,
-     *  albums/playlists open, artists search for their songs. */
-    fun openItem(item: Item) {
+    /** Tap on a YouTube item: songs play straight away (then the rest of `queue`), and the
+     *  PC keeps a copy of anything it didn't have; albums/playlists open; artists search. */
+    fun openItem(item: Item, queue: List<Item> = listOf(item)) {
         when {
-            item.isSong && item.libraryTrackId != null -> playLibrary(listOf(item.libraryTrackId))
-            item.isSong -> download(item)
+            item.isSong -> playItems(queue, item)
             item.type == "album" -> open(Screen.YtAlbumPage(item.id, item.title))
             item.type == "playlist" -> open(Screen.YtPlaylistPage(item.id, item.title))
             item.type == "artist" -> { searchRequest.value = item.title; selectTab(Tab.Search) }
         }
+    }
+
+    fun playItems(queue: List<Item>, first: Item) {
+        val c = controller ?: return
+        val songs = queue.filter { it.isSong }.ifEmpty { listOf(first) }
+        val start = songs.indexOfFirst { it.type == first.type && it.id == first.id }.coerceAtLeast(0)
+        c.shuffleModeEnabled = false
+        c.setMediaItems(songs.map(MediaItems::fromItem), start, 0L)
+        c.prepare()
+        c.play()
+        if (first.libraryTrackId == null) messages.tryEmit("Playing \"${first.title}\", and saving it on your PC")
     }
 
     /** Set by "artist" taps so the Search tab opens with that name filled in. */

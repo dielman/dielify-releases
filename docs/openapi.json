@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Dielify",
-    "version": "0.6.0"
+    "version": "0.7.0"
   },
   "paths": {
     "/api/auth/login": {
@@ -424,6 +424,59 @@
             "HTTPBearer": []
           }
         ]
+      }
+    },
+    "/api/yt/stream/{video_id}": {
+      "get": {
+        "tags": [
+          "youtube"
+        ],
+        "summary": "Yt Stream",
+        "description": "Play any YouTube song now (relayed by the PC, seeking works). The PC also downloads\nit next in line, so afterwards it plays from your library. A song already in the\nlibrary is served from the file.",
+        "operationId": "yt_stream_api_yt_stream__video_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "video_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Video Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              },
+              "audio/*": {}
+            }
+          },
+          "206": {
+            "content": {
+              "audio/*": {}
+            },
+            "description": "Partial Content"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/yt/album/{browse_id}": {

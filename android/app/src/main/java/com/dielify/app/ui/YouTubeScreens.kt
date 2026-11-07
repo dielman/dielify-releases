@@ -114,7 +114,8 @@ private fun subtitleOf(item: Item): String = when (item.type) {
 
 /** A row for a song/album/playlist/artist, with a menu (download, similar songs). */
 @Composable
-fun ItemRow(vm: AppViewModel, item: Item, onClick: () -> Unit = { vm.openItem(item) }) {
+fun ItemRow(vm: AppViewModel, item: Item, queue: List<Item> = listOf(item),
+            onClick: () -> Unit = { vm.openItem(item, queue) }) {
     var menu by remember { mutableStateOf(false) }
     Row(
         Modifier.fillMaxWidth().clickable(onClick = onClick).padding(start = 16.dp, top = 6.dp, bottom = 6.dp),
@@ -142,8 +143,8 @@ fun ItemRow(vm: AppViewModel, item: Item, onClick: () -> Unit = { vm.openItem(it
         Box {
             IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "More") }
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                if (item.isSong && item.libraryTrackId != null) DropdownMenuItem(
-                    text = { Text("Play") }, onClick = { menu = false; vm.openItem(item) })
+                if (item.isSong) DropdownMenuItem(
+                    text = { Text("Play") }, onClick = { menu = false; vm.openItem(item, queue) })
                 if (item.type != "artist" && item.libraryTrackId == null) {
                     DropdownMenuItem(
                         text = { Text(if (item.isSong) "Download next" else "Download all next") },
@@ -168,8 +169,8 @@ fun ItemRow(vm: AppViewModel, item: Item, onClick: () -> Unit = { vm.openItem(it
 
 /** A square card for the horizontal shelves on Discover. */
 @Composable
-private fun ItemCard(vm: AppViewModel, item: Item) {
-    Column(Modifier.width(150.dp).clickable { vm.openItem(item) }) {
+private fun ItemCard(vm: AppViewModel, item: Item, queue: List<Item>) {
+    Column(Modifier.width(150.dp).clickable { vm.openItem(item, queue) }) {
         Box {
             Thumb(item.thumbnail, 150.dp, round = item.type == "artist")
             if (item.isSong) Box(
@@ -178,7 +179,7 @@ private fun ItemCard(vm: AppViewModel, item: Item) {
                 Alignment.Center,
             ) {
                 Icon(
-                    if (item.libraryTrackId != null) Icons.Filled.PlayArrow else Icons.Filled.Download,
+                    Icons.Filled.PlayArrow,
                     null, Modifier.size(18.dp),
                 )
             }
@@ -197,7 +198,7 @@ private fun ShelfRow(vm: AppViewModel, title: String, items: List<Item>) {
     Text(title, style = MaterialTheme.typography.titleMedium,
         modifier = Modifier.padding(start = 16.dp, top = 20.dp, bottom = 8.dp))
     LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        items(items, key = { it.type + it.id }) { ItemCard(vm, it) }
+        items(items, key = { it.type + it.id }) { ItemCard(vm, it, items) }
     }
 }
 
@@ -220,8 +221,8 @@ fun DiscoverScreen(vm: AppViewModel) {
                     }
                     item {
                         Text(
-                            "Tap a song to download it to your PC; ✓ songs are already in your library " +
-                                "and play straight away.",
+                            "Tap a song to play it straight away; your PC keeps a copy. ✓ songs are " +
+                                "already in your library.",
                             Modifier.padding(16.dp), style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -271,14 +272,14 @@ fun YtSearchScreen(vm: AppViewModel) {
             }
             if (query.isBlank()) {
                 Box(Modifier.fillMaxSize().padding(32.dp), Alignment.Center) {
-                    Text("Search YouTube Music, then tap a song to download it to your PC.",
+                    Text("Search YouTube Music, then tap a song to play it. Your PC keeps a copy.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             } else {
                 Loaded(vm, "$type:$query", { vm.server.ytSearch(query, type) }) { items ->
                     if (items.isEmpty()) Box(Modifier.fillMaxSize(), Alignment.Center) { Text("No results") }
                     else LazyColumn(Modifier.fillMaxSize()) {
-                        items(items, key = { it.type + it.id }) { ItemRow(vm, it) }
+                        items(items, key = { it.type + it.id }) { ItemRow(vm, it, items) }
                     }
                 }
             }
@@ -332,10 +333,7 @@ fun YtCollectionScreen(vm: AppViewModel, name: String, key: String, load: suspen
                         }
                     }
                     items(c.tracks, key = { "t" + it.id }) { t ->
-                        ItemRow(vm, t) {
-                            if (t.libraryTrackId != null) vm.playLibrary(have, have.indexOf(t.libraryTrackId))
-                            else vm.download(t)
-                        }
+                        ItemRow(vm, t, c.tracks)
                     }
                 }
             }
@@ -348,7 +346,7 @@ fun SimilarScreen(vm: AppViewModel, page: Screen.SimilarPage) {
     Page(vm, "Like \"${page.name}\"") { pad ->
         Box(Modifier.padding(pad)) {
             Loaded(vm, page.videoId, { vm.server.similar(page.videoId) }) { items ->
-                LazyColumn(Modifier.fillMaxSize()) { items(items, key = { it.type + it.id }) { ItemRow(vm, it) } }
+                LazyColumn(Modifier.fillMaxSize()) { items(items, key = { it.type + it.id }) { ItemRow(vm, it, items) } }
             }
         }
     }
