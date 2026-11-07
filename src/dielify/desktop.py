@@ -286,6 +286,8 @@ def main(argv: list[str] | None = None) -> int:
     threading.Thread(target=winint.wait_for_show, args=(show,), daemon=True, name="dielify-show").start()
     threading.Thread(target=winint.keep_awake_loop, args=(lambda: settings_mod.load().keep_awake,),
                      daemon=True, name="dielify-keep-awake").start()
+    from .backup import scheduler as backups
+    backups.start()
 
     webview.start(tray.run_detached, private_mode=False, storage_path=str(app_data_dir() / "webview"))
 

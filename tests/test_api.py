@@ -59,6 +59,10 @@ class FakeYT:
     def playlist(self, playlist_id, limit=200):
         return YTItem("playlist", playlist_id, "Mix"), [item("s3"), item("s1")]
 
+    def my_playlists(self):
+        return [YTItem("playlist", "LM", "Liked Music", subtitle="42 songs"),
+                YTItem("playlist", "PLmine", "Road trip", subtitle="165 songs")]
+
 
 class FakeDownloader:
     """Download side of the adapter: real audio files, optional slowness/failures."""
@@ -389,3 +393,12 @@ def test_download_next_jumps_the_queue():
         assert c.post("/api/downloads/99999/next", headers=h).status_code == 404
         for i in ids + [n4]:
             c.delete(f"/api/downloads/{i}", headers=h)
+
+
+def test_my_playlists():
+    with make_client(FakeDownloader()) as c:
+        h = login(c)
+        items = c.get("/api/yt/my-playlists", headers=h).json()["items"]
+        assert [(i["id"], i["title"], i["subtitle"]) for i in items] == [
+            ("LM", "Liked Music", "42 songs"), ("PLmine", "Road trip", "165 songs")]
+        assert c.get("/api/yt/my-playlists").status_code == 401

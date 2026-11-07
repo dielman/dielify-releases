@@ -505,6 +505,20 @@ class YTMusicAdapter:
         tracks = _items(t for t in raw.get("tracks") or [] if t.get("isAvailable", True))
         return info, tracks[:limit]
 
+    def my_playlists(self) -> list[YTItem]:
+        """The signed-in account's own playlists in YouTube Music (and Liked Music)."""
+        raw = self._call("Loading your playlists", self._yt.get_library_playlists, limit=None)
+        items = []
+        for p in raw or []:
+            it = to_item(p)
+            if it is None:
+                continue
+            count = p.get("count")
+            if count:
+                it.subtitle = f"{count} songs"
+            items.append(it)
+        return items
+
     # --- downloading -----------------------------------------------------------------
 
     def get_track(self, video_id: str) -> TrackInfo:

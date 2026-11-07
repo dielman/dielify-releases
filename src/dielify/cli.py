@@ -328,6 +328,27 @@ def cmd_serve(args) -> int:
     return 0
 
 
+def cmd_backup_now(args) -> int:
+    from . import backup
+    folder = Path(args.folder) if args.folder else (Path(settings_mod.load().backup_folder)
+                                                     if settings_mod.load().backup_folder else None)
+    if folder is None:
+        print("No backup folder set. Choose one in Dielify > Settings > Backups, or pass --folder.")
+        return 1
+    print(f"Backup written: {backup.make_backup(folder)}")
+    return 0
+
+
+def cmd_backup_restore(args) -> int:
+    from . import backup, winint
+    if winint.another_instance_running():
+        print("Close Dielify first (right-click the tray icon > Quit), then run this again.")
+        return 1
+    safety = backup.restore(Path(args.zip))
+    print(f"Restored from {args.zip}.\nYour data from just before is saved in {safety}.")
+    return 0
+
+
 def cmd_openapi(args) -> int:
     import json
 
@@ -420,6 +441,15 @@ def build_parser() -> argparse.ArgumentParser:
     so = sv.add_parser("openapi", help="print or save the /api contract (OpenAPI JSON)")
     so.add_argument("--out", help="file to write, e.g. docs/openapi.json")
     so.set_defaults(fn=cmd_openapi)
+
+    b = sub.add_parser("backup", help="back up / restore Dielify's data (not the music)").add_subparsers(
+        dest="sub", required=True)
+    bn = b.add_parser("now", help="write a backup now")
+    bn.add_argument("--folder", help="where to (default: the folder set in Settings)")
+    bn.set_defaults(fn=cmd_backup_now)
+    br = b.add_parser("restore", help="put a backup back (close Dielify first)")
+    br.add_argument("zip", help="the dielify-backup-....zip file")
+    br.set_defaults(fn=cmd_backup_restore)
 
     sr = sub.add_parser("serve", help="serve the library to phone apps (home network/Tailscale)")
     sr.add_argument("--port", type=int, help="override server_port for this run")

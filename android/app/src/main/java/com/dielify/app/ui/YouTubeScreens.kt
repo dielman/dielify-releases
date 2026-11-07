@@ -25,12 +25,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.DownloadForOffline
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.VerticalAlignTop
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
@@ -314,6 +316,17 @@ fun YtCollectionScreen(vm: AppViewModel, name: String, key: String, load: suspen
                                 }
                                 if (have.isNotEmpty()) Button(onClick = { vm.playLibrary(have) }) {
                                     Icon(Icons.Filled.PlayArrow, null); Text("Play downloaded")
+                                }
+                            }
+                            if (have.isNotEmpty()) {
+                                val saved by vm.savedSongs.collectAsStateWithLifecycle()
+                                val notSaved = have.filter { it !in saved }
+                                Spacer(Modifier.height(8.dp))
+                                if (notSaved.isEmpty()) Text("Downloaded songs are all on this phone",
+                                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                                else OutlinedButton(onClick = { vm.saveLibraryToPhone(notSaved) }) {
+                                    Icon(Icons.Filled.DownloadForOffline, null); Spacer(Modifier.width(8.dp))
+                                    Text("Save ${notSaved.size} downloaded on phone")
                                 }
                             }
                         }

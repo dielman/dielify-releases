@@ -324,6 +324,12 @@ def yt_search(q: str = Query(min_length=1), type: Literal["song", "video", "albu
     return ItemList(items=_items(youtube.call(s.user.profile, "search_items", q, type, limit), s.lib))
 
 
+@router.get("/yt/my-playlists", response_model=ItemList, tags=["youtube"])
+def yt_my_playlists(s: Session = Depends(session)) -> ItemList:
+    """Your own playlists on YouTube Music (open one with /yt/playlist/{id})."""
+    return ItemList(items=_items(youtube.call(s.user.profile, "my_playlists"), s.lib))
+
+
 @router.get("/yt/album/{browse_id}", response_model=Collection, tags=["youtube"])
 def yt_album(browse_id: str, s: Session = Depends(session)) -> Collection:
     info, tracks = youtube.call(s.user.profile, "album", browse_id)

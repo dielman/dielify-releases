@@ -49,7 +49,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.PrimaryTabRow
+import androidx.compose.material3.PrimaryScrollableTabRow
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
@@ -181,20 +181,27 @@ fun LibraryScreen(vm: AppViewModel) {
             if (searching && query.isNotBlank()) {
                 SearchResults(vm, query.trim())
             } else {
-                val tabs = listOf("Albums", "Artists", "Recent", "On phone")
+                val tabs = listOf("Albums", "Artists", "Playlists", "Recent", "On phone")
                 val link by vm.server.link.collectAsStateWithLifecycle()
                 val savedCount = vm.savedSongs.collectAsStateWithLifecycle().value.size
                 LaunchedEffect(link) {
                     // No PC? Show what's on the phone instead of an error.
-                    if (link is Link.Down && savedCount > 0) tab = 3
+                    if (link is Link.Down && savedCount > 0) tab = 4
                 }
-                PrimaryTabRow(selectedTabIndex = tab) {
+                PrimaryScrollableTabRow(selectedTabIndex = tab, edgePadding = 8.dp) {
                     tabs.forEachIndexed { i, name -> Tab(tab == i, { tab = i }, text = { Text(name) }) }
                 }
                 when (tab) {
                     0 -> Loaded(vm, "albums", { vm.server.albums() }) { AlbumGrid(vm, it) }
                     1 -> Loaded(vm, "artists", { vm.server.artists() }) { ArtistList(vm, it) }
-                    2 -> Loaded(vm, "recent", { vm.server.recentAlbums() }) { AlbumGrid(vm, it) }
+                    2 -> Loaded(vm, "playlists", { vm.server.myPlaylists() }) { items ->
+                        if (items.isEmpty()) Box(Modifier.fillMaxSize().padding(32.dp), Alignment.Center) {
+                            Text("No playlists on your YouTube Music account.")
+                        } else LazyColumn(Modifier.fillMaxSize()) {
+                            items(items, key = { it.id }) { ItemRow(vm, it) }
+                        }
+                    }
+                    3 -> Loaded(vm, "recent", { vm.server.recentAlbums() }) { AlbumGrid(vm, it) }
                     else -> SavedAlbums(vm)
                 }
             }

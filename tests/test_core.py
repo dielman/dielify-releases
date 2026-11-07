@@ -288,3 +288,47 @@ def test_get_track_falls_back_to_video_details():
     a._pace = lambda: None
     info = a.get_track("1h8OI3ZlacI")
     assert (info.title, info.artists, info.duration_s, info.is_video) == ("Riptide", ["Vance Joy"], 204, True)
+
+
+
+def test_backup_and_restore(tmp_path, monkeypatch):
+    import zipfile
+    from dielify import backup, library, settings as settings_mod
+    from dielify.paths import app_data_dir
+    s = settings_mod.load()
+    s.library_root = str(tmp_path / "music")
+    settings_mod.save(s)
+    with library.connect() as conn:
+        conn.execute("INSERT INTO device_tokens (username, device_name, token_hash, created_at) "
+                     "VALUES ('u', 'phone', 'h1', 1)")
+    store = app_data_dir() / "server_users"
+    store.mkdir(parents=True, exist_ok=True)
+    (store / "pixel.dpapi").write_bytes(b"encrypted")
+
+    folder = tmp_path / "backups"
+    first = backup.make_backup(folder)
+    with zipfile.ZipFile(first) as z:
+        assert {"README.txt", "dielify.db", "settings.json", "server_users/pixel.dpapi"} <= set(z.namelist())
+
+    # damage the data, then restore
+    with library.connect() as conn:
+        conn.execute("DELETE FROM device_tokens")
+    (store / "pixel.dpapi").unlink()
+    safety = backup.restore(first)
+    assert safety.exists() and safety != first
+    with library.connect() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM device_tokens").fetchone()[0] == 1
+    assert (store / "pixel.dpapi").read_bytes() == b"encrypted"
+
+
+def test_backup_keeps_the_newest(tmp_path, monkeypatch):
+    from dielify import backup
+    monkeypatch.setattr(backup, "KEEP", 3)
+    folder = tmp_path / "b"
+    folder.mkdir()
+    for i in range(5):
+        (folder / f"{backup.PREFIX}2026-01-0{i + 1}_000000.zip").write_bytes(b"x")
+    backup.make_backup(folder)
+    names = [p.name for p in backup.backups(folder)]
+    assert len(names) == 3 and names[0] == f"{backup.PREFIX}2026-01-04_000000.zip"
+    assert not backup.is_due(folder)

@@ -198,6 +198,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             else "Saving ${todo.size} ${if (todo.size == 1) "song" else "songs"} on this phone")
     }
 
+    /** Save downloaded songs (by library id) on the phone, e.g. the downloaded part of a playlist. */
+    fun saveLibraryToPhone(trackIds: List<Long>) = viewModelScope.launch {
+        try {
+            val tracks = coroutineScope { trackIds.map { async { server.track(it) } }.awaitAll() }
+            saveToPhone(tracks)
+        } catch (e: ApiError) {
+            messages.tryEmit(e.message ?: "Couldn't save them")
+        }
+    }
+
     fun removeFromPhone(ids: Collection<Long>) {
         saved.remove(ids)
         messages.tryEmit("Removed from this phone")

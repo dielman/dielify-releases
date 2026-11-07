@@ -14,6 +14,7 @@ _kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
 _kernel32.CreateMutexW.restype = wintypes.HANDLE
 _kernel32.CreateEventW.restype = wintypes.HANDLE
 _kernel32.OpenEventW.restype = wintypes.HANDLE
+_kernel32.OpenMutexW.restype = wintypes.HANDLE
 _user32 = ctypes.WinDLL("user32", use_last_error=True)
 
 MUTEX_NAME = "Local\\dielify-desktop"          # Local\ = this Windows session only
@@ -32,6 +33,16 @@ def claim_single_instance() -> bool:
     global _mutex
     _mutex = _kernel32.CreateMutexW(None, False, MUTEX_NAME)
     return ctypes.get_last_error() != ERROR_ALREADY_EXISTS
+
+
+def another_instance_running() -> bool:
+    """True if the desktop app is running (for tools that need it closed)."""
+    SYNCHRONIZE = 0x00100000
+    handle = _kernel32.OpenMutexW(SYNCHRONIZE, False, MUTEX_NAME)
+    if not handle:
+        return False
+    _kernel32.CloseHandle(handle)
+    return True
 
 
 def signal_show() -> bool:

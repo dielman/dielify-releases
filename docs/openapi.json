@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Dielify",
-    "version": "0.5.0"
+    "version": "0.6.0"
   },
   "paths": {
     "/api/auth/login": {
@@ -399,6 +399,33 @@
         }
       }
     },
+    "/api/yt/my-playlists": {
+      "get": {
+        "tags": [
+          "youtube"
+        ],
+        "summary": "Yt My Playlists",
+        "description": "Your own playlists on YouTube Music (open one with /yt/playlist/{id}).",
+        "operationId": "yt_my_playlists_api_yt_my_playlists_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemList"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/yt/album/{browse_id}": {
       "get": {
         "tags": [
@@ -674,6 +701,54 @@
         "summary": "Cancel Download",
         "description": "Cancel a queued or running download. Finished ones are left as they are.",
         "operationId": "cancel_download_api_downloads__job_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Download"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/downloads/{job_id}/next": {
+      "post": {
+        "tags": [
+          "downloads"
+        ],
+        "summary": "Download Next",
+        "description": "Move a waiting download to the front of the line.",
+        "operationId": "download_next_api_downloads__job_id__next_post",
         "security": [
           {
             "HTTPBearer": []
@@ -1410,6 +1485,32 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/desktop/backup": {
+      "post": {
+        "tags": [
+          "desktop"
+        ],
+        "summary": "Backup Now",
+        "operationId": "backup_now_api_desktop_backup_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DesktopStatus"
                 }
               }
             }
@@ -2165,6 +2266,18 @@
               }
             ],
             "title": "Start With Windows"
+          },
+          "backup_folder": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Backup Folder",
+            "description": "\"\" turns backups off"
           }
         },
         "type": "object",
@@ -2241,6 +2354,51 @@
             },
             "type": "array",
             "title": "Phone Users"
+          },
+          "backup_folder": {
+            "type": "string",
+            "title": "Backup Folder",
+            "description": "\"\" = backups off",
+            "default": ""
+          },
+          "backup_suggested": {
+            "type": "string",
+            "title": "Backup Suggested",
+            "description": "A sensible folder to offer when backups are off",
+            "default": ""
+          },
+          "last_backup": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Backup"
+          },
+          "last_backup_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Backup At"
+          },
+          "backup_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Backup Error"
           }
         },
         "type": "object",
@@ -2373,6 +2531,12 @@
               }
             ],
             "title": "Request Title"
+          },
+          "next": {
+            "type": "boolean",
+            "title": "Next",
+            "description": "Asked to download before the rest of the queue",
+            "default": false
           },
           "status": {
             "type": "string",
@@ -2533,6 +2697,12 @@
               }
             ],
             "title": "Album"
+          },
+          "next": {
+            "type": "boolean",
+            "title": "Next",
+            "description": "Download before everything else that's waiting",
+            "default": false
           }
         },
         "type": "object",

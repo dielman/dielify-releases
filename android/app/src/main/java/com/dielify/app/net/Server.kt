@@ -242,6 +242,7 @@ class Server(private val context: Context, private val accounts: AccountStore) {
         get<ItemList>("api/discover/similar/" + Uri.encode(videoId) + "?limit=40").items
     suspend fun ytSearch(q: String, type: String): List<Item> =
         get<ItemList>("api/yt/search?limit=40&type=$type&q=" + Uri.encode(q)).items
+    suspend fun myPlaylists(): List<Item> = get<ItemList>("api/yt/my-playlists").items
     suspend fun ytAlbum(browseId: String): YtCollection = get("api/yt/album/" + Uri.encode(browseId))
     suspend fun ytPlaylist(playlistId: String): YtCollection = get("api/yt/playlist/" + Uri.encode(playlistId))
 
