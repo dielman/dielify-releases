@@ -199,3 +199,41 @@ def remove_device(device_id: int, s: Session = Depends(desktop_session)) -> Resp
     if not auth.revoke_token(device_id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No such device")
     return Response(status_code=204)
+
+
+# --- updates (installed app only; see updater.py) --------------------------------------
+
+class UpdateInfo(BaseModel):
+    current: str
+    latest: str | None
+    available: bool
+    notes: str | None
+    size: int | None
+    configured: bool
+    checked_at: float | None
+    error: str | None
+    installing: bool
+
+
+@router.get("/update", response_model=UpdateInfo)
+def update_status(s: Session = Depends(desktop_session)) -> UpdateInfo:
+    from .updater import updater
+    return UpdateInfo(**updater.as_dict())
+
+
+@router.post("/update/check", response_model=UpdateInfo)
+def update_check(s: Session = Depends(desktop_session)) -> UpdateInfo:
+    from .updater import updater
+    updater.check()
+    return UpdateInfo(**updater.as_dict())
+
+
+@router.post("/update/install", response_model=UpdateInfo)
+def update_install(s: Session = Depends(desktop_session)) -> UpdateInfo:
+    """Download + verify, start the installer; Dielify then closes and restarts updated."""
+    from .updater import UpdateError, updater
+    try:
+        updater.install()
+    except (UpdateError, OSError) as e:  # OSError includes download/network errors
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e)) from e
+    return UpdateInfo(**updater.as_dict())

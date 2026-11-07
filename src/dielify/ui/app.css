@@ -48,6 +48,7 @@ input[type=search], input[type=text], select {
 #search { margin-left: auto; }
 #search-input { width: 260px; }
 .pill { background: var(--warn); color: #111; border-radius: 99px; padding: 2px 10px; font-weight: 600; font-size: 12px; }
+.pill.update { background: var(--ok); border: none; cursor: pointer; }
 .badge { background: var(--accent); color: #fff; border-radius: 99px; padding: 0 6px; font-size: 11px; margin-left: 4px; }
 
 /* main */

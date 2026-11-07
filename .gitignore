@@ -47,3 +47,6 @@ android/local.properties
 .idea/
 Thumbs.db
 .DS_Store
+
+# --- Build output (packaging\build.py) ---
+packaging/version_info.txt

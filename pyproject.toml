@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dielify"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Self-hosted YouTube Music player: local cache, offline playback, LAN/Tailscale server"
 requires-python = ">=3.12"
 # Versions pinned to known-good releases. YouTube changes often: bump yt-dlp and
@@ -20,6 +20,7 @@ dependencies = [
     "uvicorn>=0.54,<1",
     "pywebview>=6.2,<7",   # desktop window (Windows' built-in WebView2)
     "pystray>=0.19,<1",    # tray icon
+    "pycryptodomex>=3.20,<4",  # Ed25519 check of signed updates (also used by yt-dlp)
 ]
 
 [project.optional-dependencies]
@@ -34,6 +35,9 @@ dielify-desktop = "dielify.desktop:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.dynamic]
+version = { attr = "dielify.__version__" }
 
 [tool.setuptools.package-data]
 dielify = ["ui/*"]

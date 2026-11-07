@@ -377,9 +377,47 @@ async function viewSettings() {
         } }, "Remove"))),
       h("div", { class: "row", style: "margin-top:10px" }, h("button", { onclick: addPhoneUser }, "Add phone login")));
 
-    const about = h("div", { class: "panel" }, h("h2", {}, "About"), setting("Version", `Dielify ${s.version}`));
+    const about = h("div", { class: "panel" }, h("h2", {}, "About"), setting("Version", `Dielify ${s.version}`),
+      await updateSetting(setting));
     show(h("h1", {}, "Settings"), youtube, music, windows, phones, about);
   } catch (e) { failed(e); }
+}
+
+// --- updates ----------------------------------------------------------------------------------
+function showUpdatePill(u) {
+  const pill = $("update-pill");
+  pill.hidden = !(u && u.available && !u.installing);
+  if (u && u.latest) pill.textContent = `Update ${u.latest}`;
+}
+
+async function updateSetting(setting) {
+  const u = await api("/api/desktop/update").catch(() => null);
+  if (!u) return null;
+  showUpdatePill(u);
+  const checked = u.checked_at ? ` (checked ${new Date(u.checked_at * 1000).toLocaleString()})` : "";
+  let text;
+  if (!u.configured) text = h("span", { class: "muted" }, "Updates aren't set up yet.");
+  else if (u.installing) text = "Installing the update… Dielify will close and reopen.";
+  else if (u.available) text = h("span", { class: "ok" }, `Dielify ${u.latest} is available`,
+    u.size ? ` (${Math.round(u.size / 1e6)} MB)` : "", u.notes ? h("div", { class: "muted small" }, u.notes) : null);
+  else if (u.error) text = h("span", { class: "muted" }, u.error);
+  else if (u.latest) text = `Up to date${checked}`;
+  else text = "Not checked yet";
+  const check = h("button", { disabled: !u.configured || u.installing, onclick: async (e) => {
+    e.target.disabled = true; e.target.textContent = "Checking…";
+    await api("/api/desktop/update/check", { method: "POST" }).catch((err) => toast(err.message, 6000));
+    viewSettings();
+  } }, "Check for updates");
+  const install = u.available && !u.installing ? h("button", { class: "primary", onclick: async (e) => {
+    if (!confirm(`Install Dielify ${u.latest}? Dielify closes, updates and opens again. Phones lose the connection for a minute.`)) return;
+    e.target.disabled = true; e.target.textContent = "Downloading…";
+    try {
+      await api("/api/desktop/update/install", { method: "POST" });
+      show(h("div", { class: "panel" }, h("h2", {}, "Installing the update"),
+        h("p", {}, "Dielify will close now and open again in a minute.")));
+    } catch (err) { toast(err.message, 8000); viewSettings(); }
+  } }, "Install update") : null;
+  return setting("Updates", text, check, install);
 }
 
 async function addProfile() {
@@ -460,4 +498,9 @@ document.addEventListener("keydown", (e) => {
 
 // --- start ----------------------------------------------------------------------------------------
 if (!KEY) show(h("p", { class: "pad warn" }, "Open Dielify from its desktop app."));
-else { go("library"); pollDownloads(); }
+else {
+  go("library"); pollDownloads();
+  $("update-pill").addEventListener("click", () => go("settings"));
+  // the app checks in the background shortly after starting; pick up the result
+  setTimeout(() => api("/api/desktop/update").then(showUpdatePill).catch(() => {}), 45000);
+}

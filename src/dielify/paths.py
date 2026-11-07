@@ -29,6 +29,16 @@ def app_data_dir() -> Path:
     return base
 
 
+def use_bundled_tools() -> None:
+    """In the installed app, FFmpeg and Deno ship in {app}\\bin: put them first on PATH
+    so yt-dlp finds them without anything else being installed."""
+    import sys
+    if getattr(sys, "frozen", False):
+        bin_dir = Path(sys.executable).parent / "bin"
+        if bin_dir.is_dir():
+            os.environ["PATH"] = f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}"
+
+
 def default_library_root() -> Path:
     return Path(user_music_dir()) / "Dielify"
 

@@ -176,8 +176,20 @@ src/dielify/
   server; library/player/discover/downloads/settings screens; in-window YouTube
   sign-in with a "Use this account" bar; offline mode; start with Windows; profiles;
   phone logins. 75 tests pass.
-- Remaining: installer (bundled Python, FFmpeg, Deno) + updater; then Josh's
-  no-terminal install test. Update hosting and code signing not yet decided by Josh.
+- Josh decided: updates from GitHub Releases, no paid code-signing certificate for
+  now, Inno Setup installed (6.7.3, per-user).
+- Built: `packaging\build.py` (PyInstaller one-folder: Dielify.exe + dielify-cli.exe,
+  then Inno Setup -> dist\Dielify-setup-<ver>.exe, ~172 MB with FFmpeg + Deno in
+  {app}\bin). Silent install/uninstall tested OK, data kept. Version is 0.4.0.
+  Found + fixed in source (not yet rebuilt): Dielify.exe vs dielify.exe clash.
+- Written, NOT yet wired up or tested: `updater.py` (Ed25519-signed manifest, SHA-256
+  + size check, silent install with /RESTARTAPP=1) and `update_config.py` (empty).
+- Next: /api/desktop/update endpoints + Settings UI + desktop quit hook; updater tests;
+  `tools\release.py` (keygen with DPAPI-stored key + backup export, configure, publish
+  via gh); rebuild; GitHub account/repo + `gh` setup steps for Josh; then Josh's
+  no-terminal install test (consider Windows Sandbox for a clean PC).
+- Size note: each update re-downloads ~172 MB (FFmpeg full build is 217 MB per exe);
+  a slimmer FFmpeg build would need Josh's OK to download.
 
 ## Open questions for Josh
 

@@ -25,7 +25,7 @@ import webview
 
 from . import __version__, auth, credstore, winint
 from . import settings as settings_mod
-from .paths import app_data_dir
+from .paths import app_data_dir, use_bundled_tools
 
 log = logging.getLogger("dielify.desktop")
 
@@ -184,6 +184,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--tray", action="store_true", help="start hidden in the tray")
     args = p.parse_args(argv)
 
+    use_bundled_tools()
     if not winint.claim_single_instance():
         winint.signal_show()  # already running: bring its window forward
         return 0
@@ -224,6 +225,12 @@ def main(argv: list[str] | None = None) -> int:
 
     window.events.closing += on_closing
     tray = _make_tray(show, quit_app)
+
+    from .updater import updater
+    # The installer waits for Dielify to close; give the window a moment to show
+    # "Installing…" first.
+    updater.on_installer_started = lambda: threading.Timer(1.5, quit_app).start()
+    updater.start_background_checks()
     threading.Thread(target=winint.wait_for_show, args=(show,), daemon=True, name="dielify-show").start()
 
     webview.start(tray.run_detached, private_mode=False, storage_path=str(app_data_dir() / "webview"))
