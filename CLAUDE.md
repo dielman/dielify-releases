@@ -259,8 +259,9 @@ src/dielify/
   `com.dielify.app.debug`. App checks the GitHub manifest's "android" entry daily,
   verifies SHA-256, hands the APK to Android's installer. `publish` uploads the APK too.
 - 8 Nov: Josh installed PC 0.6.0 and the signed phone app (old test build uninstalled),
-  "everything's working so far". Not yet: publishing 0.6.0 to GitHub (needs Josh's OK)
-  and an end-to-end phone in-app update (needs a later release, e.g. 0.6.1).
+  "everything's working so far". Published v0.6.0 to dielman/dielify-releases (Josh's OK;
+  installer + APK + signed manifest with "android" entry, verified online). Not yet: an
+  end-to-end phone in-app update (needs a later release, e.g. 0.6.1).
 
 ## Open questions for Josh
 
