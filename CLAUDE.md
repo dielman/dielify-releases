@@ -271,8 +271,13 @@ src/dielify/
   relays with Range, caches the address 30 min, re-resolves once on 403/410; the first
   request queues the download next in line; library songs are served from the file.
   Phone: song taps play the list from that song (`yt-<videoId>` media ids); PC app the
-  same. First play ~7 s (lookup + wait), seeks ~0.1 s. Not yet confirmed by Josh on
-  device; phone self-update 0.6.0 -> 0.7.0 is the Phase 7 update test.
+  same. First play ~7 s (lookup + wait), seeks ~0.1 s. **Confirmed by Josh** ("instant
+  play worked"): phone self-updated 0.6.0 -> 0.7.0 in-app (Play Protect scan prompt is
+  expected for sideloaded apps), PC updated via its updater (first check hit a dead
+  pooled connection, ConnectionResetError 10054; fixed in 3623778 with retrying
+  sessions). Real queue checked read-only via a run_in_terminal tab (sees real AppData):
+  "Champion" requested by `pixel`, marked next, downloaded first try; ~265-294 songs/hour.
+  Only failure in the queue: an old Riptide VEVO video (#48, from before the 0.6.0 fix).
 - Idea for later: pre-resolve the next song in a list so skipping feels instant.
 
 ## Open questions for Josh
