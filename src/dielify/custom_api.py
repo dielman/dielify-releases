@@ -13,7 +13,7 @@ import threading
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
@@ -203,6 +203,15 @@ def session(request: Request,
     return Session(*found)
 
 
+def media_session(request: Request,
+                  creds: HTTPAuthorizationCredentials | None = Depends(_bearer)) -> Session:
+    """Like `session`, but also accepts ?token=... because audio players and <img>
+    tags can't send headers. (Request logs never include query strings.)"""
+    if creds is None and request.query_params.get("token"):
+        creds = HTTPAuthorizationCredentials(scheme="Bearer", credentials=request.query_params["token"])
+    return session(request, creds)
+
+
 class _YouTube:
     """One adapter per profile, one call at a time (keeps traffic human-paced)."""
 
@@ -328,6 +337,44 @@ def yt_search(q: str = Query(min_length=1), type: Literal["song", "video", "albu
 def yt_my_playlists(s: Session = Depends(session)) -> ItemList:
     """Your own playlists on YouTube Music (open one with /yt/playlist/{id})."""
     return ItemList(items=_items(youtube.call(s.user.profile, "my_playlists"), s.lib))
+
+
+@router.get("/yt/stream/{video_id}", tags=["youtube"],
+            responses={200: {"content": {"audio/*": {}}}, 206: {"content": {"audio/*": {}}}})
+def yt_stream(video_id: str, request: Request, s: Session = Depends(media_session)) -> Response:
+    """Play any YouTube song now (relayed by the PC, seeking works). The PC also downloads
+    it next in line, so afterwards it plays from your library. A song already in the
+    library is served from the file."""
+    from . import ytstream
+    if not ytstream.VIDEO_ID.match(video_id):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Not a YouTube video id")
+    have = s.lib.video_ids().get(video_id)
+    if have:
+        path = s.lib.path_of(_track(s, have))
+        if path.exists():
+            return FileResponse(path, media_type=CONTENT_TYPES.get(path.suffix.lower(), "application/octet-stream"))
+    cfg = settings_mod.load()
+    resolve = lambda: youtube.call(s.user.profile, "stream_info", video_id, cfg.quality, cfg.preferred_format)
+    info = ytstream.cache.get(s.user.profile, video_id, resolve)
+    range_header = request.headers.get("range")
+    if not range_header or range_header.startswith("bytes=0-"):
+        # first request for this song: keep it (download next in line)
+        _queue(request).enqueue(s.user.profile, [YTItem("song", video_id, info.title,
+                                                        [info.artist] if info.artist else [], info.album)],
+                                "song", info.title, s.user.name, next_up=True)
+    try:
+        upstream = ytstream.open_upstream(info, range_header)
+        if upstream.status_code in (403, 410):  # address expired: ask YouTube again, once
+            upstream.close()
+            info = ytstream.cache.get(s.user.profile, video_id, resolve, fresh=True)
+            upstream = ytstream.open_upstream(info, range_header)
+    except ytstream.requests.RequestException as e:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"YouTube didn't answer: {e}") from e
+    if upstream.status_code not in (200, 206):
+        upstream.close()
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"YouTube answered HTTP {upstream.status_code}")
+    code, headers, body = ytstream.relay(upstream)
+    return StreamingResponse(body, status_code=code, media_type=info.mime, headers=headers)
 
 
 @router.get("/yt/album/{browse_id}", response_model=Collection, tags=["youtube"])
@@ -484,13 +531,6 @@ def _artist_out(r) -> Artist:
                   starred=r["starred_at"] is not None)
 
 
-def media_session(request: Request,
-                  creds: HTTPAuthorizationCredentials | None = Depends(_bearer)) -> Session:
-    """Like `session`, but also accepts ?token=... because audio players and <img>
-    tags can't send headers. (Request logs never include query strings.)"""
-    if creds is None and request.query_params.get("token"):
-        creds = HTTPAuthorizationCredentials(scheme="Bearer", credentials=request.query_params["token"])
-    return session(request, creds)
 
 
 @router.get("/library/artists", response_model=ArtistList, tags=["library"])

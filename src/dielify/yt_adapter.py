@@ -605,13 +605,8 @@ class YTMusicAdapter:
             log.warning("Cover art download failed: %s", e)
             return None
 
-    def fetch_audio(self, video_id: str, dest_dir: Path, quality: str = "auto",
-                    preferred_format: str = "auto",
-                    progress: ProgressFn | None = None) -> Path:
-        """Download audio only, without re-encoding. Returns the file path."""
-        import yt_dlp
-        _check_online()
-
+    @staticmethod
+    def _format(quality: str, preferred_format: str) -> str:
         fmt = {
             "auto": "bestaudio",
             "high": "bestaudio",
@@ -621,7 +616,61 @@ class YTMusicAdapter:
             fmt = f"bestaudio[ext=m4a]/{fmt}"
         elif preferred_format == "opus":
             fmt = f"bestaudio[acodec=opus]/{fmt}"
+        return fmt
 
+    def _cookie_file(self, cookie_dir: str) -> str | None:
+        """The signed-in cookies as a temporary Netscape cookie file (for yt-dlp)."""
+        if not self._auth:
+            return None
+        cookie = next((v for k, v in self._auth.items() if k.lower() == "cookie"), "")
+        cookie_file = os.path.join(cookie_dir, "cookies.txt")
+        with open(cookie_file, "w", encoding="utf-8") as f:
+            f.write(cookie_header_to_netscape(cookie))
+        if os.name != "nt":
+            os.chmod(cookie_file, 0o600)
+        return cookie_file
+
+    def stream_info(self, video_id: str, quality: str = "auto",
+                    preferred_format: str = "auto") -> "StreamInfo":
+        """Where to fetch a song's audio right now (for playing before it's downloaded).
+        The URL works for a few hours; it's never shown to phones, the PC relays it."""
+        import yt_dlp
+        _check_online()
+        cookie_dir = tempfile.mkdtemp(prefix="dielify-")
+        try:
+            opts: dict = {"format": self._format(quality, preferred_format), "noplaylist": True,
+                          "quiet": True, "no_warnings": False, "logger": _YdlLogger()}
+            cookie_file = self._cookie_file(cookie_dir)
+            if cookie_file:
+                opts["cookiefile"] = cookie_file
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                info = ydl.extract_info(YTM_WATCH_URL.format(video_id), download=False)
+            fmt = (info.get("requested_formats") or [info])[0]
+            url = fmt.get("url") or info.get("url")
+            if not url:
+                raise YouTubeError(f"No playable audio for {video_id}")
+            ext = fmt.get("ext") or info.get("ext") or "webm"
+            mime = {"m4a": "audio/mp4", "mp4": "audio/mp4", "webm": "audio/webm",
+                    "opus": "audio/ogg"}.get(ext, "application/octet-stream")
+            log.info("Streaming %s: format %s, %s kbps", video_id, fmt.get("format_id"), fmt.get("abr"))
+            return StreamInfo(video_id=video_id, url=url, headers=dict(fmt.get("http_headers") or {}),
+                              mime=mime, size=fmt.get("filesize") or fmt.get("filesize_approx"),
+                              title=info.get("track") or info.get("title") or video_id,
+                              artist=info.get("artist") or info.get("uploader"),
+                              album=info.get("album"), available_at=float(fmt.get("available_at") or 0))
+        except yt_dlp.utils.DownloadError as e:
+            raise YouTubeError(f"Can't play {video_id}: {e}") from e
+        finally:
+            shutil.rmtree(cookie_dir, ignore_errors=True)  # never leave cookies on disk
+
+    def fetch_audio(self, video_id: str, dest_dir: Path, quality: str = "auto",
+                    preferred_format: str = "auto",
+                    progress: ProgressFn | None = None) -> Path:
+        """Download audio only, without re-encoding. Returns the file path."""
+        import yt_dlp
+        _check_online()
+
+        fmt = self._format(quality, preferred_format)
         dest_dir.mkdir(parents=True, exist_ok=True)
         cookie_dir = tempfile.mkdtemp(prefix="dielify-")
         cookie_file = None
@@ -638,13 +687,8 @@ class YTMusicAdapter:
                 "postprocessors": [{"key": "FFmpegExtractAudio", "preferredcodec": "best"}],
                 "logger": _YdlLogger(),
             }
-            if self._auth:
-                cookie = next((v for k, v in self._auth.items() if k.lower() == "cookie"), "")
-                cookie_file = os.path.join(cookie_dir, "cookies.txt")
-                with open(cookie_file, "w", encoding="utf-8") as f:
-                    f.write(cookie_header_to_netscape(cookie))
-                if os.name != "nt":
-                    os.chmod(cookie_file, 0o600)
+            cookie_file = self._cookie_file(cookie_dir)
+            if cookie_file:
                 opts["cookiefile"] = cookie_file
             if progress:
                 opts["progress_hooks"] = [progress]
@@ -664,6 +708,20 @@ class YTMusicAdapter:
             raise YouTubeError(f"Download failed for {video_id}: {e}{hint}") from e
         finally:
             shutil.rmtree(cookie_dir, ignore_errors=True)  # never leave cookies on disk
+
+
+@dataclass
+class StreamInfo:
+    video_id: str
+    url: str
+    headers: dict
+    mime: str
+    size: int | None
+    title: str
+    artist: str | None = None
+    album: str | None = None
+    available_at: float = 0.0  # YouTube refuses the address (403) before this time
+    fetched_at: float = field(default_factory=time.time)
 
 
 class _YdlLogger:

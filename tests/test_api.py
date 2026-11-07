@@ -402,3 +402,49 @@ def test_my_playlists():
         assert [(i["id"], i["title"], i["subtitle"]) for i in items] == [
             ("LM", "Liked Music", "42 songs"), ("PLmine", "Road trip", "165 songs")]
         assert c.get("/api/yt/my-playlists").status_code == 401
+
+
+def test_yt_stream_relays_and_queues_the_download(monkeypatch):
+    from dielify import ytstream
+    from dielify.yt_adapter import StreamInfo
+    audio = bytes(range(256)) * 40  # 10240 bytes
+
+    def stream_info(self, video_id, quality="auto", preferred_format="auto"):
+        return StreamInfo(video_id=video_id, url="https://example.invalid/a", headers={},
+                          mime="audio/webm", size=len(audio), title="Song Four", artist="Band")
+    monkeypatch.setattr(FakeYT, "stream_info", stream_info, raising=False)
+    seen = []
+
+    class Up:
+        def __init__(self, rng):
+            seen.append(rng)
+            start = int(rng.split("=")[1].split("-")[0]) if rng else 0
+            self.body = audio[start:]
+            self.status_code = 206 if rng else 200
+            self.headers = {"Content-Length": str(len(self.body)), "Content-Type": "audio/webm"}
+            if rng:
+                self.headers["Content-Range"] = f"bytes {start}-{len(audio) - 1}/{len(audio)}"
+
+        def iter_content(self, n):
+            for i in range(0, len(self.body), n):
+                yield self.body[i:i + n]
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(ytstream, "open_upstream", lambda info, rng: Up(rng))
+    ytstream.cache._cache.clear()
+    with make_client(FakeDownloader(slow=True)) as c:
+        h = login(c)
+        token = h["Authorization"].split()[1]
+        r = c.get("/api/yt/stream/abcdefghijk", params={"token": token})
+        assert r.status_code == 200 and r.content == audio
+        r = c.get("/api/yt/stream/abcdefghijk", headers={**h, "Range": "bytes=1000-"})
+        assert r.status_code == 206 and r.content == audio[1000:]
+        assert r.headers["content-range"] == f"bytes 1000-10239/{len(audio)}"
+        jobs = [j for j in c.get("/api/downloads", headers=h).json()["downloads"] if j["video_id"] == "abcdefghijk"]
+        assert [(j["title"], j["next"]) for j in jobs] == [("Song Four", True)]   # queued once, next in line
+        assert c.get("/api/yt/stream/bad", headers=h).status_code == 400
+        assert c.get("/api/yt/stream/abcdefghijk").status_code == 401
+        for j in jobs:
+            c.delete(f"/api/downloads/{j['id']}", headers=h)
