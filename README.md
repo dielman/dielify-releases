@@ -14,8 +14,8 @@ app over your home network or Tailscale.
 | 1 | Command line: sign in, search, download with tags + cover art | **Done** (7 Nov 2026) |
 | 2 | Library database + Subsonic API (Symfonium/Ultrasonic) | **Done** (7 Nov 2026) |
 | 3 | Discovery + download requests | **Done** (7 Nov 2026) |
-| 4 | Desktop app (settings, folder picker, tray icon) | **Next** |
-| 5 | Secure remote access (Tailscale) | |
+| 4 | Desktop app, installer and automatic updates | **Done** (7 Nov 2026) |
+| 5 | Secure remote access (Tailscale) | **Next** |
 | 6 | Android app | |
 | 7 | Installer, second user, backups | |
 

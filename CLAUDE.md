@@ -126,8 +126,8 @@ src/dielify/
 | 1 | Server core (CLI) | CLI run produces a tagged audio file that plays in VLC with no internet | **Done** 2026-11-07 (Josh confirmed VLC offline playback) |
 | 2 | Library + Subsonic API | Symfonium/Ultrasonic on the home network browses and plays | **Done** 2026-11-07 (Josh played a track in Symfonium over home Wi-Fi) |
 | 3 | Discovery + request endpoints | Test client discovers, requests, watches progress, plays | **Done** 2026-11-07 (Josh's acceptance run: PASS) |
-| 4 | Desktop GUI + Windows integration | Non-technical user installs, signs in, plays offline, no terminal | **In progress** — app works (Josh tested); installer + updater next |
-| 5 | Secure remote access | Phone plays over mobile data, no router ports open | Not started |
+| 4 | Desktop GUI + Windows integration | Non-technical user installs, signs in, plays offline, no terminal | **Done** 2026-11-07 — 0.4.3 installed + working on Josh's PC; clean-PC test waived by Josh |
+| 5 | Secure remote access | Phone plays over mobile data, no router ports open | Next — waiting for Josh's go-ahead |
 | 6 | Android app | Find, request and listen on the road | Not started |
 | 7 | Polish + multi-user install | Second PC, second profile, backups | Not started |
 
@@ -254,5 +254,15 @@ src/dielify/
   read (verified on Josh's PC: 17 tracks, YouTube and phone logins intact). Kept as-is:
   Josh's music folder `E:\Music\ymp`, the project folder `E:\Legit\Code\` + `ymp`, and
   his firewall rule, still named "`ymp` server (private networks)" (works the same).
+- 2026-11-07: **Phase 4 closed by Josh without the formal clean-PC acceptance test**
+  ("skip"). Evidence instead: Josh installed 0.4.3 on his own PC, signed in, all screens
+  work, downloads run at Premium quality; in-app update 0.4.1 -> 0.4.2 worked. Not
+  verified: first install on a clean PC (Windows Sandbox), offline playback in the
+  installed app. Do that before giving Dielify to someone else (Phase 7).
+- 2026-11-07: Open after Phase 4: playlists in Library / YouTube playlist sync (Josh
+  asked); "playlist stops at 100" not reproduced (Bicycle loads 165); faster downloads
+  (measure first; optional 2-at-a-time). Josh asked for TorBox downloads: declined
+  (torrent/usenet sources = unlicensed copies). Hidden duplicate data under
+  `...\Packages\Claude_*\LocalCache\Local\Dielify*` still to clean up with Josh's OK.
 - 2026-11-07: Default `auto` keeps the Premium Opus stream (itag 774) over 256k AAC:
   same quality class, no re-encode. Josh can set `preferred_format m4a` for AAC.
