@@ -258,8 +258,9 @@ src/dielify/
   (`release.py check-keys` unlocks both from Josh's own terminal too). Release build 4 MB (R8), test builds are
   `com.dielify.app.debug`. App checks the GitHub manifest's "android" entry daily,
   verifies SHA-256, hands the APK to Android's installer. `publish` uploads the APK too.
-- Not yet: Josh's install of PC 0.6.0 + the release phone app, Android key backup,
-  publishing 0.6.0 to GitHub (needs Josh's OK).
+- 8 Nov: Josh installed PC 0.6.0 and the signed phone app (old test build uninstalled),
+  "everything's working so far". Not yet: publishing 0.6.0 to GitHub (needs Josh's OK)
+  and an end-to-end phone in-app update (needs a later release, e.g. 0.6.1).
 
 ## Open questions for Josh
 
