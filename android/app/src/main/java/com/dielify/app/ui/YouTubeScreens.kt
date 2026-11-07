@@ -193,12 +193,33 @@ private fun ItemCard(vm: AppViewModel, item: Item, queue: List<Item>) {
 }
 
 @Composable
-private fun ShelfRow(vm: AppViewModel, title: String, items: List<Item>) {
+fun ShelfRow(vm: AppViewModel, title: String, items: List<Item>) {
     if (items.isEmpty()) return
     Text(title, style = MaterialTheme.typography.titleMedium,
         modifier = Modifier.padding(start = 16.dp, top = 20.dp, bottom = 8.dp))
     LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         items(items, key = { it.type + it.id }) { ItemCard(vm, it, items) }
+    }
+}
+
+/** A shelf of your own (library) songs. */
+@Composable
+fun TrackShelf(vm: AppViewModel, title: String, tracks: List<com.dielify.app.net.Track>) {
+    if (tracks.isEmpty()) return
+    Text(title, style = MaterialTheme.typography.titleMedium,
+        modifier = Modifier.padding(start = 16.dp, top = 20.dp, bottom = 8.dp))
+    LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        items(tracks.size, key = { tracks[it].id }) { i ->
+            val t = tracks[i]
+            Column(Modifier.width(150.dp).clickable { vm.play(tracks, i) }) {
+                Cover(vm, t.coverUrl, 150.dp)
+                Spacer(Modifier.height(6.dp))
+                Text(t.title, maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Medium,
+                    style = MaterialTheme.typography.bodyMedium)
+                Text(t.artist, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
     }
 }
 
@@ -211,9 +232,15 @@ fun DiscoverScreen(vm: AppViewModel) {
             Loaded(vm, "discover", {
                 val home = vm.server.home()
                 val charts = runCatching { vm.server.charts() }.getOrNull()
-                home to charts
-            }) { (home, charts) ->
+                val forYou = runCatching { vm.server.forYou() }.getOrNull()
+                Triple(home, charts, forYou)
+            }) { (home, charts, forYou) ->
                 LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) {
+                    if (forYou != null) {
+                        item(key = "fy-repeat") { TrackShelf(vm, "On repeat", forYou.onRepeat) }
+                        item(key = "fy-more") { ShelfRow(vm, "More like your top songs", forYou.moreLike) }
+                        item(key = "fy-forgotten") { TrackShelf(vm, "Forgotten favourites", forYou.forgotten) }
+                    }
                     items(home.shelves, key = { "shelf-" + it.title }) { ShelfRow(vm, it.title, it.items) }
                     if (charts != null) {
                         item(key = "charts-pl") { ShelfRow(vm, "Charts", charts.playlists) }

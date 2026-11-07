@@ -136,3 +136,73 @@ data class DownloadList(
     @SerialName("active_total") val activeTotal: Int? = null,
     @SerialName("seconds_per_song") val secondsPerSong: Double? = null,
 )
+
+// --- play history + stats ---------------------------------------------------------------
+
+@Serializable
+data class PlayReport(
+    @SerialName("track_id") val trackId: Long? = null,
+    @SerialName("video_id") val videoId: String? = null,
+    val title: String,
+    val artist: String? = null,
+    val album: String? = null,
+    @SerialName("duration_s") val durationS: Int? = null,
+    @SerialName("played_s") val playedS: Int,
+    @SerialName("started_at") val startedAt: Double,
+    @SerialName("client_id") val clientId: String,
+)
+
+@Serializable data class PlayBatch(val plays: List<PlayReport>)
+
+@Serializable
+data class StatSong(
+    val title: String,
+    val artist: String? = null,
+    val album: String? = null,
+    val plays: Int,
+    val minutes: Int,
+    @SerialName("track_id") val trackId: Long? = null,
+    @SerialName("video_id") val videoId: String? = null,
+    @SerialName("cover_url") val coverUrl: String? = null,
+    val thumbnail: String? = null,
+)
+
+@Serializable
+data class StatArtist(
+    val name: String,
+    val plays: Int,
+    val minutes: Int,
+    @SerialName("cover_url") val coverUrl: String? = null,
+    @SerialName("artist_id") val artistId: Long? = null,
+)
+
+@Serializable
+data class StatAlbum(
+    val name: String,
+    val artist: String? = null,
+    val plays: Int,
+    @SerialName("cover_url") val coverUrl: String? = null,
+    @SerialName("album_id") val albumId: Long? = null,
+)
+
+@Serializable
+data class Stats(
+    val period: String,
+    @SerialName("history_starts") val historyStarts: Double? = null,
+    val plays: Int,
+    val minutes: Int,
+    val songs: Int,
+    val artists: Int,
+    val skips: Int,
+    @SerialName("by_hour") val byHour: List<Int>,
+    @SerialName("top_songs") val topSongs: List<StatSong>,
+    @SerialName("top_artists") val topArtists: List<StatArtist>,
+    @SerialName("top_albums") val topAlbums: List<StatAlbum>,
+)
+
+@Serializable
+data class ForYou(
+    @SerialName("on_repeat") val onRepeat: List<Track>,
+    val forgotten: List<Track>,
+    @SerialName("more_like") val moreLike: List<Item>,
+)

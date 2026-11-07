@@ -40,6 +40,7 @@ sealed interface Screen {
     data class YtPlaylistPage(val playlistId: String, val name: String) : Screen
     data class SimilarPage(val videoId: String, val name: String) : Screen
     data class SavedAlbumPage(val album: String, val artist: String) : Screen
+    data object StatsPage : Screen
 }
 
 data class PlayerUi(
@@ -93,6 +94,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val lastUsername: String get() = accounts.lastUsername()
 
     init {
+        app.dielify.plays.flush()
         viewModelScope.launch {
             updater.check()
             val s = updater.state.value

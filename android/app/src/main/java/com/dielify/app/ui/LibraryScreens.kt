@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.DownloadForOffline
 import androidx.compose.material.icons.filled.OfflinePin
 import androidx.compose.material.icons.filled.Explore
+import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
@@ -141,6 +142,7 @@ private fun TabBar(vm: AppViewModel) {
 @Composable
 fun TopActions(vm: AppViewModel) {
     LinkLabel(vm)
+    IconButton(onClick = { vm.open(Screen.StatsPage) }) { Icon(Icons.Filled.Insights, "Your stats") }
     IconButton(onClick = { vm.open(Screen.Settings) }) { Icon(Icons.Filled.Settings, "Settings") }
 }
 

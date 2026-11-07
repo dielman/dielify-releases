@@ -10,6 +10,7 @@ import coil3.request.crossfade
 import com.dielify.app.net.Server
 import com.dielify.app.saved.SavedSongs
 import com.dielify.app.update.AppUpdater
+import com.dielify.app.stats.PlayReporter
 
 class DielifyApp : Application(), SingletonImageLoader.Factory {
     lateinit var accounts: AccountStore
@@ -20,6 +21,8 @@ class DielifyApp : Application(), SingletonImageLoader.Factory {
         private set
     lateinit var updater: AppUpdater
         private set
+    lateinit var plays: PlayReporter
+        private set
 
     override fun onCreate() {
         super.onCreate()
@@ -27,6 +30,7 @@ class DielifyApp : Application(), SingletonImageLoader.Factory {
         server = Server(this, accounts)
         saved = SavedSongs(this)
         updater = AppUpdater(this)
+        plays = PlayReporter(this, server)
     }
 
     // Cover art goes through the server's HTTP client, which adds the sign-in token

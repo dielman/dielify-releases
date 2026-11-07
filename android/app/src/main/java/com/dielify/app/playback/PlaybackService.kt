@@ -52,6 +52,10 @@ object MediaItems {
     private fun mediaUri(path: String): Uri = Uri.parse("${Server.MEDIA_SCHEME}://server$path")
 
     private const val YT_PREFIX = "yt-"
+    const val VIDEO_ID = "video_id"
+
+    fun videoId(item: MediaItem?): String? =
+        item?.mediaMetadata?.extras?.getString(VIDEO_ID) ?: item?.mediaId?.takeIf { it.startsWith(YT_PREFIX) }?.removePrefix(YT_PREFIX)
 
     fun streamUri(trackId: Long) = mediaUri("/api/library/tracks/$trackId/stream")
 
@@ -71,6 +75,7 @@ object MediaItems {
                     .setAlbumTitle(i.album)
                     .setDurationMs(i.durationS?.let { it * 1000L })
                     .setArtworkUri(if (id != null) ArtProvider.trackArt(id) else i.thumbnail?.let(Uri::parse))
+                    .setExtras(android.os.Bundle().apply { putString(VIDEO_ID, i.id) })
                     .setIsPlayable(true)
                     .setIsBrowsable(false)
                     .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
@@ -88,6 +93,7 @@ object MediaItems {
                 .setArtist(t.artist)
                 .setAlbumTitle(t.album)
                 .setAlbumArtist(t.albumArtist.ifEmpty { null })
+                .setExtras(android.os.Bundle().apply { t.videoId?.let { putString(VIDEO_ID, it) } })
                 .setTrackNumber(t.trackNo)
                 .setReleaseYear(t.year)
                 .setDurationMs(t.durationS?.let { it * 1000L })
@@ -133,6 +139,7 @@ object MediaItems {
 @OptIn(UnstableApi::class)
 class PlaybackService : MediaLibraryService() {
     private var session: MediaLibrarySession? = null
+    private var watcher: Watcher? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     /** Items handed to the car, so a tap (which sends only the id) can be played in full. */
@@ -160,7 +167,8 @@ class PlaybackService : MediaLibraryService() {
             .setHandleAudioBecomingNoisy(true)  // pause when headphones are unplugged
             .setWakeMode(C.WAKE_MODE_NETWORK)
             .build()
-        player.addListener(Watcher(player, server))
+        watcher = Watcher(player, server)
+        player.addListener(watcher!!)
 
         val bitmaps = CacheBitmapLoader(
             DataSourceBitmapLoader.Builder(this)
@@ -190,6 +198,7 @@ class PlaybackService : MediaLibraryService() {
     }
 
     override fun onDestroy() {
+        watcher?.finish()
         scope.cancel()
         session?.run {
             player.release()
@@ -329,11 +338,38 @@ class PlaybackService : MediaLibraryService() {
     /**
      * - Network trouble: find the PC again (maybe the phone left home Wi-Fi) and carry on
      *   from the same spot, up to 3 times in a row.
-     * - A song that played to the end counts as played on the PC (play counts).
+     * - Play history: how long each song was actually heard goes to the PC (the PC decides
+     *   what counts as a play; skips are kept too).
      */
     private inner class Watcher(private val player: ExoPlayer, private val server: Server) : Player.Listener {
         private var retries = 0
         private var current: MediaItem? = null
+        private var startedAt = 0.0
+        private var heardMs = 0L
+        private var playingSince: Long? = null
+
+        private fun pause() {
+            playingSince?.let { heardMs += android.os.SystemClock.elapsedRealtime() - it }
+            playingSince = null
+        }
+
+        /** The song in `current` is over (finished, skipped or stopped): report it. */
+        fun finish() {
+            pause()
+            val item = current
+            val played = (heardMs / 1000).toInt()
+            heardMs = 0
+            if (item == null || played < 1) return
+            val m = item.mediaMetadata
+            dielify.plays.add(
+                com.dielify.app.net.PlayReport(
+                    trackId = MediaItems.trackId(item), videoId = MediaItems.videoId(item),
+                    title = m.title?.toString() ?: return, artist = m.artist?.toString(),
+                    album = m.albumTitle?.toString(), durationS = m.durationMs?.let { (it / 1000).toInt() },
+                    playedS = played, startedAt = startedAt, clientId = java.util.UUID.randomUUID().toString(),
+                )
+            )
+        }
 
         override fun onPlayerError(error: PlaybackException) {
             val network = error.errorCode in 2000..2999
@@ -345,24 +381,22 @@ class PlaybackService : MediaLibraryService() {
         }
 
         override fun onIsPlayingChanged(isPlaying: Boolean) {
-            if (isPlaying) retries = 0
+            if (isPlaying) {
+                retries = 0
+                if (current == null) { current = player.currentMediaItem; startedAt = System.currentTimeMillis() / 1000.0 }
+                if (playingSince == null) playingSince = android.os.SystemClock.elapsedRealtime()
+            } else pause()
         }
 
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-            val finished = current
-            if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO ||
-                reason == Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT) {
-                MediaItems.trackId(finished)?.let { id ->
-                    scope.launch { runCatching { server.played(id) } }
-                }
-            }
+            finish()
             current = mediaItem
+            startedAt = System.currentTimeMillis() / 1000.0
+            if (player.isPlaying) playingSince = android.os.SystemClock.elapsedRealtime()
         }
 
         override fun onPlaybackStateChanged(playbackState: Int) {
-            if (playbackState == Player.STATE_ENDED) {
-                MediaItems.trackId(current)?.let { id -> scope.launch { runCatching { server.played(id) } } }
-            }
+            if (playbackState == Player.STATE_ENDED) { finish(); current = null }
         }
     }
 

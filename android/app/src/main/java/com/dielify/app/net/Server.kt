@@ -262,9 +262,11 @@ class Server(private val context: Context, private val accounts: AccountStore) {
         send("DELETE", "api/downloads/$id")
     }
 
-    suspend fun played(trackId: Long) {
-        send("POST", "api/library/tracks/$trackId/played")
+    suspend fun reportPlays(plays: List<PlayReport>) {
+        send("POST", "api/plays", json.encodeToString(PlayBatch.serializer(), PlayBatch(plays)))
     }
+    suspend fun stats(period: String): Stats = get("api/stats?limit=25&period=$period")
+    suspend fun forYou(): ForYou = get("api/discover/for-you")
 
     companion object {
         const val MEDIA_SCHEME = "dielify"

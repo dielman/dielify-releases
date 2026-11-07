@@ -77,7 +77,7 @@ function go(v, ...args) {
   view = v;
   document.querySelectorAll("#nav button").forEach((b) => b.classList.toggle("active", b.dataset.view === v));
   $("search-input").placeholder = v === "discover" ? "Search YouTube Music" : "Search your library";
-  ({ library: viewLibrary, discover: viewDiscover, downloads: viewDownloads, settings: viewSettings })[v](...args);
+  ({ library: viewLibrary, discover: viewDiscover, downloads: viewDownloads, stats: viewStats, settings: viewSettings })[v](...args);
 }
 $("search").addEventListener("submit", (e) => {
   e.preventDefault();
@@ -197,13 +197,19 @@ async function viewDiscover() {
     if (status.offline) return show(h("h1", {}, "Discover"), offlineNotice());
     if (needsSignIn()) return show(h("h1", {}, "Discover"), welcome());
     show(h("h1", {}, "Discover"), h("p", { class: "muted" }, "Loading your YouTube Music home…"));
-    const [home, charts] = await Promise.all([api("/api/discover/home?shelves=8"),
-      api("/api/discover/charts").catch(() => null)]);
+    const [home, charts, forYou] = await Promise.all([api("/api/discover/home?shelves=8"),
+      api("/api/discover/charts").catch(() => null), api("/api/discover/for-you").catch(() => null)]);
     const shelves = home.shelves.filter((s) => s.items.length).map((s) =>
       [h("h2", {}, s.title), h("div", { class: "shelf" }, s.items.map(ytCard))]);
     const chartShelf = charts && charts.playlists.length
       ? [h("h2", {}, `Charts · ${charts.country}`), h("div", { class: "shelf" }, charts.playlists.map(ytCard))] : null;
-    if (view === "discover") show(h("h1", {}, "Discover"), shelves, chartShelf);
+    const trackShelf = (title, tracks) => tracks.length ? [h("h2", {}, title), h("div", { class: "shelf" },
+      tracks.map((t, i) => h("div", { class: "card", onclick: () => playList(tracks, i) },
+        art(media(t.cover_url, 320)), h("div", { class: "t" }, t.title), h("div", { class: "s" }, t.artist))))] : null;
+    const mine = forYou ? [trackShelf("On repeat", forYou.on_repeat),
+      forYou.more_like.length ? [h("h2", {}, "More like your top songs"), h("div", { class: "shelf" }, forYou.more_like.map(ytCard))] : null,
+      trackShelf("Forgotten favourites", forYou.forgotten)] : null;
+    if (view === "discover") show(h("h1", {}, "Discover"), mine, shelves, chartShelf);
   } catch (e) { failed(e); }
 }
 
@@ -345,6 +351,45 @@ async function renderDownloads(active) {
   const keep = main.scrollTop;  // re-drawn every 1.5 s: don't jump back to the top
   show(h("h1", {}, "Downloads"), summary, now, line, done);
   main.scrollTop = keep;
+}
+
+// --- stats -------------------------------------------------------------------------------------
+let statsPeriod = "month";
+async function viewStats(period = statsPeriod) {
+  statsPeriod = period;
+  try {
+    const st = await api(`/api/stats?period=${period}&limit=25`);
+    const tabs = h("div", { class: "tabs" }, [["week", "This week"], ["month", "This month"], ["year", "This year"], ["all", "All time"]]
+      .map(([p, l]) => h("button", { class: p === period ? "active" : "", onclick: () => viewStats(p) }, l)));
+    if (!st.plays) {
+      return show(h("h1", {}, "Your stats"), tabs, h("p", { class: "muted" }, st.history_starts
+        ? "Nothing played in this period." : "No plays recorded yet. Your history starts with the next song you play."));
+    }
+    const time = st.minutes < 120 ? `${st.minutes} min` : `${Math.round(st.minutes / 60)} hours`;
+    const max = Math.max(1, ...st.by_hour);
+    const chart = h("div", { class: "hours" }, st.by_hour.map((n, hr) =>
+      h("div", { class: "bar", title: `${hr}:00 · ${n} plays`, style: `height:${Math.max(2, (n / max) * 100)}%` })));
+    const songItems = st.top_songs.filter((s) => s.video_id).map((s) => ({ type: "song", id: s.video_id, title: s.title,
+      artists: s.artist ? [s.artist] : [], album: s.album, thumbnail: s.thumbnail, library_track_id: s.track_id }));
+    const row = (i, img, title, sub, count, onclick) => h("tr", { onclick, style: onclick ? "cursor:pointer" : "" },
+      h("td", { class: "n" }, i + 1), h("td", { style: "width:52px" }, img),
+      h("td", {}, title, h("div", { class: "muted small" }, sub)), h("td", { class: "d" }, count));
+    const pic = (cover, thumb) => cover ? art(media(cover, 96), "♪", "mini") : thumb ? art(thumb, "♪", "mini") : art(null, "♪", "mini");
+    show(h("h1", {}, "Your stats"), tabs,
+      h("div", { class: "stat-cards" }, [[time, "listened"], [st.plays, "plays"], [st.songs, "songs"], [st.artists, "artists"]]
+        .map(([v, l]) => h("div", { class: "panel stat" }, h("div", { class: "big" }, String(v)), h("div", { class: "muted small" }, l)))),
+      h("h2", {}, "When you listen"), chart,
+      h("div", { class: "muted small hours-axis" }, h("span", {}, "12am"), h("span", {}, "6am"), h("span", {}, "12pm"), h("span", {}, "6pm"), h("span", {}, "")),
+      h("h2", {}, "Top songs"), h("table", { class: "tracks" }, h("tbody", {}, st.top_songs.map((s, i) =>
+        row(i, pic(s.cover_url, s.thumbnail), s.title, [s.artist, s.album].filter(Boolean).join(" · "), `${s.plays}×`,
+          s.video_id ? () => songActions(songItems.find((x) => x.id === s.video_id), songItems) : null)))),
+      h("h2", {}, "Top artists"), h("table", { class: "tracks" }, h("tbody", {}, st.top_artists.map((a, i) =>
+        row(i, pic(a.cover_url), a.name, `${a.minutes} min`, `${a.plays}×`, a.artist_id ? () => { go("library"); viewArtist(a.artist_id); } : null)))),
+      h("h2", {}, "Top albums"), h("table", { class: "tracks" }, h("tbody", {}, st.top_albums.map((a, i) =>
+        row(i, pic(a.cover_url), a.name, a.artist || "", `${a.plays}×`, null)))),
+      h("p", { class: "muted small" }, `${st.skips} skipped (under half a song) not counted.`,
+        st.history_starts ? ` History since ${new Date(st.history_starts * 1000).toLocaleDateString()}.` : ""));
+  } catch (e) { failed(e); }
 }
 
 // --- settings --------------------------------------------------------------------------------
