@@ -243,6 +243,22 @@ src/dielify/
   we can fix"). He turned on Android Auto "Unknown sources". Not verified: Android Auto
   in a car, and the full "request a new song and hear it on the road" run.
 
+**Phase 7 — in progress** (started 8 Nov 2026, branch `phase-7`; scope in Decisions log):
+- Built (0.6.0, all tests pass: 105): download next (`downloads.priority` = ms when marked
+  next, 0 = normal; phone song taps default to next; Move up on PC + phone);
+  music videos missing from YouTube Music's catalogue fall back to the video's own
+  details (`get_song`, title split "Artist - Title"); Library > Playlists (your YouTube
+  Music playlists, `/api/yt/my-playlists`); backups (`backup.py`: daily zip of db +
+  settings + DPAPI login files, keep 14, Settings > Backups, `dielify-cli backup
+  now|restore`, restore takes a non-pruning safety copy first).
+- Phone release: `tools/release.py android-keygen|android-export-key|android-import-key|
+  android-build`; keystore + DPAPI'd password in %LOCALAPPDATA%\Dielify-release (Claude's
+  redirected copy, like the PC signing key). Release build 4 MB (R8), test builds are
+  `com.dielify.app.debug`. App checks the GitHub manifest's "android" entry daily,
+  verifies SHA-256, hands the APK to Android's installer. `publish` uploads the APK too.
+- Not yet: Josh's install of PC 0.6.0 + the release phone app, Android key backup,
+  publishing 0.6.0 to GitHub (needs Josh's OK).
+
 ## Open questions for Josh
 
 - Default audio quality/format (currently `auto`: best available, ~256k Opus with
