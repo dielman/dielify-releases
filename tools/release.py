@@ -130,6 +130,7 @@ def cmd_export_key(args) -> None:
     key = _load_key()
     pem = key.export_key(format="PEM", passphrase=_ask_password(True),
                          protection="PBKDF2WithHMAC-SHA512AndAES256-CBC")
+    Path(args.file).parent.mkdir(parents=True, exist_ok=True)
     Path(args.file).write_text(pem, encoding="utf-8")
     print(f"Backup written to {args.file}. Keep it (and its password) somewhere safe, not in the project.")
 
@@ -258,6 +259,7 @@ def cmd_android_export_key(args) -> None:
     AES, key = _backup_cipher(_ask_password(True), salt)
     c = AES.new(key, AES.MODE_GCM)
     data, tag = c.encrypt_and_digest(blob)
+    Path(args.file).parent.mkdir(parents=True, exist_ok=True)
     Path(args.file).write_text(json.dumps({
         "dielify-android-key": 1, "salt": base64.b64encode(salt).decode(),
         "nonce": base64.b64encode(c.nonce).decode(), "tag": base64.b64encode(tag).decode(),
