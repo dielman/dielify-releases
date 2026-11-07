@@ -236,9 +236,10 @@ def main(argv: list[str] | None = None) -> int:
 
     from . import server
     log_file = server.setup_file_logging()
-    if sys.stderr is None:  # the installed app has no console: keep its error output
+    if sys.stdout is None or sys.stderr is None:  # the installed app has no console
         out = open(log_file.with_name("desktop.log"), "a", encoding="utf-8", buffering=1)
-        sys.stdout = sys.stderr = out
+        sys.stdout = sys.stdout or out
+        sys.stderr = sys.stderr or out
     s = settings_mod.load()
     token = auth.enable_desktop_token()
     try:

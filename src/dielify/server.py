@@ -59,6 +59,22 @@ def create_app(queue: DownloadQueue | None = None) -> FastAPI:
     # The desktop app's screens. They hold no data; everything comes from /api with a key.
     app.mount("/ui", StaticFiles(directory=UI_DIR, html=True), name="ui")
 
+    @app.exception_handler(Exception)
+    async def unexpected_error(request: Request, exc: Exception):
+        """Say what went wrong instead of a bare 500. The full details are only shown to
+        the desktop window on this PC; phones get a short message."""
+        from fastapi.responses import JSONResponse
+
+        from .auth import is_desktop_token
+        from .paths import app_data_dir
+        bearer = request.headers.get("authorization", "")[7:] or request.query_params.get("token")
+        if is_desktop_token(bearer):
+            detail = (f"Dielify hit an error: {type(exc).__name__}: {exc}  "
+                      f"(details in {app_data_dir() / 'logs' / 'server.log'})")
+        else:
+            detail = "Dielify hit an unexpected error on the PC."
+        return JSONResponse({"detail": detail}, status_code=500)
+
     @app.get("/api/health", tags=["status"])
     def health() -> dict:
         return {"status": "ok", "version": __version__}
@@ -124,10 +140,6 @@ def setup_file_logging() -> Path:
     fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
     root = logging.getLogger()
     root.addHandler(fh)
-    # uvicorn's loggers don't pass messages up to the root, and they're where crashes
-    # inside a request are reported: send those to the file as well.
-    for name in ("uvicorn", "uvicorn.error"):
-        logging.getLogger(name).addHandler(fh)
     if root.level > logging.WARNING or root.level == logging.NOTSET:
         root.setLevel(logging.WARNING)
     for name in ("dielify.server", "dielify.subsonic_api", "dielify.downloads"):
@@ -151,7 +163,11 @@ def _config(queue: DownloadQueue | None = None) -> uvicorn.Config:
     # A paused phone holds its stream open without reading, so a graceful shutdown
     # would wait for it forever: give open connections a few seconds, then close them.
     logging.getLogger("uvicorn.error").addFilter(_ExpectedShutdownNoise())
-    return uvicorn.Config(create_app(queue), access_log=False, log_level="warning",
+    # log_config=None: uvicorn's own logging setup checks the console for colour
+    # support and crashes when there is no console (the installed app). Its messages
+    # then go to our log file through the root logger instead.
+    logging.getLogger("uvicorn").setLevel(logging.WARNING)
+    return uvicorn.Config(create_app(queue), access_log=False, log_config=None, use_colors=False,
                           server_header=False, timeout_graceful_shutdown=SHUTDOWN_GRACE_S)
 
 

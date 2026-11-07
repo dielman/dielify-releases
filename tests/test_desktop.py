@@ -130,3 +130,38 @@ def test_request_crash_is_logged(client, caplog, monkeypatch):
     with pytest.raises(RuntimeError):
         client.get("/api/desktop/status", headers=client.desk)
     assert "/api/desktop/status failed" in caplog.text and "kaboom" in caplog.text
+
+
+def test_unexpected_error_is_explained_to_the_desktop_only(monkeypatch):
+    queue = DownloadQueue(adapter_factory=lambda profile: FakeDownloader())
+    app = create_app(queue)
+    monkeypatch.setattr(desktop_api, "_status", lambda: (_ for _ in ()).throw(RuntimeError("disk on fire")))
+    with TestClient(app, raise_server_exceptions=False) as c:
+        desk = {"Authorization": f"Bearer {auth.enable_desktop_token()}"}
+        r = c.get("/api/desktop/status", headers=desk)
+        assert r.status_code == 500
+        assert "RuntimeError: disk on fire" in r.json()["detail"] and "server.log" in r.json()["detail"]
+        monkeypatch.setattr(custom_api.Session, "__init__", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("secret")))
+        phone = c.get("/api/settings", headers={"Authorization": "Bearer dielify_x"})
+        assert "secret" not in phone.text
+
+
+def test_unreadable_login_shows_signed_out_not_500(client, monkeypatch):
+    from dielify import credstore
+
+    def broken(*a, **k):
+        raise credstore.CredentialError("DPAPI decrypt failed")
+    monkeypatch.setattr(credstore, "load", broken)
+    st = client.get("/api/desktop/status", headers=client.desk)
+    assert st.status_code == 200 and st.json()["profiles"][0]["youtube_signed_in"] is False
+    assert st.json()["data_folder"] and st.json()["log_file"].endswith("server.log")
+
+
+def test_server_starts_without_a_console(monkeypatch):
+    """Regression: the installed app has no console; uvicorn's logging setup crashed on it."""
+    import sys
+
+    from dielify import server
+    monkeypatch.setattr(sys, "stdout", None)
+    monkeypatch.setattr(sys, "stderr", None)
+    server._config(DownloadQueue(adapter_factory=lambda p: FakeDownloader()))

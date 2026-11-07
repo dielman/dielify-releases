@@ -400,6 +400,7 @@ async function viewSettings() {
       h("div", { class: "row", style: "margin-top:10px" }, h("button", { onclick: addPhoneUser }, "Add phone login")));
 
     const about = h("div", { class: "panel" }, h("h2", {}, "About"), setting("Version", `Dielify ${s.version}`),
+      setting("Data folder", s.data_folder), setting("Log file", s.log_file),
       await updateSetting(setting));
     show(h("h1", {}, "Settings"), youtube, music, windows, phones, about);
   } catch (e) { failed(e); }

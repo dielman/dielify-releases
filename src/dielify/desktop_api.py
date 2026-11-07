@@ -16,7 +16,7 @@ from . import __version__, auth, credstore, winint
 from . import settings as settings_mod
 from .custom_api import Session, desktop_session, youtube
 from .library import Library
-from .paths import safe_name
+from .paths import app_data_dir, safe_name
 
 router = APIRouter(prefix="/api/desktop", tags=["desktop"])
 
@@ -43,6 +43,8 @@ class PhoneUser(BaseModel):
 
 class DesktopStatus(BaseModel):
     version: str
+    data_folder: str
+    log_file: str
     active_profile: str
     profiles: list[ProfileInfo]
     library_root: str
@@ -97,20 +99,33 @@ def _profiles(s: settings_mod.Settings) -> list[str]:
     return sorted(names, key=str.casefold)
 
 
+def _signed_in(profile: str) -> bool:
+    """A login file that can't be read counts as signed out (and is logged), so one bad
+    file can't break every screen."""
+    try:
+        return credstore.load(profile) is not None
+    except credstore.CredentialError as e:
+        import logging
+        logging.getLogger(__name__).warning("Can't read the YouTube sign-in of %s: %s", profile, e)
+        return False
+
+
 def _status() -> DesktopStatus:
     from .server import bind_addresses
     s = settings_mod.load()
     profiles = []
     for name in _profiles(s):
         lib = Library(name, s.profile_library(name))
-        profiles.append(ProfileInfo(name=name, youtube_signed_in=credstore.load(name) is not None,
+        profiles.append(ProfileInfo(name=name, youtube_signed_in=_signed_in(name),
                                     library_path=str(lib.root), tracks=lib.stats()["tracks"]))
     users = [PhoneUser(name=u.name, profile=u.profile,
                        devices=[PhoneDevice(**{k: d[k] for k in ("id", "device_name", "created_at", "last_used_at")})
                                 for d in auth.list_tokens(u.name)])
              for u in auth.list_users()]
     return DesktopStatus(
-        version=__version__, active_profile=s.active_profile, profiles=profiles,
+        version=__version__, data_folder=str(app_data_dir()),
+        log_file=str(app_data_dir() / "logs" / "server.log"),
+        active_profile=s.active_profile, profiles=profiles,
         library_root=s.library_root, quality=s.quality, preferred_format=s.preferred_format,
         cache_limit_gb=s.cache_limit_gb, offline=s.offline, start_with_windows=winint.start_with_windows(),
         server_port=s.server_port,
