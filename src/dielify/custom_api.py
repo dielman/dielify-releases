@@ -586,10 +586,166 @@ def library_star(track_id: int, body: StarChange, s: Session = Depends(session))
 
 @router.post("/library/tracks/{track_id}/played", status_code=204, tags=["library"])
 def library_played(track_id: int, s: Session = Depends(session)) -> Response:
-    """Call when a track has been listened to (counts towards 'frequent' and 'recent')."""
+    """Older way to say a track was listened to; POST /api/plays says how much."""
+    from . import history
     _track(s, track_id)
-    s.lib.record_play(track_id)
+    history.record(s.lib, history.PlayIn(track_id=track_id), _device_name(s))
     return Response(status_code=204)
+
+
+# --- play history + stats ------------------------------------------------------------
+
+class PlayReport(BaseModel):
+    track_id: int | None = None
+    video_id: str | None = Field(None, max_length=20)
+    title: str | None = Field(None, max_length=300)
+    artist: str | None = Field(None, max_length=300)
+    album: str | None = Field(None, max_length=300)
+    duration_s: int | None = Field(None, ge=0)
+    played_s: int | None = Field(None, ge=0, description="Seconds actually heard (skips count too)")
+    started_at: float | None = Field(None, description="Unix time; default now")
+    client_id: str | None = Field(None, max_length=64, description="Unique per play, so resending is safe")
+
+
+class PlayBatch(BaseModel):
+    plays: list[PlayReport] = Field(max_length=500)
+
+
+class PlaysRecorded(BaseModel):
+    recorded: int
+    duplicates: int
+
+
+def _device_name(s: Session) -> str:
+    if s.desktop:
+        return "PC"
+    for d in auth.list_tokens(s.user.name):
+        if d["id"] == s.device_id:
+            return d["device_name"]
+    return s.user.name
+
+
+@router.post("/plays", response_model=PlaysRecorded, tags=["stats"])
+def report_plays(body: PlayBatch, s: Session = Depends(session)) -> PlaysRecorded:
+    """Report plays (when, how much was heard). A play counts once you've heard half the
+    song or 4 minutes; shorter ones are kept as skips."""
+    from . import history
+    device, new, dup = _device_name(s), 0, 0
+    for p in body.plays:
+        try:
+            if history.record(s.lib, history.PlayIn(**p.model_dump()), device):
+                new += 1
+            else:
+                dup += 1
+        except ValueError:
+            dup += 1  # nothing to identify the song: skip it rather than fail the batch
+    return PlaysRecorded(recorded=new, duplicates=dup)
+
+
+class StatSong(BaseModel):
+    title: str
+    artist: str | None
+    album: str | None
+    plays: int
+    minutes: int
+    track_id: int | None
+    video_id: str | None
+    cover_url: str | None = Field(None, description="From the library (needs the token)")
+    thumbnail: str | None = Field(None, description="From YouTube")
+
+
+class StatArtist(BaseModel):
+    name: str
+    plays: int
+    minutes: int
+    cover_url: str | None
+    artist_id: int | None = None
+
+
+class StatAlbum(BaseModel):
+    name: str
+    artist: str | None
+    plays: int
+    cover_url: str | None
+    album_id: int | None = None
+
+
+class Stats(BaseModel):
+    period: Literal["week", "month", "year", "all"]
+    since: float | None
+    history_starts: float | None = Field(description="When play history began (None = no plays yet)")
+    plays: int
+    minutes: int
+    songs: int
+    artists: int
+    skips: int
+    by_hour: list[int] = Field(description="Plays per hour of the day, 0-23, local time")
+    top_songs: list[StatSong]
+    top_artists: list[StatArtist]
+    top_albums: list[StatAlbum]
+
+
+def _thumb(video_id: str | None) -> str | None:
+    return f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg" if video_id else None
+
+
+@router.get("/stats", response_model=Stats, tags=["stats"])
+def get_stats(period: Literal["week", "month", "year", "all"] = "month",
+              limit: int = Query(10, ge=1, le=50), s: Session = Depends(session)) -> Stats:
+    from . import history
+    st = history.stats(s.lib, period, limit)
+    tracks = {}
+
+    def track(tid):
+        if tid and tid not in tracks:
+            tracks[tid] = s.lib.track(tid)
+        return tracks.get(tid)
+
+    def cover(tid):
+        t = track(tid)
+        return f"/api/library/tracks/{tid}/cover" if t is not None and t["has_cover"] else None
+
+    songs = [StatSong(title=r["title"], artist=r["artist"], album=r["album"], plays=r["plays"],
+                      minutes=round((r["secs"] or 0) / 60), track_id=r["track_id"] if track(r["track_id"]) else None,
+                      video_id=r["video_id"], cover_url=cover(r["track_id"]), thumbnail=_thumb(r["video_id"]))
+             for r in st["top_songs"]]
+    artists = []
+    for r in st["top_artists"]:
+        t = track(r["track_id"])
+        artists.append(StatArtist(name=r["name"], plays=r["plays"], minutes=round((r["secs"] or 0) / 60),
+                                  cover_url=cover(r["track_id"]), artist_id=t["artist_id"] if t is not None else None))
+    albums = []
+    for r in st["top_albums"]:
+        t = track(r["track_id"])
+        albums.append(StatAlbum(name=r["name"], artist=r["artist"], plays=r["plays"], cover_url=cover(r["track_id"]),
+                                album_id=t["album_id"] if t is not None else None))
+    return Stats(**{k: st[k] for k in ("period", "since", "history_starts", "plays", "minutes", "songs",
+                                         "artists", "skips", "by_hour")},
+                 top_songs=songs, top_artists=artists, top_albums=albums)
+
+
+class ForYou(BaseModel):
+    on_repeat: list[Track] = Field(description="Your songs you've played most in the last 2 weeks")
+    forgotten: list[Track] = Field(description="Songs you played a lot, but not for 2 months")
+    more_like: list[Item] = Field(description="New to you: like your most-played songs (from YouTube Music)")
+
+
+@router.get("/discover/for-you", response_model=ForYou, tags=["discover"])
+def discover_for_you(s: Session = Depends(session)) -> ForYou:
+    from . import history
+    on_repeat = [_track_out(t) for t in map(s.lib.track, history.on_repeat(s.lib)) if t is not None]
+    forgotten = [_track_out(t) for t in map(s.lib.track, history.forgotten(s.lib)) if t is not None]
+    have, seen, more = s.lib.video_ids(), set(), []
+    for vid in history.seeds(s.lib):
+        try:
+            similar = youtube.call(s.user.profile, "similar", vid, 12)
+        except HTTPException:
+            continue  # offline / signed out: the library lists still work
+        for it in similar:
+            if it.id not in have and it.id not in seen:
+                seen.add(it.id)
+                more.append(it)
+    return ForYou(on_repeat=on_repeat, forgotten=forgotten, more_like=_items(more[:40], s.lib))
 
 
 @router.get("/library/tracks/{track_id}/stream", tags=["library"],

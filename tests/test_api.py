@@ -448,3 +448,62 @@ def test_yt_stream_relays_and_queues_the_download(monkeypatch):
         assert c.get("/api/yt/stream/abcdefghijk").status_code == 401
         for j in jobs:
             c.delete(f"/api/downloads/{j['id']}", headers=h)
+
+
+def test_play_history_and_stats():
+    import time as _t
+    with make_client(FakeDownloader()) as c:
+        h = login(c)
+        now = _t.time()
+        plays = [
+            # heard in full twice, once as a stream (video id only) - one song
+            {"video_id": "vid00000001", "title": "Song A", "artist": "Band", "album": "LP", "duration_s": 200,
+             "played_s": 200, "started_at": now - 3600, "client_id": "a1"},
+            {"video_id": "vid00000001", "title": "Song A", "artist": "Band", "album": "LP", "duration_s": 200,
+             "played_s": 120, "started_at": now - 1800, "client_id": "a2"},
+            # skipped after 20 s: kept, but doesn't count
+            {"video_id": "vid00000002", "title": "Song B", "artist": "Other", "duration_s": 300,
+             "played_s": 20, "started_at": now - 600, "client_id": "b1"},
+            # long song: 4 minutes is enough
+            {"video_id": "vid00000003", "title": "Epic", "artist": "Band", "duration_s": 1200,
+             "played_s": 250, "started_at": now - 60, "client_id": "c1"},
+            # a year ago: only in "all"
+            {"video_id": "vid00000004", "title": "Old", "artist": "Band", "duration_s": 100,
+             "played_s": 100, "started_at": now - 400 * 86400, "client_id": "d1"},
+        ]
+        r = c.post("/api/plays", headers=h, json={"plays": plays}).json()
+        assert r == {"recorded": 5, "duplicates": 0}
+        assert c.post("/api/plays", headers=h, json={"plays": plays[:2]}).json() == {"recorded": 0, "duplicates": 2}
+
+        st = c.get("/api/stats", params={"period": "month"}, headers=h).json()
+        assert (st["plays"], st["skips"], st["songs"], st["artists"]) == (3, 1, 2, 1)
+        assert st["minutes"] == round((200 + 120 + 250) / 60)
+        assert [(s["title"], s["plays"]) for s in st["top_songs"]] == [("Song A", 2), ("Epic", 1)]
+        assert st["top_songs"][0]["thumbnail"].endswith("/vid00000001/hqdefault.jpg")
+        assert [(a["name"], a["plays"]) for a in st["top_artists"]] == [("Band", 3)]
+        assert sum(st["by_hour"]) == 3 and st["history_starts"] < now - 300 * 86400
+        assert c.get("/api/stats", params={"period": "all"}, headers=h).json()["plays"] == 4
+        assert c.get("/api/stats", params={"period": "day"}, headers=h).status_code == 422
+        assert c.get("/api/stats").status_code == 401
+
+
+def test_library_plays_count_and_feed_for_you(monkeypatch):
+    with make_client(FakeDownloader()) as c:
+        h = login(c)
+        job = c.post("/api/downloads", headers=h, json={"type": "song", "id": "s1"}).json()["downloads"][0]
+        for _ in range(100):
+            job = c.get(f"/api/downloads/{job['id']}", headers=h).json()
+            if job["status"] == "done":
+                break
+            time.sleep(0.05)
+        tid = job["track_id"]
+        assert tid
+        for i in range(2):  # played twice from the library on the phone
+            c.post("/api/plays", headers=h, json={"plays": [{"track_id": tid, "played_s": 9999, "client_id": f"x{i}"}]})
+        c.post(f"/api/library/tracks/{tid}/played", headers=h)  # the older endpoint counts too
+        assert c.get(f"/api/library/tracks/{tid}", headers=h).json()["play_count"] == 3
+        fy = c.get("/api/discover/for-you", headers=h).json()
+        assert [t["id"] for t in fy["on_repeat"]] == [tid]
+        assert fy["forgotten"] == []
+        assert all(i["id"] != "s1" for i in fy["more_like"])   # suggestions are new to you
+        assert fy["more_like"]                                  # FakeYT.similar of your top song

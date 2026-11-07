@@ -1212,7 +1212,7 @@
           "library"
         ],
         "summary": "Library Played",
-        "description": "Call when a track has been listened to (counts towards 'frequent' and 'recent').",
+        "description": "Older way to say a track was listened to; POST /api/plays says how much.",
         "operationId": "library_played_api_library_tracks__track_id__played_post",
         "security": [
           {
@@ -1245,6 +1245,145 @@
             }
           }
         }
+      }
+    },
+    "/api/plays": {
+      "post": {
+        "tags": [
+          "stats"
+        ],
+        "summary": "Report Plays",
+        "description": "Report plays (when, how much was heard). A play counts once you've heard half the\nsong or 4 minutes; shorter ones are kept as skips.",
+        "operationId": "report_plays_api_plays_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlayBatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaysRecorded"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/stats": {
+      "get": {
+        "tags": [
+          "stats"
+        ],
+        "summary": "Get Stats",
+        "operationId": "get_stats_api_stats_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "period",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "week",
+                "month",
+                "year",
+                "all"
+              ],
+              "type": "string",
+              "default": "month",
+              "title": "Period"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 50,
+              "minimum": 1,
+              "default": 10,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Stats"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/discover/for-you": {
+      "get": {
+        "tags": [
+          "discover"
+        ],
+        "summary": "Discover For You",
+        "operationId": "discover_for_you_api_discover_for_you_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForYou"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/library/tracks/{track_id}/stream": {
@@ -2765,6 +2904,41 @@
         ],
         "title": "DownloadRequest"
       },
+      "ForYou": {
+        "properties": {
+          "on_repeat": {
+            "items": {
+              "$ref": "#/components/schemas/Track"
+            },
+            "type": "array",
+            "title": "On Repeat",
+            "description": "Your songs you've played most in the last 2 weeks"
+          },
+          "forgotten": {
+            "items": {
+              "$ref": "#/components/schemas/Track"
+            },
+            "type": "array",
+            "title": "Forgotten",
+            "description": "Songs you played a lot, but not for 2 months"
+          },
+          "more_like": {
+            "items": {
+              "$ref": "#/components/schemas/Item"
+            },
+            "type": "array",
+            "title": "More Like",
+            "description": "New to you: like your most-played songs (from YouTube Music)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "on_repeat",
+          "forgotten",
+          "more_like"
+        ],
+        "title": "ForYou"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -3152,6 +3326,156 @@
         ],
         "title": "PhoneUser"
       },
+      "PlayBatch": {
+        "properties": {
+          "plays": {
+            "items": {
+              "$ref": "#/components/schemas/PlayReport"
+            },
+            "type": "array",
+            "maxItems": 500,
+            "title": "Plays"
+          }
+        },
+        "type": "object",
+        "required": [
+          "plays"
+        ],
+        "title": "PlayBatch"
+      },
+      "PlayReport": {
+        "properties": {
+          "track_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Track Id"
+          },
+          "video_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 20
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Video Id"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "artist": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artist"
+          },
+          "album": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Album"
+          },
+          "duration_s": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration S"
+          },
+          "played_s": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Played S",
+            "description": "Seconds actually heard (skips count too)"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At",
+            "description": "Unix time; default now"
+          },
+          "client_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Id",
+            "description": "Unique per play, so resending is safe"
+          }
+        },
+        "type": "object",
+        "title": "PlayReport"
+      },
+      "PlaysRecorded": {
+        "properties": {
+          "recorded": {
+            "type": "integer",
+            "title": "Recorded"
+          },
+          "duplicates": {
+            "type": "integer",
+            "title": "Duplicates"
+          }
+        },
+        "type": "object",
+        "required": [
+          "recorded",
+          "duplicates"
+        ],
+        "title": "PlaysRecorded"
+      },
       "ProfileInfo": {
         "properties": {
           "name": {
@@ -3332,6 +3656,302 @@
           "starred"
         ],
         "title": "StarChange"
+      },
+      "StatAlbum": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "artist": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artist"
+          },
+          "plays": {
+            "type": "integer",
+            "title": "Plays"
+          },
+          "cover_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cover Url"
+          },
+          "album_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Album Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "artist",
+          "plays",
+          "cover_url"
+        ],
+        "title": "StatAlbum"
+      },
+      "StatArtist": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "plays": {
+            "type": "integer",
+            "title": "Plays"
+          },
+          "minutes": {
+            "type": "integer",
+            "title": "Minutes"
+          },
+          "cover_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cover Url"
+          },
+          "artist_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artist Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "plays",
+          "minutes",
+          "cover_url"
+        ],
+        "title": "StatArtist"
+      },
+      "StatSong": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "artist": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artist"
+          },
+          "album": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Album"
+          },
+          "plays": {
+            "type": "integer",
+            "title": "Plays"
+          },
+          "minutes": {
+            "type": "integer",
+            "title": "Minutes"
+          },
+          "track_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Track Id"
+          },
+          "video_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Video Id"
+          },
+          "cover_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cover Url",
+            "description": "From the library (needs the token)"
+          },
+          "thumbnail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thumbnail",
+            "description": "From YouTube"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "artist",
+          "album",
+          "plays",
+          "minutes",
+          "track_id",
+          "video_id"
+        ],
+        "title": "StatSong"
+      },
+      "Stats": {
+        "properties": {
+          "period": {
+            "type": "string",
+            "enum": [
+              "week",
+              "month",
+              "year",
+              "all"
+            ],
+            "title": "Period"
+          },
+          "since": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Since"
+          },
+          "history_starts": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "History Starts",
+            "description": "When play history began (None = no plays yet)"
+          },
+          "plays": {
+            "type": "integer",
+            "title": "Plays"
+          },
+          "minutes": {
+            "type": "integer",
+            "title": "Minutes"
+          },
+          "songs": {
+            "type": "integer",
+            "title": "Songs"
+          },
+          "artists": {
+            "type": "integer",
+            "title": "Artists"
+          },
+          "skips": {
+            "type": "integer",
+            "title": "Skips"
+          },
+          "by_hour": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "By Hour",
+            "description": "Plays per hour of the day, 0-23, local time"
+          },
+          "top_songs": {
+            "items": {
+              "$ref": "#/components/schemas/StatSong"
+            },
+            "type": "array",
+            "title": "Top Songs"
+          },
+          "top_artists": {
+            "items": {
+              "$ref": "#/components/schemas/StatArtist"
+            },
+            "type": "array",
+            "title": "Top Artists"
+          },
+          "top_albums": {
+            "items": {
+              "$ref": "#/components/schemas/StatAlbum"
+            },
+            "type": "array",
+            "title": "Top Albums"
+          }
+        },
+        "type": "object",
+        "required": [
+          "period",
+          "since",
+          "history_starts",
+          "plays",
+          "minutes",
+          "songs",
+          "artists",
+          "skips",
+          "by_hour",
+          "top_songs",
+          "top_artists",
+          "top_albums"
+        ],
+        "title": "Stats"
       },
       "Track": {
         "properties": {

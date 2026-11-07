@@ -225,7 +225,7 @@ function ytCard(item, from, list) {  // also used as .map(ytCard): (item, index,
 function ytAsTrack(item) {
   const lib = item.library_track_id;
   return {
-    id: lib || null, title: item.title, artist: item.artists.join(", "), album: item.album || "",
+    id: lib || null, video_id: item.id, title: item.title, artist: item.artists.join(", "), album: item.album || "",
     stream_url: lib ? `/api/library/tracks/${lib}/stream` : `/api/yt/stream/${encodeURIComponent(item.id)}`,
     cover_url: lib ? `/api/library/tracks/${lib}/cover` : null,
     thumb: lib ? null : item.thumbnail,  // YouTube's own picture: loaded without our key
@@ -535,10 +535,26 @@ audio.volume = 0.8;
 function playList(list, index) {
   player.list = list; playAt(index);
 }
+// Play history: how long the current song was actually heard (seeking doesn't count).
+let heard = 0, lastTick = null, startedAt = null;
+function reportPlay() {
+  const t = player.current;
+  if (!t || startedAt === null || heard < 1) return;
+  const play = { track_id: t.id || null, video_id: t.video_id || null, title: t.title,
+    artist: t.artist || null, album: t.album || null, duration_s: Math.round(audio.duration) || null,
+    played_s: Math.round(heard), started_at: startedAt,
+    client_id: `pc-${Math.round(startedAt * 1000)}-${Math.random().toString(36).slice(2, 8)}` };
+  startedAt = null; heard = 0;
+  api("/api/plays", { method: "POST", body: { plays: [play] } }).catch(() => {});
+}
+window.addEventListener("beforeunload", reportPlay);
+
 function playAt(i) {
   if (i < 0 || i >= player.list.length) return;
+  reportPlay();
   const t = player.list[i];
   player.index = i; player.current = t; player.counted = false;
+  heard = 0; lastTick = null; startedAt = Date.now() / 1000;
   audio.src = media(t.stream_url);
   audio.play().catch((e) => toast(`Can't play: ${e.message}`));
   $("np-title").textContent = t.title;
@@ -557,17 +573,15 @@ $("btn-next").addEventListener("click", () => playAt(player.index + 1));
 $("btn-prev").addEventListener("click", () => (audio.currentTime > 3 ? (audio.currentTime = 0) : playAt(player.index - 1)));
 audio.addEventListener("play", () => ($("btn-play").textContent = "⏸"));
 audio.addEventListener("pause", () => ($("btn-play").textContent = "▶"));
-audio.addEventListener("ended", () => playAt(player.index + 1));
+audio.addEventListener("ended", () => { reportPlay(); playAt(player.index + 1); });
 audio.addEventListener("timeupdate", () => {
   const d = audio.duration || 0;
+  const now = audio.currentTime;
+  if (lastTick !== null && !audio.paused && now > lastTick && now - lastTick < 2) heard += now - lastTick;
+  lastTick = now;
   $("t-cur").textContent = dur(audio.currentTime) || "0:00";
   $("t-dur").textContent = dur(d) || "0:00";
   if (!seeking && d) $("seek").value = Math.round((audio.currentTime / d) * 1000);
-  // counts as played after half the song or 4 minutes (like most scrobblers)
-  if (!player.counted && player.current.id && d && (audio.currentTime > d / 2 || audio.currentTime > 240)) {
-    player.counted = true;
-    api(`/api/library/tracks/${player.current.id}/played`, { method: "POST" }).catch(() => {});
-  }
 });
 let seeking = false;
 $("seek").addEventListener("input", () => (seeking = true));

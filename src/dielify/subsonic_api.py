@@ -371,7 +371,10 @@ def scrobble(ctx: Ctx) -> dict:
     for i, raw in enumerate(ctx.p.all("id")):
         _, tid = parse_id(raw, "tr")
         when = int(times[i]) / 1000 if i < len(times) and times[i].isdigit() else None
-        ctx.lib.record_play(tid, when)
+        from . import history
+        if ctx.lib.track(tid) is not None:
+            history.record(ctx.lib, history.PlayIn(track_id=tid, started_at=when),
+                           f"Subsonic ({ctx.user.name})" if ctx.user else "Subsonic")
     return {}
 
 

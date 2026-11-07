@@ -89,6 +89,25 @@ CREATE TABLE IF NOT EXISTS downloads (
 );
 CREATE INDEX IF NOT EXISTS downloads_status ON downloads(status, not_before);
 
+-- Play history (history.py): one row per play or skip.
+CREATE TABLE IF NOT EXISTS plays (
+    id          INTEGER PRIMARY KEY,
+    profile     TEXT NOT NULL,
+    client_id   TEXT,                 -- set by the phone so a resend isn't counted twice
+    track_id    INTEGER,              -- library track, if it is (or later is) downloaded
+    video_id    TEXT,
+    title       TEXT NOT NULL,
+    artist      TEXT,
+    album       TEXT,
+    duration_s  INTEGER,
+    played_s    INTEGER,              -- how much was actually heard (NULL = unknown, counted)
+    counted     INTEGER NOT NULL,
+    started_at  REAL NOT NULL,
+    device      TEXT,
+    UNIQUE (profile, client_id)
+);
+CREATE INDEX IF NOT EXISTS plays_when ON plays(profile, started_at);
+
 -- Logins for our own API (auth.py): only a hash of each token is kept.
 CREATE TABLE IF NOT EXISTS device_tokens (
     id           INTEGER PRIMARY KEY,
