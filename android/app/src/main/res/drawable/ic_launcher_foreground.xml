@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A music note on the 108dp adaptive-icon canvas (safe zone is the middle 66dp). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M48,34 L72,29 L72,64 A8,7 0 1 1 66,57.3 L66,39 L54,41.5 L54,69 A8,7 0 1 1 48,62.3 Z" />
+</vector>

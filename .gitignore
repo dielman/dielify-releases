@@ -12,10 +12,10 @@ oauth.json
 *.db
 *.sqlite
 *.sqlite3
-data/
-music/
-library/
-logs/
+/data/
+/music/
+/library/
+/logs/
 
 # --- Audio (in case a library folder lands inside the repo) ---
 *.m4a
