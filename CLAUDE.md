@@ -128,7 +128,7 @@ src/dielify/
 | 3 | Discovery + request endpoints | Test client discovers, requests, watches progress, plays | **Done** 2026-11-07 (Josh's acceptance run: PASS) |
 | 4 | Desktop GUI + Windows integration | Non-technical user installs, signs in, plays offline, no terminal | **Done** 2026-11-07 — 0.4.3 installed + working on Josh's PC; clean-PC test waived by Josh |
 | 5 | Secure remote access | Phone plays over mobile data, no router ports open | **Done** 2026-11-07 (Josh played in Symfonium over mobile data via Tailscale) |
-| 6 | Android app | Find, request and listen on the road | In progress (branch `phase-6`) — step 1 works |
+| 6 | Android app | Find, request and listen on the road | **Done** 2026-11-08 — closed by Josh before the car test ("assume it works"); Android Auto untested |
 | 7 | Polish + multi-user install | Second PC, second profile, backups | Not started |
 
 ## Current status
@@ -239,7 +239,9 @@ src/dielify/
   ArtProvider serves covers as content://com.dielify.app.art/{track|album}/<id> (saved
   cover, else fetched once into cacheDir/art). Sideloaded apps only show in Android Auto
   with AA developer settings > "Unknown sources" ticked. Not yet tested in a car.
-- Next: Josh's car test, then Phase 6 acceptance on the road.
+- Closed 8 Nov 2026 by Josh ("lets assume it works and progress, any issues arising later
+  we can fix"). He turned on Android Auto "Unknown sources". Not verified: Android Auto
+  in a car, and the full "request a new song and hear it on the road" run.
 
 ## Open questions for Josh
 
