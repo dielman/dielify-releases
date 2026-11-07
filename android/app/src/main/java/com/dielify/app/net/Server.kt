@@ -1,10 +1,12 @@
 package com.dielify.app.net
 
 import android.content.Context
+import android.content.pm.PackageManager
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.Uri
 import android.os.Build
+import android.util.Log
 import com.dielify.app.Account
 import com.dielify.app.AccountStore
 import kotlinx.coroutines.Dispatchers
@@ -48,7 +50,7 @@ sealed interface Link {
  * (home first, so music doesn't go through Tailscale at home). When the phone's network
  * changes, or a call fails, it asks again.
  */
-class Server(context: Context, private val accounts: AccountStore) {
+class Server(private val context: Context, private val accounts: AccountStore) {
     @Volatile var account: Account? = accounts.load()
         private set
     @Volatile private var base: HttpUrl? = null
@@ -81,6 +83,11 @@ class Server(context: Context, private val accounts: AccountStore) {
         })
     }
 
+    /** Android 17+ blocks the home network unless the user allows "local network" access. */
+    fun hasLocalNetworkPermission(): Boolean =
+        Build.VERSION.SDK_INT < 37 ||
+            context.checkSelfPermission(LOCAL_NETWORK) == PackageManager.PERMISSION_GRANTED
+
     /** Make the next call find the PC again (e.g. after leaving home Wi-Fi). */
     fun forgetAddress() {
         base = null
@@ -93,7 +100,8 @@ class Server(context: Context, private val accounts: AccountStore) {
             probeClient.newCall(Request.Builder().url(url.resolve("api/health")!!).build()).execute().use {
                 it.isSuccessful && it.body.string().contains("\"status\"")
             }
-        } catch (_: IOException) {
+        } catch (e: IOException) {
+            Log.w(TAG, "No answer from ${url.host}:${url.port}: $e")
             false
         }
     }
@@ -106,6 +114,7 @@ class Server(context: Context, private val accounts: AccountStore) {
         val found = urls.zip(answered).firstOrNull { it.second }?.first
         if (found == null) {
             _link.value = Link.Down
+            if (!hasLocalNetworkPermission()) throw ApiError(NO_PERMISSION)
             throw ApiError(
                 "Can't reach your PC. Check that Dielify is running on it, and that the " +
                     "phone is on home Wi-Fi or connected to Tailscale."
@@ -216,6 +225,10 @@ class Server(context: Context, private val accounts: AccountStore) {
 
     companion object {
         const val MEDIA_SCHEME = "dielify"
+        const val LOCAL_NETWORK = "android.permission.ACCESS_LOCAL_NETWORK"
+        const val NO_PERMISSION = "Dielify isn't allowed to use your home network. Allow it: " +
+            "Android Settings > Apps > Dielify > Permissions > Nearby devices (local network)."
+        private const val TAG = "Dielify"
         const val DEFAULT_PORT = 4747
         private val JSON_TYPE = "application/json".toMediaType()
         val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
