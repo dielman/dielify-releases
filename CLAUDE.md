@@ -193,7 +193,7 @@ src/dielify/
   Found + fixed in source (not yet rebuilt): Dielify.exe vs dielify.exe clash.
 - Updater wired up and tested (`updater.py`, Settings → About → Updates); releases
   via `tools\release.py` to github.com/dielman/dielify-releases (gh signed in as
-  dielman; signing key in %LOCALAPPDATA%\Dielify-release, backed up by Josh).
+  dielman; signing key now in E:\Legit\Code\dielify-release-keys, see Phase 7).
   Published 0.4.0; 0.4.2 is the first one installed copies should update to.
 - Josh installed the app on his PC (route B, not Windows Sandbox). Found and fixed:
   1. 500s on every screen after in-app sign-in: cause never captured (windowed app
@@ -252,8 +252,10 @@ src/dielify/
   settings + DPAPI login files, keep 14, Settings > Backups, `dielify-cli backup
   now|restore`, restore takes a non-pruning safety copy first).
 - Phone release: `tools/release.py android-keygen|android-export-key|android-import-key|
-  android-build`; keystore + DPAPI'd password in %LOCALAPPDATA%\Dielify-release (Claude's
-  redirected copy, like the PC signing key). Release build 4 MB (R8), test builds are
+  android-build`; keystore + DPAPI'd password in `E:\Legit\Code\dielify-release-keys` (beside the
+  repo, not in it). Both release keys were first made under %LOCALAPPDATA% from Claude's
+  shell, i.e. only in the redirected copy, invisible to Josh's terminals; moved 8 Nov
+  (`release.py check-keys` unlocks both from Josh's own terminal too). Release build 4 MB (R8), test builds are
   `com.dielify.app.debug`. App checks the GitHub manifest's "android" entry daily,
   verifies SHA-256, hands the APK to Android's installer. `publish` uploads the APK too.
 - Not yet: Josh's install of PC 0.6.0 + the release phone app, Android key backup,

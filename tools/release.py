@@ -42,7 +42,11 @@ from Cryptodome.Signature import eddsa  # noqa: E402
 from dielify import __version__  # noqa: E402
 from dielify.credstore import _dpapi  # noqa: E402
 
-KEY_DIR = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local") / "Dielify-release"
+# Beside the project (never inside it, so never in git), and NOT under AppData: the Claude
+# desktop app redirects AppData for programs it starts, so keys made there were invisible
+# to Josh's own terminal. DIELIFY_RELEASE_DIR overrides.
+KEY_DIR = Path(os.environ.get("DIELIFY_RELEASE_DIR") or ROOT.parent / "dielify-release-keys")
+OLD_KEY_DIR = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local") / "Dielify-release"
 KEY_FILE = KEY_DIR / "signing-key.dpapi"
 ENTROPY = b"dielify-release-signing-key"
 CONFIG = ROOT / "src" / "dielify" / "update_config.py"
@@ -51,6 +55,30 @@ ANDROID_PASSWORD = KEY_DIR / "android-keystore-password.dpapi"
 ANDROID_ENTROPY = b"dielify-android-keystore"
 ANDROID_DIR = ROOT / "android"
 STUDIO_JBR = Path(r"C:\Program Files\Android\Android Studio\jbr")
+
+
+def _move_old_keys() -> None:
+    """One-time move from the old AppData location."""
+    if OLD_KEY_DIR.is_dir() and not (KEY_DIR.is_dir() and any(KEY_DIR.iterdir())):
+        KEY_DIR.mkdir(parents=True, exist_ok=True)
+        for f in OLD_KEY_DIR.iterdir():
+            if f.is_file() and not (KEY_DIR / f.name).exists():
+                shutil.copy2(f, KEY_DIR / f.name)
+        print(f"Moved the release keys from {OLD_KEY_DIR} to {KEY_DIR}")
+
+
+def cmd_check_keys(args) -> None:
+    """Can this Windows user, in this window, unlock the keys?"""
+    _move_old_keys()
+    print(f"Keys folder: {KEY_DIR}")
+    for label, fn in (("PC update-signing key", _load_key), ("Android signing key", _android_password)):
+        try:
+            fn()
+            print(f"  {label}: OK")
+        except SystemExit as e:
+            print(f"  {label}: missing ({e})")
+        except Exception as e:
+            print(f"  {label}: CAN'T UNLOCK ({type(e).__name__}: {e})")
 
 
 def _set_config(name: str, value: str) -> None:
@@ -300,7 +328,10 @@ def main() -> None:
     ai.add_argument("file")
     ai.set_defaults(fn=cmd_android_import_key)
     sub.add_parser("android-build").set_defaults(fn=cmd_android_build)
+    sub.add_parser("check-keys", help="check the release keys can be unlocked here").set_defaults(fn=cmd_check_keys)
     args = p.parse_args()
+    if args.fn is not cmd_check_keys:
+        _move_old_keys()
     args.fn(args)
 
 
