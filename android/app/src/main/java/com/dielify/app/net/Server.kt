@@ -219,6 +219,31 @@ class Server(private val context: Context, private val accounts: AccountStore) {
     suspend fun search(q: String): LibrarySearch =
         get("api/library/search?limit=50&q=" + Uri.encode(q))
 
+    suspend fun track(id: Long): Track = get("api/library/tracks/$id")
+
+    // YouTube Music (these ask YouTube through the PC, so they need the PC to be online)
+    suspend fun home(): HomeFeed = get("api/discover/home?shelves=10")
+    suspend fun charts(): Charts = get("api/discover/charts")
+    suspend fun similar(videoId: String): List<Item> =
+        get<ItemList>("api/discover/similar/" + Uri.encode(videoId) + "?limit=40").items
+    suspend fun ytSearch(q: String, type: String): List<Item> =
+        get<ItemList>("api/yt/search?limit=40&type=$type&q=" + Uri.encode(q)).items
+    suspend fun ytAlbum(browseId: String): YtCollection = get("api/yt/album/" + Uri.encode(browseId))
+    suspend fun ytPlaylist(playlistId: String): YtCollection = get("api/yt/playlist/" + Uri.encode(playlistId))
+
+    // Downloads (onto the PC)
+    suspend fun requestDownload(item: Item): DownloadList {
+        val type = if (item.type == "video") "video" else item.type
+        val body = json.encodeToString(DownloadRequest.serializer(),
+            DownloadRequest(type, item.id, item.title, item.artists, item.album))
+        return json.decodeFromString(send("POST", "api/downloads", body))
+    }
+    suspend fun activeDownloads(): DownloadList = get("api/downloads?active=true&limit=300")
+    suspend fun finishedDownloads(): DownloadList = get("api/downloads?finished=true&limit=60")
+    suspend fun cancelDownload(id: Long) {
+        send("DELETE", "api/downloads/$id")
+    }
+
     suspend fun played(trackId: Long) {
         send("POST", "api/library/tracks/$trackId/played")
     }

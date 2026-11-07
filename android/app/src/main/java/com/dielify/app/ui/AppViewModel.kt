@@ -10,21 +10,32 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.dielify.app.Account
 import com.dielify.app.dielify
+import com.dielify.app.net.ApiError
+import com.dielify.app.net.Item
 import com.dielify.app.net.Track
 import com.dielify.app.playback.MediaItems
 import com.dielify.app.playback.PlaybackService
 import com.google.common.util.concurrent.MoreExecutors
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
+enum class Tab(val label: String) { Library("Library"), Discover("Discover"), Search("Search"), Downloads("Downloads") }
+
 sealed interface Screen {
-    data object Library : Screen
+    data object Library : Screen    // the tabs (Library / Discover / Search / Downloads)
     data class AlbumPage(val id: Long, val name: String) : Screen
     data class ArtistPage(val id: Long, val name: String) : Screen
     data object NowPlaying : Screen
     data object Settings : Screen
+    data class YtAlbumPage(val browseId: String, val name: String) : Screen
+    data class YtPlaylistPage(val playlistId: String, val name: String) : Screen
+    data class SimilarPage(val videoId: String, val name: String) : Screen
 }
 
 data class PlayerUi(
@@ -54,6 +65,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _player = MutableStateFlow(PlayerUi())
     val player: StateFlow<PlayerUi> = _player.asStateFlow()
+
+    private val _tab = MutableStateFlow(Tab.Library)
+    val tab: StateFlow<Tab> = _tab.asStateFlow()
+
+    /** Short messages shown at the bottom ("Added to downloads", errors). */
+    val messages = MutableSharedFlow<String>(extraBufferCapacity = 4)
+
+    /** Downloads waiting or running on the PC (for the badge on the Downloads tab). */
+    private val _activeDownloads = MutableStateFlow(0)
+    val activeDownloads: StateFlow<Int> = _activeDownloads.asStateFlow()
 
     var controller: MediaController? = null
         private set
@@ -100,10 +121,70 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         _stack.value = _stack.value + screen
     }
 
+    fun selectTab(t: Tab) {
+        _tab.value = t
+        _stack.value = listOf(Screen.Library)
+    }
+
     fun back(): Boolean {
         if (_stack.value.size <= 1) return false
         _stack.value = _stack.value.dropLast(1)
         return true
+    }
+
+    // --- YouTube Music: open, download, play ----------------------------------------------
+
+    /** Tap on a YouTube item: songs already downloaded play, other songs get downloaded,
+     *  albums/playlists open, artists search for their songs. */
+    fun openItem(item: Item) {
+        when {
+            item.isSong && item.libraryTrackId != null -> playLibrary(listOf(item.libraryTrackId))
+            item.isSong -> download(item)
+            item.type == "album" -> open(Screen.YtAlbumPage(item.id, item.title))
+            item.type == "playlist" -> open(Screen.YtPlaylistPage(item.id, item.title))
+            item.type == "artist" -> { searchRequest.value = item.title; selectTab(Tab.Search) }
+        }
+    }
+
+    /** Set by "artist" taps so the Search tab opens with that name filled in. */
+    val searchRequest = MutableStateFlow<String?>(null)
+
+    fun download(item: Item) = viewModelScope.launch {
+        try {
+            val jobs = server.requestDownload(item).downloads
+            val already = jobs.count { it.status == "done" }
+            val queued = jobs.size - already
+            messages.tryEmit(
+                when {
+                    queued == 0 -> "Already in your library"
+                    item.isSong -> "Downloading \"${item.title}\" on the PC"
+                    else -> "$queued ${if (queued == 1) "song" else "songs"} added to downloads" +
+                        if (already > 0) " ($already already in your library)" else ""
+                }
+            )
+            refreshDownloadCount()
+        } catch (e: ApiError) {
+            if (e.code == 401) tokenRejected()
+            messages.tryEmit(e.message ?: "Couldn't start the download")
+        }
+    }
+
+    /** Play downloaded songs by library id, starting with the first. */
+    fun playLibrary(trackIds: List<Long>, startIndex: Int = 0) = viewModelScope.launch {
+        try {
+            val tracks = coroutineScope { trackIds.map { async { server.track(it) } }.awaitAll() }
+            play(tracks, startIndex)
+        } catch (e: ApiError) {
+            messages.tryEmit(e.message ?: "Couldn't play that")
+        }
+    }
+
+    suspend fun refreshDownloadCount() {
+        runCatching { server.activeDownloads() }.onSuccess { _activeDownloads.value = it.activeTotal ?: 0 }
+    }
+
+    fun setDownloadCount(n: Int) {
+        _activeDownloads.value = n
     }
 
     // --- account -----------------------------------------------------------------------------

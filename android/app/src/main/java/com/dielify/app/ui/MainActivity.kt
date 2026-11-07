@@ -14,7 +14,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.material3.SnackbarHostState
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dielify.app.net.Server
@@ -50,14 +57,32 @@ fun App(vm: AppViewModel) {
         return
     }
     val stack by vm.stack.collectAsStateWithLifecycle()
-    BackHandler(enabled = stack.size > 1) { vm.back() }
-    Box(Modifier.fillMaxSize()) {
+    val tab by vm.tab.collectAsStateWithLifecycle()
+    BackHandler(enabled = stack.size > 1 || tab != Tab.Library) {
+        if (!vm.back()) vm.selectTab(Tab.Library)
+    }
+    val snackbar = remember { SnackbarHostState() }
+    LaunchedEffect(Unit) { vm.messages.collect { snackbar.showSnackbar(it) } }
+    // Keep the Downloads badge current while the app is on screen.
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(lifecycle) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (true) {
+                vm.refreshDownloadCount()
+                delay(if (vm.activeDownloads.value > 0) 3_000 else 15_000)
+            }
+        }
+    }
+    CompositionLocalProvider(LocalSnackbar provides snackbar) { Box(Modifier.fillMaxSize()) {
         when (val screen = stack.last()) {
-            Screen.Library -> LibraryScreen(vm)
+            Screen.Library -> RootScreen(vm)
             is Screen.AlbumPage -> AlbumScreen(vm, screen)
             is Screen.ArtistPage -> ArtistScreen(vm, screen)
             Screen.NowPlaying -> NowPlayingScreen(vm)
             Screen.Settings -> SettingsScreen(vm)
+            is Screen.YtAlbumPage -> YtCollectionScreen(vm, screen.name, screen.browseId) { vm.server.ytAlbum(screen.browseId) }
+            is Screen.YtPlaylistPage -> YtCollectionScreen(vm, screen.name, screen.playlistId) { vm.server.ytPlaylist(screen.playlistId) }
+            is Screen.SimilarPage -> SimilarScreen(vm, screen)
         }
-    }
+    } }
 }

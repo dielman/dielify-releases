@@ -128,7 +128,7 @@ src/dielify/
 | 3 | Discovery + request endpoints | Test client discovers, requests, watches progress, plays | **Done** 2026-11-07 (Josh's acceptance run: PASS) |
 | 4 | Desktop GUI + Windows integration | Non-technical user installs, signs in, plays offline, no terminal | **Done** 2026-11-07 — 0.4.3 installed + working on Josh's PC; clean-PC test waived by Josh |
 | 5 | Secure remote access | Phone plays over mobile data, no router ports open | **Done** 2026-11-07 (Josh played in Symfonium over mobile data via Tailscale) |
-| 6 | Android app | Find, request and listen on the road | Next — waiting for Josh's go-ahead |
+| 6 | Android app | Find, request and listen on the road | In progress (branch `phase-6`) — step 1 works |
 | 7 | Polish + multi-user install | Second PC, second profile, backups | Not started |
 
 ## Current status
@@ -211,6 +211,24 @@ src/dielify/
   test (Windows Sandbox suggested) and the first in-app update (0.4.1 -> 0.4.2).
 - Size note: each update re-downloads ~172 MB (FFmpeg full build is 217 MB per exe);
   a slimmer FFmpeg build would need Josh's OK to download.
+
+**Phase 6 — in progress** (started 8 Nov 2026, branch `phase-6`):
+- Toolchain: Android Studio (JBR = Java 25) at C:\Program Files\Android\Android Studio,
+  SDK at `E:\Android\Sdk` (kept off AppData on purpose), Gradle 9.9.0 wrapper, AGP 9.5.1,
+  Kotlin 2.4.21, Compose BOM 2026.09.00, Media3 1.11.1, OkHttp 5, Coil 3. compile/target
+  SDK 37, minSdk 29. Build from Claude's shell:
+  `JAVA_HOME="/c/Program Files/Android/Android Studio/jbr" ./gradlew assembleDebug` in
+  `android/`, install with `E:\Android\Sdk\platform-toolsdb.exe install -r ...`.
+  Josh's Pixel 9 Pro (Android 17) is authorised for USB debugging.
+- Step 1 done (Josh: "It plays"): sign in with a phone login (device token encrypted by
+  the Android Keystore, backups off), auto-pick home vs Tailscale address via
+  /api/health, library albums/artists/recent/search, streaming via `dielify://server/...`
+  URIs resolved at fetch time, background playback + lock-screen controls (Media3).
+- **Android 17 fact:** apps targeting SDK 37 need the runtime permission
+  `ACCESS_LOCAL_NETWORK` (shown as "Nearby devices") to reach LAN addresses; without it
+  connections fail silently. Symfonium (older target) isn't affected.
+- Next: discovery + YouTube search + tap-to-download + downloads queue; then phone-side
+  offline saving; then Android Auto.
 
 ## Open questions for Josh
 

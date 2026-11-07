@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -23,11 +24,20 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Explore
+import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Shuffle
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -44,6 +54,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -65,6 +76,7 @@ fun Page(
     vm: AppViewModel,
     title: String,
     back: Boolean = true,
+    tabs: Boolean = false,
     actions: @Composable () -> Unit = {},
     content: @Composable (PaddingValues) -> Unit,
 ) {
@@ -80,9 +92,51 @@ fun Page(
                 actions = { actions() },
             )
         },
-        bottomBar = { MiniPlayer(vm) },
+        bottomBar = {
+            Column {
+                MiniPlayer(vm)
+                if (tabs) TabBar(vm) else Spacer(Modifier.navigationBarsPadding())
+            }
+        },
+        snackbarHost = { SnackbarHost(LocalSnackbar.current) },
         content = content,
     )
+}
+
+val LocalSnackbar = staticCompositionLocalOf { SnackbarHostState() }
+
+@Composable
+private fun TabBar(vm: AppViewModel) {
+    val tab by vm.tab.collectAsStateWithLifecycle()
+    val active by vm.activeDownloads.collectAsStateWithLifecycle()
+    NavigationBar {
+        Tab.entries.forEach { t ->
+            NavigationBarItem(
+                selected = tab == t,
+                onClick = { vm.selectTab(t) },
+                label = { Text(t.label) },
+                icon = {
+                    val icon = when (t) {
+                        Tab.Library -> Icons.Filled.LibraryMusic
+                        Tab.Discover -> Icons.Filled.Explore
+                        Tab.Search -> Icons.Filled.Search
+                        Tab.Downloads -> Icons.Filled.Download
+                    }
+                    if (t == Tab.Downloads && active > 0) {
+                        BadgedBox(badge = { Badge { Text(if (active > 999) "999+" else active.toString()) } }) {
+                            Icon(icon, null)
+                        }
+                    } else Icon(icon, null)
+                },
+            )
+        }
+    }
+}
+
+@Composable
+fun TopActions(vm: AppViewModel) {
+    LinkLabel(vm)
+    IconButton(onClick = { vm.open(Screen.Settings) }) { Icon(Icons.Filled.Settings, "Settings") }
 }
 
 @Composable
@@ -105,12 +159,11 @@ fun LibraryScreen(vm: AppViewModel) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var searching by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
-    Page(vm, "Library", back = false, actions = {
-        LinkLabel(vm)
+    Page(vm, "Library", back = false, tabs = true, actions = {
         IconButton(onClick = { searching = !searching; if (!searching) query = "" }) {
-            Icon(if (searching) Icons.Filled.Close else Icons.Filled.Search, "Search")
+            Icon(if (searching) Icons.Filled.Close else Icons.Filled.Search, "Search your library")
         }
-        IconButton(onClick = { vm.open(Screen.Settings) }) { Icon(Icons.Filled.Settings, "Settings") }
+        TopActions(vm)
     }) { pad ->
         Column(Modifier.padding(pad).fillMaxSize()) {
             if (searching) {
