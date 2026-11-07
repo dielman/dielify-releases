@@ -65,7 +65,9 @@ def set_password(name: str, profile: str | None = None, password: str | None = N
 def get_user(name: str) -> ServerUser | None:
     try:
         data = credstore.load(safe_name(name), STORE) if name else None
-    except credstore.CredentialError:
+    except credstore.CredentialError as e:
+        import logging
+        logging.getLogger(__name__).warning("Can't read the phone login file of %r: %s", name, e)
         return None
     if not data or safe_name(name) != name:
         return None
