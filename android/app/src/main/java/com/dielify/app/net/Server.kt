@@ -135,6 +135,15 @@ class Server(private val context: Context, private val accounts: AccountStore) {
         current()
     }
 
+    /** Download a server path into a file (blocking; call off the main thread). */
+    fun fetchTo(path: String, into: java.io.File) {
+        val url = url(path) ?: throw IOException("Not signed in")
+        http.newCall(Request.Builder().url(url).build()).execute().use { r ->
+            if (!r.isSuccessful) throw IOException("The PC answered HTTP ${r.code}")
+            into.outputStream().use { out -> r.body.byteStream().copyTo(out) }
+        }
+    }
+
     /** Absolute URL for a server path like "/api/library/albums/3/cover", for the UI. */
     fun url(path: String): String? {
         val b = base ?: account?.addresses?.firstNotNullOfOrNull(::parseAddress) ?: return null

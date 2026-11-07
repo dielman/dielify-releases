@@ -233,7 +233,13 @@ src/dielify/
   filesDir/saved + index.json); player and covers use the phone copy first; Library
   "On phone" tab, shown automatically when the PC can't be reached. Saving verified on
   the Pixel; offline playback not yet tested by Josh.
-- Next: Android Auto / lock-screen polish; then Phase 6 acceptance on the road.
+- Step 3 done (Josh: "It plays offline").
+- Step 4 built: PlaybackService is a MediaLibraryService (browse tree Recently added /
+  Albums / On this phone; a song tapped in the car plays on through its album);
+  ArtProvider serves covers as content://com.dielify.app.art/{track|album}/<id> (saved
+  cover, else fetched once into cacheDir/art). Sideloaded apps only show in Android Auto
+  with AA developer settings > "Unknown sources" ticked. Not yet tested in a car.
+- Next: Josh's car test, then Phase 6 acceptance on the road.
 
 ## Open questions for Josh
 

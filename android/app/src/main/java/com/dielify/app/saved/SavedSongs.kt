@@ -39,6 +39,15 @@ data class SavedSong(
     val savedAt: Long = 0,
 )
 
+/** Saved songs grouped into albums (for the "On phone" screens and Android Auto). */
+data class SavedAlbum(val album: String, val artist: String, val tracks: List<Track>)
+
+fun groupAlbums(songs: Collection<SavedSong>): List<SavedAlbum> =
+    songs.map { it.track }
+        .groupBy { (it.albumArtist.ifEmpty { it.artist }) to it.album }
+        .map { (k, ts) -> SavedAlbum(k.second, k.first, ts.sortedWith(compareBy({ it.trackNo ?: 999 }, { it.title }))) }
+        .sortedWith(compareBy({ it.artist.lowercase() }, { it.album.lowercase() }))
+
 /**
  * Songs saved on the phone, for listening with no connection to the PC.
  *

@@ -361,13 +361,7 @@ fun SaveButton(vm: AppViewModel, tracks: List<Track>) {
 
 // --- songs saved on the phone (works with no connection to the PC) ------------------------------
 
-private data class SavedAlbum(val album: String, val artist: String, val tracks: List<Track>)
-
-private fun savedAlbums(songs: Collection<com.dielify.app.saved.SavedSong>): List<SavedAlbum> =
-    songs.map { it.track }
-        .groupBy { (it.albumArtist.ifEmpty { it.artist }) to it.album }
-        .map { (k, ts) -> SavedAlbum(k.second, k.first, ts.sortedWith(compareBy({ it.trackNo ?: 999 }, { it.title }))) }
-        .sortedWith(compareBy({ it.artist.lowercase() }, { it.album.lowercase() }))
+private fun savedAlbums(songs: Collection<com.dielify.app.saved.SavedSong>) = com.dielify.app.saved.groupAlbums(songs)
 
 @Composable
 private fun SavedAlbums(vm: AppViewModel) {

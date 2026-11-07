@@ -37,8 +37,24 @@
             android:exported="true"
             android:foregroundServiceType="mediaPlayback">
             <intent-filter>
+                <action android:name="androidx.media3.session.MediaLibraryService" />
                 <action android:name="androidx.media3.session.MediaSessionService" />
+                <action android:name="android.media.browse.MediaBrowserService" />
             </intent-filter>
         </service>
+
+        <!-- Cover pictures for Android Auto / system media controls (read-only, images only). -->
+        <provider
+            android:name=".playback.ArtProvider"
+            android:authorities="com.dielify.app.art"
+            android:exported="true" />
+
+        <!-- Android Auto: this is a media app. -->
+        <meta-data
+            android:name="com.google.android.gms.car.application"
+            android:resource="@xml/automotive_app_desc" />
+        <meta-data
+            android:name="com.google.android.gms.car.notification.SmallIcon"
+            android:resource="@drawable/ic_notification" />
     </application>
 </manifest>
