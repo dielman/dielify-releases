@@ -481,7 +481,8 @@ class YTMusicAdapter:
             t.year = t.year or raw.get("year")
         return info, tracks
 
-    def playlist(self, playlist_id: str, limit: int = 200) -> tuple[YTItem, list[YTItem]]:
+    def playlist(self, playlist_id: str, limit: int = 5000) -> tuple[YTItem, list[YTItem]]:
+        # ytmusicapi fetches pages of 100 until it has `limit`: ask for (practically) all
         raw = self._call("Loading the playlist", self._yt.get_playlist, playlist_id, limit=limit)
         info = to_item({**raw, "playlistId": playlist_id}) or YTItem("playlist", playlist_id, "")
         tracks = _items(t for t in raw.get("tracks") or [] if t.get("isAvailable", True))

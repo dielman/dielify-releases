@@ -325,7 +325,7 @@ def yt_album(browse_id: str, s: Session = Depends(session)) -> Collection:
 
 
 @router.get("/yt/playlist/{playlist_id}", response_model=Collection, tags=["youtube"])
-def yt_playlist(playlist_id: str, limit: int = Query(200, ge=1, le=1000),
+def yt_playlist(playlist_id: str, limit: int = Query(5000, ge=1, le=5000),
                 s: Session = Depends(session)) -> Collection:
     info, tracks = youtube.call(s.user.profile, "playlist", playlist_id, limit)
     return Collection(info=_items([info], s.lib)[0], tracks=_items(tracks, s.lib))

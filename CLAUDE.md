@@ -36,6 +36,15 @@ The full brief is `docs/HANDOFF.md`.
 - Explain Windows setup plainly.
 - Flag security concerns directly; never quietly work around them.
 - Never commit secrets, the database, or music. Never log cookies or tokens.
+- **AppData is redirected for anything started from the Claude desktop app** (it's an
+  MSIX package). Writes under `%LOCALAPPDATA%`/`%APPDATA%` from Claude's shell, and
+  from programs Claude starts, land in
+  `%LOCALAPPDATA%\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Local\...`, and Claude's reads
+  see that copy first. Dielify started normally (Start menu, installer) uses the real
+  folder, which Claude can't see. So: never "fix" Josh's data from Claude's shell, never
+  judge the installed app by files Claude can read, don't start the installed app
+  yourself for testing. `E:\` is not redirected. To see the real app's state, ask Josh
+  (Settings > About shows data folder + log file; errors show their message on screen).
 - In every instruction for Josh, list what he needs **before** the step: which
   password, which terminal (admin or not), whether `.venv` must be active (prefer
   `.venv\Scripts\python` / `.venv\Scripts\dielify` so it doesn't matter), which
