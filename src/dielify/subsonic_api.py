@@ -166,7 +166,7 @@ def _to_xml(parent: ET.Element, name: str, value) -> None:
 
 
 def render(params: Params, payload: dict, status: str = "ok") -> Response:
-    envelope = {"status": status, "version": API_VERSION, "type": "ymp",
+    envelope = {"status": status, "version": API_VERSION, "type": "dielify",
                 "serverVersion": __version__, "openSubsonic": True, **payload}
     if params.get("f", "xml").startswith("json"):
         return JSONResponse({"subsonic-response": envelope})
@@ -491,7 +491,7 @@ async def dispatch(method: str, request: Request) -> Response:
     handler = HANDLERS.get(method)
     try:
         if handler is None:
-            raise ApiError(GENERIC, f"Not implemented in ymp yet: {method}")
+            raise ApiError(GENERIC, f"Not implemented in Dielify yet: {method}")
         client = request.client.host if request.client else "?"
         # Database, DPAPI and file work happen off the event loop.
         result = await run_in_threadpool(_run, handler, method, params, client)

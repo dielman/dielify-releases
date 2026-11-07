@@ -7,11 +7,11 @@ import pytest
 from fastapi.testclient import TestClient
 
 from conftest import FakeAdapter, needs_ffmpeg
-from ymp import auth, settings, subsonic_api
-from ymp.downloader import download_track
-from ymp.library import Library
-from ymp.server import bind_addresses, create_app
-from ymp.yt_adapter import TrackInfo
+from dielify import auth, settings, subsonic_api
+from dielify.downloader import download_track
+from dielify.library import Library
+from dielify.server import bind_addresses, create_app
+from dielify.yt_adapter import TrackInfo
 
 pytestmark = needs_ffmpeg
 
@@ -19,7 +19,7 @@ pytestmark = needs_ffmpeg
 @pytest.fixture(autouse=True)
 def dev_store(monkeypatch):
     # Server users go through the credential store; DPAPI on Windows, dev store elsewhere.
-    monkeypatch.setenv("YMP_INSECURE_DEV_STORE", "1")
+    monkeypatch.setenv("DIELIFY_INSECURE_DEV_STORE", "1")
     subsonic_api.lockout = auth.Lockout()
     subsonic_api._cover_bytes.cache_clear()
 
@@ -189,8 +189,8 @@ def test_xml_format_and_form_post(client):
 
 
 def test_unknown_method_and_logs_without_secrets(client, caplog):
-    caplog.set_level("INFO", logger="ymp.server")
-    caplog.set_level("INFO", logger="ymp.subsonic_api")
+    caplog.set_level("INFO", logger="dielify.server")
+    caplog.set_level("INFO", logger="dielify.subsonic_api")
     r = call(client, "createPlaylist", name="x").json()["subsonic-response"]
     assert r["status"] == "failed" and "Not implemented" in r["error"]["message"]
     assert "/rest/createPlaylist.view" in caplog.text and "name='x'" in caplog.text

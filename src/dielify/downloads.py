@@ -18,7 +18,7 @@ from . import credstore
 from . import settings as settings_mod
 from .downloader import download_track
 from .library import Library, connect
-from .yt_adapter import NotSignedIn, YTItem, YTMusicAdapter
+from .yt_adapter import NotSignedIn, Offline, YTItem, YTMusicAdapter
 
 log = logging.getLogger(__name__)
 
@@ -38,7 +38,7 @@ def _default_adapter(profile: str) -> YTMusicAdapter:
     auth = credstore.load(profile)
     if auth is None:
         raise NotSignedIn(f"Profile '{profile}' is not signed in to YouTube Music on the PC "
-                          "(run: ymp auth login)")
+                          "(run: dielify auth login)")
     return YTMusicAdapter(auth=auth, request_delay_s=settings_mod.load().request_delay_s)
 
 
@@ -58,7 +58,7 @@ class DownloadQueue:
     def start(self) -> None:
         self._recover()
         self._stop.clear()
-        self._thread = threading.Thread(target=self._run, name="ymp-downloads", daemon=True)
+        self._thread = threading.Thread(target=self._run, name="dielify-downloads", daemon=True)
         self._thread.start()
 
     def stop(self, timeout: float = 10) -> None:
@@ -76,8 +76,17 @@ class DownloadQueue:
                          "WHERE status IN ('downloading', 'processing')", (time.time(),))
         s = settings_mod.load()
         for r in rows:  # half-finished temp folders from the interrupted downloads
-            for tmp in s.profile_library(r["profile"]).glob(".ymp-dl-*"):
+            for tmp in s.profile_library(r["profile"]).glob(".dielify-dl-*"):
                 shutil.rmtree(tmp, ignore_errors=True)
+
+    def signin_changed(self, profile: str) -> None:
+        """A new YouTube sign-in was saved: use it, and retry waiting jobs now."""
+        self._adapters.pop(profile, None)
+        self._signin_ok.pop(profile, None)
+        with connect() as conn:
+            conn.execute("UPDATE downloads SET not_before = 0 WHERE profile = ? AND status = 'queued'",
+                         (profile,))
+        self._wake.set()
 
     # --- requests ------------------------------------------------------------------
 
@@ -193,7 +202,7 @@ class DownloadQueue:
     def _confirm_signin(self, profile: str):
         """The profile's adapter, after checking (at most every SIGNIN_CHECK_S) that
         YouTube still accepts the sign-in. A dead sign-in doesn't fail downloads; it
-        would silently drop Premium quality, so jobs wait for `ymp auth login` instead."""
+        would silently drop Premium quality, so jobs wait for `dielify auth login` instead."""
         adapter = self._adapter(profile)
         check = getattr(adapter, "account_name", None)
         if check and time.time() - self._signin_ok.get(profile, 0) > SIGNIN_CHECK_S:
@@ -203,13 +212,17 @@ class DownloadQueue:
 
     def _process(self, job: dict) -> None:
         job_id, profile = job["id"], job["profile"]
+        if settings_mod.load().offline:
+            self._set(job_id, status="queued", not_before=time.time() + SIGNIN_WAIT_S,
+                      error="Waiting: offline mode is on. Turn it off to download.")
+            return
         try:
             adapter = self._confirm_signin(profile)
         except NotSignedIn as e:
             self._adapters.pop(profile, None)  # pick up a fresh sign-in next time
             self._signin_ok.pop(profile, None)
             self._set(job_id, status="queued", not_before=time.time() + SIGNIN_WAIT_S,
-                      error=f"Waiting for YouTube sign-in on the PC (run: ymp auth login). {e}")
+                      error=f"Waiting for YouTube sign-in on the PC (run: dielify auth login). {e}")
             log.warning("Profile %s: YouTube sign-in not working; downloads wait. %s", profile, e)
             return
         attempt = job["attempts"] + 1
@@ -227,7 +240,11 @@ class DownloadQueue:
                       title=res.info.title, artist=res.info.artist, album=res.info.album)
             log.info("Done %s -> track %s", job["video_id"], track_id)
         except Exception as e:
-            if job_id in self._cancel or isinstance(e, _Cancelled) or "_Cancelled" in repr(e):
+            if isinstance(e, Offline):  # switched offline mid-download: wait, don't count it
+                self._set(job_id, status="queued", attempts=attempt - 1, progress=0.0,
+                          not_before=time.time() + SIGNIN_WAIT_S,
+                          error="Waiting: offline mode is on. Turn it off to download.")
+            elif job_id in self._cancel or isinstance(e, _Cancelled) or "_Cancelled" in repr(e):
                 self._set(job_id, status="cancelled", error=None)
                 log.info("Cancelled %s", job["video_id"])
             elif isinstance(e, NotSignedIn):  # sign-in died mid-download: wait, don't count it
@@ -235,7 +252,7 @@ class DownloadQueue:
                 self._signin_ok.pop(profile, None)
                 self._set(job_id, status="queued", attempts=attempt - 1, progress=0.0,
                           not_before=time.time() + SIGNIN_WAIT_S,
-                          error=f"Waiting for YouTube sign-in on the PC (run: ymp auth login). {e}")
+                          error=f"Waiting for YouTube sign-in on the PC (run: dielify auth login). {e}")
             elif attempt < MAX_ATTEMPTS:
                 delay = RETRY_DELAYS_S[min(attempt - 1, len(RETRY_DELAYS_S) - 1)]
                 self._set(job_id, status="queued", progress=0.0, not_before=time.time() + delay,

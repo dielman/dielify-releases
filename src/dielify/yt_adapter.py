@@ -1,7 +1,7 @@
 """The ONLY module that talks to YouTube.
 
 ytmusicapi (catalogue, search, metadata) and yt-dlp (audio) both track YouTube's
-private APIs and break from time to time. Everything else in ymp depends on the
+private APIs and break from time to time. Everything else in Dielify depends on the
 small interface here, so a fix after a YouTube change should only touch this file
 (plus a version bump in pyproject.toml).
 """
@@ -34,6 +34,17 @@ class YouTubeError(Exception):
 
 class NotSignedIn(YouTubeError):
     pass
+
+
+class Offline(YouTubeError):
+    """Offline mode is on: Dielify doesn't contact YouTube at all."""
+
+
+def _check_online() -> None:
+    from .settings import load
+    if load().offline:
+        raise Offline("Offline mode is on, so Dielify isn't contacting YouTube. "
+                      "Your downloaded music still plays.")
 
 
 @dataclass
@@ -258,6 +269,37 @@ def normalize_headers(raw: str) -> dict[str, str]:
     return headers
 
 
+YTM_ORIGIN = "https://music.youtube.com"
+
+
+def sapisid_hash(sapisid: str, origin: str = YTM_ORIGIN, now: int | None = None) -> str:
+    """The `authorization` header browsers send, derived from the SAPISID cookie."""
+    import hashlib
+    ts = str(now or int(time.time()))
+    return f"SAPISIDHASH {ts}_{hashlib.sha1(f'{ts} {sapisid} {origin}'.encode()).hexdigest()}"
+
+
+def headers_from_cookies(cookies: dict[str, str], authuser: str = "0", pageid: str | None = None,
+                         user_agent: str | None = None) -> dict:
+    """Build ytmusicapi browser auth from cookies read out of a signed-in window,
+    i.e. the same headers a person would otherwise copy from DevTools."""
+    sapisid = cookies.get("__Secure-3PAPISID") or cookies.get("SAPISID")
+    if not sapisid:
+        raise NotSignedIn("The window isn't signed in to YouTube Music (no SAPISID cookie).")
+    headers = {
+        "cookie": "; ".join(f"{k}={v}" for k, v in cookies.items()),
+        "authorization": sapisid_hash(sapisid),
+        "x-goog-authuser": str(authuser or "0"),
+        "x-origin": YTM_ORIGIN,
+        "user-agent": user_agent or "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+        "accept": "*/*",
+        "content-type": "application/json",
+    }
+    if pageid:
+        headers["x-goog-pageid"] = pageid  # brand account / channel the person chose
+    return parse_browser_headers("\n".join(f"{k}: {v}" for k, v in headers.items()))
+
+
 def parse_browser_headers(raw: str) -> dict:
     """Turn request headers copied from browser DevTools into ytmusicapi auth."""
     import ytmusicapi
@@ -290,7 +332,7 @@ def parse_browser_headers(raw: str) -> dict:
 
 
 def check_runtime() -> dict[str, str | None]:
-    """Versions/locations of everything a download needs (for `ymp doctor`)."""
+    """Versions/locations of everything a download needs (for `dielify doctor`)."""
     import mutagen
     import yt_dlp
     import ytmusicapi
@@ -322,11 +364,15 @@ class YTMusicAdapter:
         self._auth = auth
         self._delay = request_delay_s
         self._last_call = 0.0
-        self._yt = YTMusic(auth=auth, language=language) if auth else YTMusic(language=language)
+        try:
+            self._yt = YTMusic(auth=auth, language=language) if auth else YTMusic(language=language)
+        except Exception as e:  # ytmusicapi rejects malformed auth here
+            raise NotSignedIn(f"The saved sign-in isn't usable: {_short_error(e)}") from e
         self._http = requests.Session()
 
     # Gentle pacing so traffic looks like a person, not a bot.
     def _pace(self) -> None:
+        _check_online()  # every YouTube call passes through here
         wait = self._delay - (time.monotonic() - self._last_call)
         if wait > 0:
             time.sleep(wait)
@@ -339,7 +385,7 @@ class YTMusicAdapter:
     def account_name(self) -> str:
         """Confirms the sign-in still works. Raises NotSignedIn if it doesn't."""
         if not self._auth:
-            raise NotSignedIn("Not signed in. Run: ymp auth login")
+            raise NotSignedIn("Not signed in. Run: dielify auth login")
         self._pace()
         try:
             info = self._yt.get_account_info()
@@ -361,7 +407,7 @@ class YTMusicAdapter:
             if re.search(r"\b(401|403)\b|sign(ed)? ?in|login", detail, re.I):
                 raise NotSignedIn(
                     "YouTube rejected the sign-in (cookies usually expire after a few "
-                    f"weeks). Run: ymp auth login  [{detail}]") from e
+                    f"weeks). Run: dielify auth login  [{detail}]") from e
             raise YouTubeError(f"Couldn't confirm the sign-in with YouTube: {detail}") from e
         return info.get("accountName") or info.get("channelHandle") or "(signed in)"
 
@@ -496,6 +542,7 @@ class YTMusicAdapter:
     def fetch_cover(self, url: str | None) -> bytes | None:
         if not url:
             return None
+        _check_online()
         try:
             r = self._http.get(url, timeout=20)
             if r.status_code == 404 and "maxresdefault" in url:
@@ -511,6 +558,7 @@ class YTMusicAdapter:
                     progress: ProgressFn | None = None) -> Path:
         """Download audio only, without re-encoding. Returns the file path."""
         import yt_dlp
+        _check_online()
 
         fmt = {
             "auto": "bestaudio",
@@ -523,7 +571,7 @@ class YTMusicAdapter:
             fmt = f"bestaudio[acodec=opus]/{fmt}"
 
         dest_dir.mkdir(parents=True, exist_ok=True)
-        cookie_dir = tempfile.mkdtemp(prefix="ymp-")
+        cookie_dir = tempfile.mkdtemp(prefix="dielify-")
         cookie_file = None
         try:
             opts: dict = {

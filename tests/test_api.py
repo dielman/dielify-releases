@@ -7,10 +7,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 from conftest import make_audio, make_image, needs_ffmpeg
-from ymp import auth, custom_api, downloads, settings
-from ymp.downloads import DownloadQueue
-from ymp.server import create_app
-from ymp.yt_adapter import NotSignedIn, Shelf, TrackInfo, YouTubeError, YTItem
+from dielify import auth, custom_api, downloads, settings
+from dielify.downloads import DownloadQueue
+from dielify.server import create_app
+from dielify.yt_adapter import NotSignedIn, Shelf, TrackInfo, YouTubeError, YTItem
 
 pytestmark = needs_ffmpeg
 
@@ -89,7 +89,7 @@ class FakeDownloader:
 
 @pytest.fixture(autouse=True)
 def setup(monkeypatch, tmp_path):
-    monkeypatch.setenv("YMP_INSECURE_DEV_STORE", "1")
+    monkeypatch.setenv("DIELIFY_INSECURE_DEV_STORE", "1")
     monkeypatch.setattr(custom_api, "YTMusicAdapter", FakeYT)
     monkeypatch.setattr(downloads, "RETRY_DELAYS_S", (0, 0))
     custom_api.youtube.reset()
@@ -135,11 +135,11 @@ def test_login_tokens_and_devices():
         assert c.delete(f"/api/auth/device-token/{other['id']}", headers=h).status_code == 204
         assert c.get("/api/settings", headers=h2).status_code == 401  # revoked
         assert c.get("/api/settings", headers=h).status_code == 200
-        assert c.get("/api/settings", headers={"Authorization": "Bearer ymp_forged"}).status_code == 401
+        assert c.get("/api/settings", headers={"Authorization": "Bearer dielify_forged"}).status_code == 401
 
 
 def test_tokens_stored_hashed_and_die_with_user():
-    from ymp.library import connect
+    from dielify.library import connect
     with make_client() as c:
         h = login(c)
         token = h["Authorization"].split()[1]
@@ -265,7 +265,7 @@ def test_dead_signin_waits_instead_of_downgrading(monkeypatch):
         end = time.time() + 10
         while not (job := c.get(f"/api/downloads/{job['id']}", headers=h).json())["error"] and time.time() < end:
             time.sleep(0.05)
-        assert job["status"] == "queued" and "ymp auth login" in job["error"]
+        assert job["status"] == "queued" and "dielify auth login" in job["error"]
         assert fake.calls == 0 and job["attempts"] == 0  # nothing downloaded at lower quality
         SignInFlips.signed_in = True  # Josh signs in again
         job = wait_done(c, h, job["id"])
@@ -296,7 +296,7 @@ def test_cancel_running_download(tmp_path):
         job = c.get(f"/api/downloads/{job['id']}", headers=h).json()
         assert job["status"] == "cancelled" and job["track_id"] is None
         lib = settings.load().profile_library("josh")
-        assert not list(lib.rglob("*.m4a")) and not list(lib.glob(".ymp-dl-*"))
+        assert not list(lib.rglob("*.m4a")) and not list(lib.glob(".dielify-dl-*"))
 
 
 def test_users_only_see_their_own_queue():
@@ -313,7 +313,7 @@ def test_users_only_see_their_own_queue():
 
 
 def test_interrupted_jobs_resume_after_restart():
-    from ymp.library import connect
+    from dielify.library import connect
     queue = DownloadQueue(adapter_factory=lambda p: FakeDownloader())
     job = queue.enqueue("josh", [item("s3")], "song")[0]
     with connect() as conn:  # as if the PC was switched off mid-download

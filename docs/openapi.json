@@ -1,7 +1,7 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "ymp",
+    "title": "Dielify",
     "version": "0.1.0"
   },
   "paths": {
@@ -704,6 +704,266 @@
         }
       }
     },
+    "/api/library/artists": {
+      "get": {
+        "tags": [
+          "library"
+        ],
+        "summary": "Library Artists",
+        "operationId": "library_artists_api_library_artists_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtistList"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/library/artists/{artist_id}": {
+      "get": {
+        "tags": [
+          "library"
+        ],
+        "summary": "Library Artist",
+        "operationId": "library_artist_api_library_artists__artist_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "artist_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Artist Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtistDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/library/albums": {
+      "get": {
+        "tags": [
+          "library"
+        ],
+        "summary": "Library Albums",
+        "operationId": "library_albums_api_library_albums_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "newest",
+                "alphabeticalByName",
+                "alphabeticalByArtist",
+                "frequent",
+                "recent",
+                "starred",
+                "random"
+              ],
+              "type": "string",
+              "default": "newest",
+              "title": "Sort"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlbumList"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/library/albums/{album_id}": {
+      "get": {
+        "tags": [
+          "library"
+        ],
+        "summary": "Library Album",
+        "operationId": "library_album_api_library_albums__album_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "album_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Album Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlbumDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/library/search": {
+      "get": {
+        "tags": [
+          "library"
+        ],
+        "summary": "Library Search",
+        "operationId": "library_search_api_library_search_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Q"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 30,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LibrarySearch"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/library/tracks/{track_id}": {
       "get": {
         "tags": [
@@ -737,6 +997,104 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/library/tracks/{track_id}/star": {
+      "put": {
+        "tags": [
+          "library"
+        ],
+        "summary": "Library Star",
+        "operationId": "library_star_api_library_tracks__track_id__star_put",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "track_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Track Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StarChange"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Track"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/library/tracks/{track_id}/played": {
+      "post": {
+        "tags": [
+          "library"
+        ],
+        "summary": "Library Played",
+        "description": "Call when a track has been listened to (counts towards 'frequent' and 'recent').",
+        "operationId": "library_played_api_library_tracks__track_id__played_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "track_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Track Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
           },
           "422": {
             "description": "Validation Error",
@@ -853,6 +1211,64 @@
         }
       }
     },
+    "/api/library/albums/{album_id}/cover": {
+      "get": {
+        "tags": [
+          "library"
+        ],
+        "summary": "Library Album Cover",
+        "operationId": "library_album_cover_api_library_albums__album_id__cover_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "album_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Album Id"
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 3000,
+              "minimum": 0,
+              "default": 0,
+              "title": "Size"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              },
+              "image/jpeg": {}
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/settings": {
       "get": {
         "tags": [
@@ -924,6 +1340,370 @@
         ]
       }
     },
+    "/api/desktop/status": {
+      "get": {
+        "tags": [
+          "desktop"
+        ],
+        "summary": "Status ",
+        "operationId": "status__api_desktop_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DesktopStatus"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/desktop/settings": {
+      "put": {
+        "tags": [
+          "desktop"
+        ],
+        "summary": "Change",
+        "operationId": "change_api_desktop_settings_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DesktopChange"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DesktopStatus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/desktop/profiles": {
+      "post": {
+        "tags": [
+          "desktop"
+        ],
+        "summary": "Add Profile",
+        "operationId": "add_profile_api_desktop_profiles_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewProfile"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DesktopStatus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/desktop/youtube/{profile}": {
+      "delete": {
+        "tags": [
+          "desktop"
+        ],
+        "summary": "Youtube Sign Out",
+        "operationId": "youtube_sign_out_api_desktop_youtube__profile__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "profile",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Profile"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DesktopStatus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/desktop/scan": {
+      "post": {
+        "tags": [
+          "desktop"
+        ],
+        "summary": "Scan",
+        "operationId": "scan_api_desktop_scan_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScanResult"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/desktop/phone-users": {
+      "post": {
+        "tags": [
+          "desktop"
+        ],
+        "summary": "Add Phone User",
+        "operationId": "add_phone_user_api_desktop_phone_users_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewPhoneUser"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhoneLogin"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/desktop/phone-users/{name}/password": {
+      "post": {
+        "tags": [
+          "desktop"
+        ],
+        "summary": "New Phone Password",
+        "operationId": "new_phone_password_api_desktop_phone_users__name__password_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhoneLogin"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/desktop/phone-users/{name}": {
+      "delete": {
+        "tags": [
+          "desktop"
+        ],
+        "summary": "Remove Phone User",
+        "operationId": "remove_phone_user_api_desktop_phone_users__name__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/desktop/devices/{device_id}": {
+      "delete": {
+        "tags": [
+          "desktop"
+        ],
+        "summary": "Remove Device",
+        "operationId": "remove_device_api_desktop_devices__device_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "device_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Device Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/health": {
       "get": {
         "tags": [
@@ -950,6 +1730,195 @@
   },
   "components": {
     "schemas": {
+      "Album": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "artist": {
+            "type": "string",
+            "title": "Artist"
+          },
+          "artist_id": {
+            "type": "integer",
+            "title": "Artist Id"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          },
+          "song_count": {
+            "type": "integer",
+            "title": "Song Count"
+          },
+          "duration_s": {
+            "type": "integer",
+            "title": "Duration S"
+          },
+          "play_count": {
+            "type": "integer",
+            "title": "Play Count"
+          },
+          "cover_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cover Url"
+          },
+          "starred": {
+            "type": "boolean",
+            "title": "Starred"
+          },
+          "created_at": {
+            "type": "number",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "artist",
+          "artist_id",
+          "year",
+          "song_count",
+          "duration_s",
+          "play_count",
+          "cover_url",
+          "starred",
+          "created_at"
+        ],
+        "title": "Album"
+      },
+      "AlbumDetail": {
+        "properties": {
+          "album": {
+            "$ref": "#/components/schemas/Album"
+          },
+          "tracks": {
+            "items": {
+              "$ref": "#/components/schemas/Track"
+            },
+            "type": "array",
+            "title": "Tracks"
+          }
+        },
+        "type": "object",
+        "required": [
+          "album",
+          "tracks"
+        ],
+        "title": "AlbumDetail"
+      },
+      "AlbumList": {
+        "properties": {
+          "albums": {
+            "items": {
+              "$ref": "#/components/schemas/Album"
+            },
+            "type": "array",
+            "title": "Albums"
+          }
+        },
+        "type": "object",
+        "required": [
+          "albums"
+        ],
+        "title": "AlbumList"
+      },
+      "Artist": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "album_count": {
+            "type": "integer",
+            "title": "Album Count"
+          },
+          "cover_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cover Url"
+          },
+          "starred": {
+            "type": "boolean",
+            "title": "Starred"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "album_count",
+          "cover_url",
+          "starred"
+        ],
+        "title": "Artist"
+      },
+      "ArtistDetail": {
+        "properties": {
+          "artist": {
+            "$ref": "#/components/schemas/Artist"
+          },
+          "albums": {
+            "items": {
+              "$ref": "#/components/schemas/Album"
+            },
+            "type": "array",
+            "title": "Albums"
+          }
+        },
+        "type": "object",
+        "required": [
+          "artist",
+          "albums"
+        ],
+        "title": "ArtistDetail"
+      },
+      "ArtistList": {
+        "properties": {
+          "artists": {
+            "items": {
+              "$ref": "#/components/schemas/Artist"
+            },
+            "type": "array",
+            "title": "Artists"
+          }
+        },
+        "type": "object",
+        "required": [
+          "artists"
+        ],
+        "title": "ArtistList"
+      },
       "Charts": {
         "properties": {
           "country": {
@@ -1006,6 +1975,178 @@
           "tracks"
         ],
         "title": "Collection"
+      },
+      "DesktopChange": {
+        "properties": {
+          "library_root": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Library Root"
+          },
+          "active_profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Profile"
+          },
+          "quality": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "auto",
+                  "high",
+                  "standard"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quality"
+          },
+          "preferred_format": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "auto",
+                  "m4a",
+                  "opus"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preferred Format"
+          },
+          "cache_limit_gb": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cache Limit Gb"
+          },
+          "offline": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Offline"
+          },
+          "start_with_windows": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start With Windows"
+          }
+        },
+        "type": "object",
+        "title": "DesktopChange"
+      },
+      "DesktopStatus": {
+        "properties": {
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "active_profile": {
+            "type": "string",
+            "title": "Active Profile"
+          },
+          "profiles": {
+            "items": {
+              "$ref": "#/components/schemas/ProfileInfo"
+            },
+            "type": "array",
+            "title": "Profiles"
+          },
+          "library_root": {
+            "type": "string",
+            "title": "Library Root"
+          },
+          "quality": {
+            "type": "string",
+            "title": "Quality"
+          },
+          "preferred_format": {
+            "type": "string",
+            "title": "Preferred Format"
+          },
+          "cache_limit_gb": {
+            "type": "number",
+            "title": "Cache Limit Gb"
+          },
+          "offline": {
+            "type": "boolean",
+            "title": "Offline"
+          },
+          "start_with_windows": {
+            "type": "boolean",
+            "title": "Start With Windows"
+          },
+          "server_port": {
+            "type": "integer",
+            "title": "Server Port"
+          },
+          "addresses": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Addresses",
+            "description": "Addresses phones can use"
+          },
+          "phone_users": {
+            "items": {
+              "$ref": "#/components/schemas/PhoneUser"
+            },
+            "type": "array",
+            "title": "Phone Users"
+          }
+        },
+        "type": "object",
+        "required": [
+          "version",
+          "active_profile",
+          "profiles",
+          "library_root",
+          "quality",
+          "preferred_format",
+          "cache_limit_gb",
+          "offline",
+          "start_with_windows",
+          "server_port",
+          "addresses",
+          "phone_users"
+        ],
+        "title": "DesktopStatus"
       },
       "Device": {
         "properties": {
@@ -1424,6 +2565,38 @@
         ],
         "title": "ItemList"
       },
+      "LibrarySearch": {
+        "properties": {
+          "artists": {
+            "items": {
+              "$ref": "#/components/schemas/Artist"
+            },
+            "type": "array",
+            "title": "Artists"
+          },
+          "albums": {
+            "items": {
+              "$ref": "#/components/schemas/Album"
+            },
+            "type": "array",
+            "title": "Albums"
+          },
+          "tracks": {
+            "items": {
+              "$ref": "#/components/schemas/Track"
+            },
+            "type": "array",
+            "title": "Tracks"
+          }
+        },
+        "type": "object",
+        "required": [
+          "artists",
+          "albums",
+          "tracks"
+        ],
+        "title": "LibrarySearch"
+      },
       "LoginRequest": {
         "properties": {
           "username": {
@@ -1490,6 +2663,196 @@
           "device_name"
         ],
         "title": "NewDevice"
+      },
+      "NewPhoneUser": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "NewPhoneUser"
+      },
+      "NewProfile": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "NewProfile"
+      },
+      "PhoneDevice": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "device_name": {
+            "type": "string",
+            "title": "Device Name"
+          },
+          "created_at": {
+            "type": "number",
+            "title": "Created At"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "device_name",
+          "created_at",
+          "last_used_at"
+        ],
+        "title": "PhoneDevice"
+      },
+      "PhoneLogin": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "profile": {
+            "type": "string",
+            "title": "Profile"
+          },
+          "password": {
+            "type": "string",
+            "title": "Password",
+            "description": "Shown once; type it into the phone app"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "profile",
+          "password"
+        ],
+        "title": "PhoneLogin"
+      },
+      "PhoneUser": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "profile": {
+            "type": "string",
+            "title": "Profile"
+          },
+          "devices": {
+            "items": {
+              "$ref": "#/components/schemas/PhoneDevice"
+            },
+            "type": "array",
+            "title": "Devices"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "profile",
+          "devices"
+        ],
+        "title": "PhoneUser"
+      },
+      "ProfileInfo": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "youtube_signed_in": {
+            "type": "boolean",
+            "title": "Youtube Signed In"
+          },
+          "library_path": {
+            "type": "string",
+            "title": "Library Path"
+          },
+          "tracks": {
+            "type": "integer",
+            "title": "Tracks"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "youtube_signed_in",
+          "library_path",
+          "tracks"
+        ],
+        "title": "ProfileInfo"
+      },
+      "ScanResult": {
+        "properties": {
+          "added": {
+            "type": "integer",
+            "title": "Added"
+          },
+          "updated": {
+            "type": "integer",
+            "title": "Updated"
+          },
+          "removed": {
+            "type": "integer",
+            "title": "Removed"
+          },
+          "unchanged": {
+            "type": "integer",
+            "title": "Unchanged"
+          },
+          "errors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Errors"
+          }
+        },
+        "type": "object",
+        "required": [
+          "added",
+          "updated",
+          "removed",
+          "unchanged",
+          "errors"
+        ],
+        "title": "ScanResult"
       },
       "SettingsChange": {
         "properties": {
@@ -1594,6 +2957,19 @@
           "items"
         ],
         "title": "Shelf"
+      },
+      "StarChange": {
+        "properties": {
+          "starred": {
+            "type": "boolean",
+            "title": "Starred"
+          }
+        },
+        "type": "object",
+        "required": [
+          "starred"
+        ],
+        "title": "StarChange"
       },
       "Track": {
         "properties": {

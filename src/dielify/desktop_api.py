@@ -1,0 +1,201 @@
+"""PC-only endpoints (/api/desktop/...) for the desktop app's settings screens.
+
+Only the desktop window's own key works here (see auth.enable_desktop_token);
+phones and other devices get 403.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Literal
+
+from fastapi import APIRouter, Depends, HTTPException, Response, status
+from pydantic import BaseModel, Field
+
+from . import __version__, auth, credstore, winint
+from . import settings as settings_mod
+from .custom_api import Session, desktop_session, youtube
+from .library import Library
+from .paths import safe_name
+
+router = APIRouter(prefix="/api/desktop", tags=["desktop"])
+
+
+class ProfileInfo(BaseModel):
+    name: str
+    youtube_signed_in: bool
+    library_path: str
+    tracks: int
+
+
+class PhoneDevice(BaseModel):
+    id: int
+    device_name: str
+    created_at: float
+    last_used_at: float | None
+
+
+class PhoneUser(BaseModel):
+    name: str
+    profile: str
+    devices: list[PhoneDevice]
+
+
+class DesktopStatus(BaseModel):
+    version: str
+    active_profile: str
+    profiles: list[ProfileInfo]
+    library_root: str
+    quality: str
+    preferred_format: str
+    cache_limit_gb: float
+    offline: bool
+    start_with_windows: bool
+    server_port: int
+    addresses: list[str] = Field(description="Addresses phones can use")
+    phone_users: list[PhoneUser]
+
+
+class DesktopChange(BaseModel):
+    library_root: str | None = None
+    active_profile: str | None = None
+    quality: Literal["auto", "high", "standard"] | None = None
+    preferred_format: Literal["auto", "m4a", "opus"] | None = None
+    cache_limit_gb: float | None = Field(None, ge=0)
+    offline: bool | None = None
+    start_with_windows: bool | None = None
+
+
+class NewProfile(BaseModel):
+    name: str = Field(min_length=1, max_length=40)
+
+
+class NewPhoneUser(BaseModel):
+    name: str = Field(min_length=1, max_length=40)
+    profile: str | None = None
+
+
+class PhoneLogin(BaseModel):
+    name: str
+    profile: str
+    password: str = Field(description="Shown once; type it into the phone app")
+
+
+class ScanResult(BaseModel):
+    added: int
+    updated: int
+    removed: int
+    unchanged: int
+    errors: list[str]
+
+
+def _profiles(s: settings_mod.Settings) -> list[str]:
+    names = set(credstore.list_profiles()) | {s.active_profile}
+    root = Path(s.library_root)
+    if root.exists():
+        names |= {p.name for p in root.iterdir() if p.is_dir() and not p.name.startswith(".")}
+    return sorted(names, key=str.casefold)
+
+
+def _status() -> DesktopStatus:
+    from .server import bind_addresses
+    s = settings_mod.load()
+    profiles = []
+    for name in _profiles(s):
+        lib = Library(name, s.profile_library(name))
+        profiles.append(ProfileInfo(name=name, youtube_signed_in=credstore.load(name) is not None,
+                                    library_path=str(lib.root), tracks=lib.stats()["tracks"]))
+    users = [PhoneUser(name=u.name, profile=u.profile,
+                       devices=[PhoneDevice(**{k: d[k] for k in ("id", "device_name", "created_at", "last_used_at")})
+                                for d in auth.list_tokens(u.name)])
+             for u in auth.list_users()]
+    return DesktopStatus(
+        version=__version__, active_profile=s.active_profile, profiles=profiles,
+        library_root=s.library_root, quality=s.quality, preferred_format=s.preferred_format,
+        cache_limit_gb=s.cache_limit_gb, offline=s.offline, start_with_windows=winint.start_with_windows(),
+        server_port=s.server_port,
+        addresses=[f"http://{a}:{s.server_port}" for a in bind_addresses(s) if not a.startswith("127.")],
+        phone_users=users)
+
+
+@router.get("/status", response_model=DesktopStatus)
+def status_(s: Session = Depends(desktop_session)) -> DesktopStatus:
+    return _status()
+
+
+@router.put("/settings", response_model=DesktopStatus)
+def change(body: DesktopChange, s: Session = Depends(desktop_session)) -> DesktopStatus:
+    changes = body.model_dump(exclude_none=True)
+    if "start_with_windows" in changes:
+        winint.set_start_with_windows(changes.pop("start_with_windows"))
+    if "library_root" in changes:
+        root = Path(changes["library_root"]).expanduser()
+        if not root.is_absolute():
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Choose a full folder path, e.g. D:\\Music")
+        try:
+            root.mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Can't use that folder: {e}") from e
+    if "active_profile" in changes and safe_name(changes["active_profile"]) != changes["active_profile"]:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Profile names: letters, digits, - and _ only")
+    for key, value in changes.items():
+        settings_mod.set_value(key, str(value))
+    if "library_root" in changes or "active_profile" in changes:
+        cfg = settings_mod.load()
+        Library(cfg.active_profile, cfg.profile_library()).scan()
+    return _status()
+
+
+@router.post("/profiles", response_model=DesktopStatus)
+def add_profile(body: NewProfile, s: Session = Depends(desktop_session)) -> DesktopStatus:
+    if safe_name(body.name) != body.name:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Profile names: letters, digits, - and _ only")
+    cfg = settings_mod.load()
+    cfg.profile_library(body.name).mkdir(parents=True, exist_ok=True)
+    settings_mod.set_value("active_profile", body.name)
+    return _status()
+
+
+@router.delete("/youtube/{profile}", response_model=DesktopStatus)
+def youtube_sign_out(profile: str, s: Session = Depends(desktop_session)) -> DesktopStatus:
+    credstore.delete(profile)
+    youtube.reset()
+    return _status()
+
+
+@router.post("/scan", response_model=ScanResult)
+def scan(s: Session = Depends(desktop_session)) -> ScanResult:
+    res = s.lib.scan()
+    return ScanResult(added=res.added, updated=res.updated, removed=res.removed,
+                      unchanged=res.unchanged, errors=res.errors)
+
+
+@router.post("/phone-users", response_model=PhoneLogin)
+def add_phone_user(body: NewPhoneUser, s: Session = Depends(desktop_session)) -> PhoneLogin:
+    try:
+        u = auth.add_user(body.name, body.profile or s.user.profile)
+    except ValueError as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e)) from e
+    return PhoneLogin(name=u.name, profile=u.profile, password=u.password)
+
+
+@router.post("/phone-users/{name}/password", response_model=PhoneLogin)
+def new_phone_password(name: str, s: Session = Depends(desktop_session)) -> PhoneLogin:
+    if auth.get_user(name) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No such phone login")
+    u = auth.set_password(name)
+    return PhoneLogin(name=u.name, profile=u.profile, password=u.password)
+
+
+@router.delete("/phone-users/{name}", status_code=204)
+def remove_phone_user(name: str, s: Session = Depends(desktop_session)) -> Response:
+    if not auth.remove_user(name):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No such phone login")
+    return Response(status_code=204)
+
+
+@router.delete("/devices/{device_id}", status_code=204)
+def remove_device(device_id: int, s: Session = Depends(desktop_session)) -> Response:
+    if not auth.revoke_token(device_id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No such device")
+    return Response(status_code=204)

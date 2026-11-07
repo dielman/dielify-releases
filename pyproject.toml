@@ -3,12 +3,12 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "ymp"
+name = "dielify"
 version = "0.1.0"
 description = "Self-hosted YouTube Music player: local cache, offline playback, LAN/Tailscale server"
 requires-python = ">=3.12"
 # Versions pinned to known-good releases. YouTube changes often: bump yt-dlp and
-# ytmusicapi together, run `ymp doctor` and the tests, then commit the new pins.
+# ytmusicapi together, run `dielify doctor` and the tests, then commit the new pins.
 dependencies = [
     "ytmusicapi==1.12.3",
     "yt-dlp[default]==2026.10.26",
@@ -18,16 +18,25 @@ dependencies = [
     "requests>=2.32,<3",
     "fastapi>=0.162,<1",
     "uvicorn>=0.54,<1",
+    "pywebview>=6.2,<7",   # desktop window (Windows' built-in WebView2)
+    "pystray>=0.19,<1",    # tray icon
 ]
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "httpx>=0.28,<1"]
+build = ["pyinstaller>=6.22,<7"]
 
 [project.scripts]
-ymp = "ymp.cli:main"
+dielify = "dielify.cli:main"
+
+[project.gui-scripts]
+dielify-desktop = "dielify.desktop:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+dielify = ["ui/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

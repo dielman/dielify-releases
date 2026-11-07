@@ -66,7 +66,7 @@ def download_track(adapter: YTMusicAdapter, video_id: str, settings: Settings,
     # Download into a temp folder on the same drive as the library so the final
     # move is atomic and a half-finished download never appears in the library.
     library.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix=".ymp-dl-", dir=library) as tmp:
+    with tempfile.TemporaryDirectory(prefix=".dielify-dl-", dir=library) as tmp:
         audio = adapter.fetch_audio(video_id, Path(tmp), settings.quality,
                                     settings.preferred_format, progress)
         cover = prepare_cover(adapter.fetch_cover(info.cover_url))
@@ -81,5 +81,5 @@ def download_track(adapter: YTMusicAdapter, video_id: str, settings: Settings,
         from .library import Library
         Library(profile or settings.active_profile, library).index_file(final)
     except Exception as e:  # the file is safe on disk; a later scan picks it up
-        log.warning("Saved but not indexed (run `ymp library scan`): %s", e)
+        log.warning("Saved but not indexed (run `dielify library scan`): %s", e)
     return DownloadResult(final, info)

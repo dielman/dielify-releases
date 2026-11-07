@@ -21,7 +21,7 @@ from . import auth
 from . import settings as settings_mod
 from .downloads import DownloadQueue
 from .library import CONTENT_TYPES, Library
-from .yt_adapter import NotSignedIn, YouTubeError, YTItem, YTMusicAdapter
+from .yt_adapter import NotSignedIn, Offline, YouTubeError, YTItem, YTMusicAdapter
 
 router = APIRouter(prefix="/api")
 lockout = auth.Lockout()
@@ -168,8 +168,8 @@ class Track(BaseModel):
 # --- session + YouTube access -----------------------------------------------------
 
 class Session:
-    def __init__(self, user: auth.ServerUser, device_id: int):
-        self.user, self.device_id = user, device_id
+    def __init__(self, user: auth.ServerUser, device_id: int, desktop: bool = False):
+        self.user, self.device_id, self.desktop = user, device_id, desktop
         self.lib = Library(user.profile, settings_mod.load().profile_library(user.profile))
 
 
@@ -182,6 +182,10 @@ def session(request: Request,
     client = _client(request)
     if lockout.is_locked(client):
         raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "Too many failed logins. Try again later.")
+    if creds and auth.is_desktop_token(creds.credentials):
+        # the desktop window on this PC: acts for the active profile
+        profile = settings_mod.load().active_profile
+        return Session(auth.ServerUser("desktop", profile, ""), 0, desktop=True)
     found = auth.check_token(creds.credentials) if creds else None
     if found is None:
         if creds:
@@ -209,6 +213,8 @@ class _YouTube:
         try:
             with lock:
                 return getattr(adapter, fn_name)(*args, **kwargs)
+        except Offline as e:
+            raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(e)) from e
         except NotSignedIn as e:
             self._adapters.pop(profile, None)
             raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(e)) from e
@@ -223,6 +229,13 @@ class _YouTube:
 
 
 youtube = _YouTube()
+
+
+def desktop_session(s: Session = Depends(session)) -> Session:
+    """PC-only actions: only the desktop app's window may do these."""
+    if not s.desktop:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only the Dielify app on the PC can do this")
+    return s
 
 
 def _queue(request: Request) -> DownloadQueue:
@@ -368,9 +381,57 @@ def _track(s: Session, track_id: int):
     return t
 
 
-@router.get("/library/tracks/{track_id}", response_model=Track, tags=["library"])
-def library_track(track_id: int, s: Session = Depends(session)) -> Track:
-    t = _track(s, track_id)
+class Artist(BaseModel):
+    id: int
+    name: str
+    album_count: int
+    cover_url: str | None
+    starred: bool
+
+
+class Album(BaseModel):
+    id: int
+    name: str
+    artist: str
+    artist_id: int
+    year: int | None
+    song_count: int
+    duration_s: int
+    play_count: int
+    cover_url: str | None
+    starred: bool
+    created_at: float
+
+
+class ArtistList(BaseModel):
+    artists: list[Artist]
+
+
+class ArtistDetail(BaseModel):
+    artist: Artist
+    albums: list[Album]
+
+
+class AlbumList(BaseModel):
+    albums: list[Album]
+
+
+class AlbumDetail(BaseModel):
+    album: Album
+    tracks: list[Track]
+
+
+class LibrarySearch(BaseModel):
+    artists: list[Artist]
+    albums: list[Album]
+    tracks: list[Track]
+
+
+class StarChange(BaseModel):
+    starred: bool
+
+
+def _track_out(t) -> Track:
     return Track(id=t["id"], title=t["title"], artist=t["artist"], album=t["album"],
                  album_artist=t["album_artist"], year=t["year"], track_no=t["track_no"],
                  duration_s=t["duration_s"], bitrate_kbps=t["bitrate_kbps"], suffix=t["suffix"],
@@ -381,9 +442,91 @@ def library_track(track_id: int, s: Session = Depends(session)) -> Track:
                  cover_url=f"/api/library/tracks/{t['id']}/cover" if t["has_cover"] else None)
 
 
+def _album_out(a) -> Album:
+    return Album(id=a["id"], name=a["name"], artist=a["artist"], artist_id=a["artist_id"],
+                 year=a["year"], song_count=a["song_count"], duration_s=a["duration"] or 0,
+                 play_count=a["play_count"],
+                 cover_url=f"/api/library/albums/{a['id']}/cover" if a["cover_track_id"] else None,
+                 starred=a["starred_at"] is not None, created_at=a["created_at"])
+
+
+def _artist_out(r) -> Artist:
+    cover = f"/api/library/albums/{r['first_album_id']}/cover" if r["first_album_id"] else None
+    return Artist(id=r["id"], name=r["name"], album_count=r["album_count"], cover_url=cover,
+                  starred=r["starred_at"] is not None)
+
+
+def media_session(request: Request,
+                  creds: HTTPAuthorizationCredentials | None = Depends(_bearer)) -> Session:
+    """Like `session`, but also accepts ?token=... because audio players and <img>
+    tags can't send headers. (Request logs never include query strings.)"""
+    if creds is None and request.query_params.get("token"):
+        creds = HTTPAuthorizationCredentials(scheme="Bearer", credentials=request.query_params["token"])
+    return session(request, creds)
+
+
+@router.get("/library/artists", response_model=ArtistList, tags=["library"])
+def library_artists(s: Session = Depends(session)) -> ArtistList:
+    return ArtistList(artists=[_artist_out(r) for r in s.lib.artists()])
+
+
+@router.get("/library/artists/{artist_id}", response_model=ArtistDetail, tags=["library"])
+def library_artist(artist_id: int, s: Session = Depends(session)) -> ArtistDetail:
+    r = s.lib.artist(artist_id)
+    if r is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No such artist")
+    return ArtistDetail(artist=_artist_out(r),
+                        albums=[_album_out(a) for a in s.lib.albums_by_artist(artist_id)])
+
+
+@router.get("/library/albums", response_model=AlbumList, tags=["library"])
+def library_albums(sort: Literal["newest", "alphabeticalByName", "alphabeticalByArtist", "frequent",
+                                 "recent", "starred", "random"] = "newest",
+                   limit: int = Query(50, ge=1, le=500), offset: int = Query(0, ge=0),
+                   s: Session = Depends(session)) -> AlbumList:
+    return AlbumList(albums=[_album_out(a) for a in s.lib.album_list(sort, limit, offset)])
+
+
+@router.get("/library/albums/{album_id}", response_model=AlbumDetail, tags=["library"])
+def library_album(album_id: int, s: Session = Depends(session)) -> AlbumDetail:
+    a = s.lib.album(album_id)
+    if a is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No such album")
+    return AlbumDetail(album=_album_out(a), tracks=[_track_out(t) for t in s.lib.tracks_on_album(album_id)])
+
+
+@router.get("/library/search", response_model=LibrarySearch, tags=["library"])
+def library_search(q: str = "", limit: int = Query(30, ge=1, le=500),
+                   s: Session = Depends(session)) -> LibrarySearch:
+    artists, albums, tracks = s.lib.search(q, limit, 0, limit, 0, limit, 0)
+    return LibrarySearch(artists=[_artist_out(r) for r in artists],
+                         albums=[_album_out(a) for a in albums],
+                         tracks=[_track_out(t) for t in tracks])
+
+
+@router.get("/library/tracks/{track_id}", response_model=Track, tags=["library"])
+def library_track(track_id: int, s: Session = Depends(session)) -> Track:
+    return _track_out(_track(s, track_id))
+
+
+@router.put("/library/tracks/{track_id}/star", response_model=Track, tags=["library"])
+def library_star(track_id: int, body: StarChange, s: Session = Depends(session)) -> Track:
+    _track(s, track_id)
+    s.lib.set_starred("tracks", track_id, body.starred)
+    return _track_out(_track(s, track_id))
+
+
+@router.post("/library/tracks/{track_id}/played", status_code=204, tags=["library"])
+def library_played(track_id: int, s: Session = Depends(session)) -> Response:
+    """Call when a track has been listened to (counts towards 'frequent' and 'recent')."""
+    _track(s, track_id)
+    s.lib.record_play(track_id)
+    return Response(status_code=204)
+
+
 @router.get("/library/tracks/{track_id}/stream", tags=["library"],
             response_class=FileResponse, responses={200: {"content": {"audio/*": {}}}})
-def library_stream(track_id: int, s: Session = Depends(session)) -> FileResponse:
+def library_stream(track_id: int, s: Session = Depends(media_session)) -> FileResponse:
     """The original file (supports Range requests for seeking)."""
     path = s.lib.path_of(_track(s, track_id))
     if not path.exists():
@@ -391,15 +534,29 @@ def library_stream(track_id: int, s: Session = Depends(session)) -> FileResponse
     return FileResponse(path, media_type=CONTENT_TYPES.get(path.suffix.lower(), "application/octet-stream"))
 
 
-@router.get("/library/tracks/{track_id}/cover", tags=["library"],
-            responses={200: {"content": {"image/jpeg": {}}}})
-def library_cover(track_id: int, size: int = Query(0, ge=0, le=3000), s: Session = Depends(session)) -> Response:
+def _cover_response(s: Session, track_id: int | None, size: int) -> Response:
     from .subsonic_api import _cover_bytes
-    path = s.lib.path_of(_track(s, track_id))
-    data = _cover_bytes(str(path), path.stat().st_mtime, size) if path.exists() else None
+    t = s.lib.track(track_id) if track_id else None
+    path = s.lib.path_of(t) if t else None
+    data = _cover_bytes(str(path), path.stat().st_mtime, size) if path and path.exists() else None
     if not data:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No cover art")
     return Response(data, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=86400"})
+
+
+@router.get("/library/tracks/{track_id}/cover", tags=["library"],
+            responses={200: {"content": {"image/jpeg": {}}}})
+def library_cover(track_id: int, size: int = Query(0, ge=0, le=3000),
+                  s: Session = Depends(media_session)) -> Response:
+    return _cover_response(s, track_id, size)
+
+
+@router.get("/library/albums/{album_id}/cover", tags=["library"],
+            responses={200: {"content": {"image/jpeg": {}}}})
+def library_album_cover(album_id: int, size: int = Query(0, ge=0, le=3000),
+                        s: Session = Depends(media_session)) -> Response:
+    a = s.lib.album(album_id)
+    return _cover_response(s, a["cover_track_id"] if a else None, size)
 
 
 # --- settings -------------------------------------------------------------------------

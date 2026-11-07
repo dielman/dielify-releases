@@ -5,14 +5,14 @@ from pathlib import Path
 
 import pytest
 
-from ymp.yt_adapter import TrackInfo
+from dielify.yt_adapter import TrackInfo
 
 
 @pytest.fixture(autouse=True)
 def isolated_home(tmp_path, monkeypatch):
     """Every test gets its own app-data folder; never touches the real one."""
-    monkeypatch.setenv("YMP_HOME", str(tmp_path / "appdata"))
-    monkeypatch.delenv("YMP_INSECURE_DEV_STORE", raising=False)
+    monkeypatch.setenv("DIELIFY_HOME", str(tmp_path / "appdata"))
+    monkeypatch.delenv("DIELIFY_INSECURE_DEV_STORE", raising=False)
     return tmp_path / "appdata"
 
 

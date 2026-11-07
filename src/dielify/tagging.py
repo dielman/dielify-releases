@@ -10,8 +10,11 @@ from mutagen.flac import Picture
 
 from .yt_adapter import TrackInfo
 
-VIDEOID_TAG = "YMP_VIDEOID"
-MP4_VIDEOID_KEY = "----:com.ymp:videoId"
+VIDEOID_TAG = "DIELIFY_VIDEOID"
+MP4_VIDEOID_KEY = "----:com.dielify:videoId"
+# Written by downloads made before the rename to Dielify; still read.
+LEGACY_VIDEOID_TAG = "YMP_VIDEOID"
+LEGACY_MP4_VIDEOID_KEY = "----:com.ymp:videoId"
 
 
 def prepare_cover(data: bytes | None, max_size: int = 1200) -> bytes | None:
@@ -155,7 +158,7 @@ def _tag_mp3(path: Path, info: TrackInfo, cover: bytes | None) -> None:
 
 
 def read_tags(path: Path) -> dict:
-    """Small normalised view of a file's tags (used by tests and `ymp inspect`)."""
+    """Small normalised view of a file's tags (used by tests and `dielify inspect`)."""
     import mutagen
     f = mutagen.File(path)
     if f is None:
@@ -166,10 +169,11 @@ def read_tags(path: Path) -> dict:
     if ext == ".m4a":
         t = f.tags or {}
         g = lambda k: (t.get(k) or [None])[0]
+        vid = g(MP4_VIDEOID_KEY) or g(LEGACY_MP4_VIDEOID_KEY)
         out.update(title=g("\xa9nam"), artist=g("\xa9ART"), album=g("\xa9alb"),
                    album_artist=g("aART"), year=g("\xa9day"),
                    track=(g("trkn") or (None,))[0],
-                   video_id=bytes(g(MP4_VIDEOID_KEY)).decode() if g(MP4_VIDEOID_KEY) else None,
+                   video_id=bytes(vid).decode() if vid else None,
                    cover_bytes=len(g("covr")) if g("covr") else 0)
     elif ext in (".opus", ".ogg", ".flac"):
         t = f.tags
@@ -180,7 +184,8 @@ def read_tags(path: Path) -> dict:
         out.update(title=g("title"), artist=g("artist"), album=g("album"),
                    album_artist=g("albumartist"), year=g("date"),
                    track=int(g("tracknumber")) if g("tracknumber") else None,
-                   video_id=g(VIDEOID_TAG.lower()) or g(VIDEOID_TAG), cover_bytes=pics)
+                   video_id=(g(VIDEOID_TAG.lower()) or g(VIDEOID_TAG) or g(LEGACY_VIDEOID_TAG.lower())
+                             or g(LEGACY_VIDEOID_TAG)), cover_bytes=pics)
     elif ext == ".mp3":
         t = f.tags
         txt = lambda k: str(t[k].text[0]) if k in t else None
@@ -188,7 +193,7 @@ def read_tags(path: Path) -> dict:
         out.update(title=txt("TIT2"), artist=txt("TPE1"), album=txt("TALB"),
                    album_artist=txt("TPE2"), year=txt("TDRC"),
                    track=int(txt("TRCK").split("/")[0]) if txt("TRCK") else None,
-                   video_id=txt(f"TXXX:{VIDEOID_TAG}"),
+                   video_id=txt(f"TXXX:{VIDEOID_TAG}") or txt(f"TXXX:{LEGACY_VIDEOID_TAG}"),
                    cover_bytes=len(apic.data) if apic else 0)
     return out
 

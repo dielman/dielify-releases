@@ -1,15 +1,15 @@
-"""`ymp` command line — the Phase 1 interface.
+"""`dielify` command line — the Phase 1 interface.
 
-    ymp doctor                     check FFmpeg, Deno, library versions
-    ymp config show | set K V      settings (library folder, quality, ...)
-    ymp auth login|status|logout   YouTube Music sign-in for a profile
-    ymp search "query"             search songs
-    ymp download VIDEO_ID ...      download by video id
-    ymp get "query"                search, pick a result, download it
-    ymp inspect FILE               show a file's tags
-    ymp library scan | stats       index the music folder (Phase 2)
-    ymp server user add|list|...   logins for phone apps (Subsonic)
-    ymp serve                      serve the library on the home network
+    dielify doctor                     check FFmpeg, Deno, library versions
+    dielify config show | set K V      settings (library folder, quality, ...)
+    dielify auth login|status|logout   YouTube Music sign-in for a profile
+    dielify search "query"             search songs
+    dielify download VIDEO_ID ...      download by video id
+    dielify get "query"                search, pick a result, download it
+    dielify inspect FILE               show a file's tags
+    dielify library scan | stats       index the music folder (Phase 2)
+    dielify server user add|list|...   logins for phone apps (Subsonic)
+    dielify serve                      serve the library on the home network
 """
 
 from __future__ import annotations
@@ -42,7 +42,7 @@ def _adapter(args, require_login: bool = True):
     s = settings_mod.load()
     auth = credstore.load(_profile(args))
     if auth is None and require_login:
-        raise NotSignedIn(f"Profile '{_profile(args)}' is not signed in. Run: ymp auth login")
+        raise NotSignedIn(f"Profile '{_profile(args)}' is not signed in. Run: dielify auth login")
     return YTMusicAdapter(auth=auth, request_delay_s=s.request_delay_s)
 
 
@@ -53,7 +53,7 @@ def cmd_doctor(args) -> int:
     rt = check_runtime()
     s = settings_mod.load()
     ok = True
-    _out(f"ymp {__version__}   Python {sys.version.split()[0]}")
+    _out(f"Dielify {__version__}   Python {sys.version.split()[0]}")
     for name in ("yt-dlp", "ytmusicapi", "mutagen"):
         _out(f"  [ok]  {name:<11} {rt[name]}")
     for name, why in (("ffmpeg", "needed to remux audio"), ("ffprobe", "ships with FFmpeg")):
@@ -73,7 +73,7 @@ def cmd_doctor(args) -> int:
     profiles = credstore.list_profiles()
     _out(f"  [..]  profiles    {', '.join(profiles) or '(none signed in)'}"
          f"   active: {s.active_profile}")
-    _out("\nAll good." if ok else "\nFix the [!!] items above, then run ymp doctor again.")
+    _out("\nAll good." if ok else "\nFix the [!!] items above, then run dielify doctor again.")
     return 0 if ok else 1
 
 
@@ -257,9 +257,9 @@ def cmd_library_stats(args) -> int:
 def _show_new_password(user) -> None:
     _out(f"  user:     {user.name}   (plays profile '{user.profile}')")
     _out(f"  password: {user.password}")
-    _out("Type this password into the phone app now; ymp won't show it again.")
+    _out("Type this password into the phone app now; Dielify won't show it again.")
     _out("(It's stored encrypted on this PC. Reset it any time with: "
-         f"ymp server user password {user.name})")
+         f"dielify server user password {user.name})")
 
 
 def cmd_user_add(args) -> int:
@@ -282,7 +282,7 @@ def cmd_user_list(args) -> int:
     for u in users:
         _out(f"  {u.name:<16} profile '{u.profile}'")
     if not users:
-        _out("No server users yet. Add one: ymp server user add josh")
+        _out("No server users yet. Add one: dielify server user add josh")
     return 0
 
 
@@ -303,7 +303,7 @@ def cmd_serve(args) -> int:
     users = auth.list_users()
     if not users:
         _out("No server users yet, so no phone app could sign in. First run:")
-        _out("  ymp server user add josh")
+        _out("  dielify server user add josh")
         return 1
     for u in users:
         res = _library_for(u.profile).scan()
@@ -311,7 +311,7 @@ def cmd_serve(args) -> int:
              f"(={res.unchanged}) — {_library_for(u.profile).stats()['tracks']} tracks")
     addrs = server.bind_addresses(s)
     _out()
-    _out(f"ymp {__version__} serving on port {s.server_port}. In the phone app, use:")
+    _out(f"Dielify {__version__} serving on port {s.server_port}. In the phone app, use:")
     for a in addrs:
         where = "this PC only" if a.startswith("127.") else (
             "Tailscale" if a.startswith("100.") else "home network")
@@ -337,19 +337,8 @@ def cmd_openapi(args) -> int:
 
 
 def _log_to_file() -> None:
-    """Server requests -> console and %LOCALAPPDATA%\\ymp\\logs\\server.log (no secrets)."""
-    from logging.handlers import RotatingFileHandler
-
-    from .paths import app_data_dir
-    logs = app_data_dir() / "logs"
-    logs.mkdir(exist_ok=True)
-    fh = RotatingFileHandler(logs / "server.log", maxBytes=2_000_000, backupCount=3,
-                             encoding="utf-8")
-    fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
-    logging.getLogger().addHandler(fh)
-    for name in ("ymp.server", "ymp.subsonic_api"):
-        logging.getLogger(name).setLevel(logging.INFO)
-    _out(f"Log: {logs / 'server.log'}")
+    from .server import setup_file_logging
+    _out(f"Log: {setup_file_logging()}")
 
 
 def _library_for(profile: str):
@@ -360,8 +349,8 @@ def _library_for(profile: str):
 # --- parser -----------------------------------------------------------------
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="ymp", description="Self-hosted YouTube Music player")
-    p.add_argument("--version", action="version", version=f"ymp {__version__}")
+    p = argparse.ArgumentParser(prog="dielify", description="Self-hosted YouTube Music player")
+    p.add_argument("--version", action="version", version=f"Dielify {__version__}")
     p.add_argument("-p", "--profile", help="user profile (default: active_profile setting)")
     p.add_argument("-v", "--verbose", action="store_true", help="show debug output")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -370,7 +359,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     c = sub.add_parser("config", help="view or change settings").add_subparsers(dest="sub", required=True)
     c.add_parser("show").set_defaults(fn=cmd_config_show)
-    cs = c.add_parser("set", help="e.g. ymp config set library_root D:\\Music")
+    cs = c.add_parser("set", help="e.g. dielify config set library_root D:\\Music")
     cs.add_argument("key")
     cs.add_argument("value")
     cs.set_defaults(fn=cmd_config_set)

@@ -30,6 +30,7 @@ class Settings:
     # "auto" = this PC's home-network and Tailscale addresses (+ localhost), or a
     # comma-separated list of IPs. Never all interfaces, never a public address.
     server_bind: str = "auto"
+    offline: bool = False          # True = never contact YouTube; the library still plays
 
     def __post_init__(self) -> None:
         if not self.library_root:
@@ -75,7 +76,7 @@ def check_bind_address(text: str) -> None:
                          "Use 'auto' or this PC's home-network / Tailscale address.")
     if not is_allowed_bind(ip):
         raise ValueError(f"server_bind: {ip} is not a private, Tailscale or loopback address; "
-                         "ymp is never exposed to the public internet.")
+                         "Dielify is never exposed to the public internet.")
 
 
 def settings_path() -> Path:
@@ -111,6 +112,8 @@ def set_value(key: str, value: str) -> Settings:
     if key == "library_root":
         value = str(Path(value).expanduser().resolve())
     current = getattr(s, key)
+    if isinstance(current, bool):  # bool("false") would be True
+        value = str(value).strip().lower() in ("1", "true", "yes", "on")
     setattr(s, key, type(current)(value))
     save(s)
     return s

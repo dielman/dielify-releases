@@ -10,23 +10,35 @@ from __future__ import annotations
 import ipaddress
 import logging
 import socket
+import threading
 import time
 from contextlib import asynccontextmanager
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
 
 import uvicorn
 from fastapi import FastAPI, Request
+from fastapi.staticfiles import StaticFiles
 
 from . import __version__
 from .downloads import DownloadQueue
 from .settings import Settings, check_bind_address, is_allowed_bind
 
-log = logging.getLogger("ymp.server")
+log = logging.getLogger("dielify.server")
 
 SHUTDOWN_GRACE_S = 3
+UI_DIR = Path(__file__).with_name("ui")
+# The desktop window holds the PC-only key, so its page may only run Dielify's own script
+# and only show pictures from dielify and YouTube's image servers.
+UI_CSP = ("default-src 'self'; script-src 'self'; connect-src 'self'; media-src 'self'; "
+          "style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'; "
+          "img-src 'self' data: https://*.googleusercontent.com https://*.ggpht.com https://*.ytimg.com "
+          "https://music.youtube.com https://www.gstatic.com")
 
 
 def create_app(queue: DownloadQueue | None = None) -> FastAPI:
     from .custom_api import router as custom_router
+    from .desktop_api import router as desktop_router
     from .subsonic_api import router as subsonic_router
 
     queue = queue or DownloadQueue()
@@ -38,11 +50,14 @@ def create_app(queue: DownloadQueue | None = None) -> FastAPI:
         queue.stop()
 
     # /api/openapi.json is the Android app's contract (also saved in docs/openapi.json).
-    app = FastAPI(title="ymp", version=__version__, lifespan=lifespan,
+    app = FastAPI(title="Dielify", version=__version__, lifespan=lifespan,
                   docs_url="/api/docs", redoc_url=None, openapi_url="/api/openapi.json")
     app.state.queue = queue
     app.include_router(subsonic_router)
     app.include_router(custom_router)
+    app.include_router(desktop_router)
+    # The desktop app's screens. They hold no data; everything comes from /api with a key.
+    app.mount("/ui", StaticFiles(directory=UI_DIR, html=True), name="ui")
 
     @app.get("/api/health", tags=["status"])
     def health() -> dict:
@@ -56,6 +71,8 @@ def create_app(queue: DownloadQueue | None = None) -> FastAPI:
         # path only: the query string can hold passwords and tokens
         log.info("%s %s %s %d %.0fms", client, request.method, request.url.path,
                  response.status_code, (time.perf_counter() - start) * 1000)
+        if request.url.path.startswith("/ui"):
+            response.headers["Content-Security-Policy"] = UI_CSP
         return response
 
     return app
@@ -94,7 +111,23 @@ def _listen(addr: str, port: int) -> socket.socket:
     return sock
 
 
-def run(s: Settings, addrs: list[str]) -> None:
+def setup_file_logging() -> Path:
+    """Server requests -> %LOCALAPPDATA%\\Dielify\\logs\\server.log (no secrets)."""
+    from .paths import app_data_dir
+    logs = app_data_dir() / "logs"
+    logs.mkdir(exist_ok=True)
+    fh = RotatingFileHandler(logs / "server.log", maxBytes=2_000_000, backupCount=3, encoding="utf-8")
+    fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+    root = logging.getLogger()
+    root.addHandler(fh)
+    if root.level > logging.WARNING or root.level == logging.NOTSET:
+        root.setLevel(logging.WARNING)
+    for name in ("dielify.server", "dielify.subsonic_api", "dielify.downloads"):
+        logging.getLogger(name).setLevel(logging.INFO)
+    return logs / "server.log"
+
+
+def _sockets(s: Settings, addrs: list[str]) -> list[socket.socket]:
     sockets = []
     for a in addrs:
         try:
@@ -103,12 +136,41 @@ def run(s: Settings, addrs: list[str]) -> None:
             log.warning("Can't listen on %s:%d (%s)", a, s.server_port, e)
     if not sockets:
         raise OSError(f"Could not listen on any address (port {s.server_port} in use?)")
+    return sockets
+
+
+def _config(queue: DownloadQueue | None = None) -> uvicorn.Config:
     # A paused phone holds its stream open without reading, so a graceful shutdown
     # would wait for it forever: give open connections a few seconds, then close them.
-    config = uvicorn.Config(create_app(), access_log=False, log_level="warning",
-                            server_header=False, timeout_graceful_shutdown=SHUTDOWN_GRACE_S)
     logging.getLogger("uvicorn.error").addFilter(_ExpectedShutdownNoise())
-    _Server(config).run(sockets=sockets)
+    return uvicorn.Config(create_app(queue), access_log=False, log_level="warning",
+                          server_header=False, timeout_graceful_shutdown=SHUTDOWN_GRACE_S)
+
+
+def run(s: Settings, addrs: list[str]) -> None:
+    """`dielify serve`: run in the foreground until Ctrl+C."""
+    sockets = _sockets(s, addrs)
+    _Server(_config()).run(sockets=sockets)
+
+
+def start_background(s: Settings, addrs: list[str]) -> uvicorn.Server:
+    """The desktop app: run the server on a background thread. Stop it with
+    `server.should_exit = True`. Raises OSError if the port is taken."""
+    if "127.0.0.1" not in addrs:
+        addrs = ["127.0.0.1", *addrs]  # the desktop window talks to localhost
+    sockets = _sockets(s, addrs)
+    if not any(sk.getsockname()[0] == "127.0.0.1" for sk in sockets):
+        for sk in sockets:
+            sk.close()
+        raise OSError(f"Port {s.server_port} is already in use on this PC")
+    srv = uvicorn.Server(_config())
+    thread = threading.Thread(target=srv.run, kwargs={"sockets": sockets}, name="dielify-server", daemon=True)
+    thread.start()
+    for _ in range(100):  # wait until it's accepting connections
+        if srv.started:
+            break
+        time.sleep(0.05)
+    return srv
 
 
 class _Server(uvicorn.Server):

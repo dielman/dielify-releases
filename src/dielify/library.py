@@ -105,7 +105,14 @@ CONTENT_TYPES = {".m4a": "audio/mp4", ".opus": "audio/ogg", ".ogg": "audio/ogg",
 
 
 def db_path() -> Path:
-    return app_data_dir() / "ymp.db"
+    path = app_data_dir() / "dielify.db"
+    legacy = path.with_name("ymp.db")  # the database's name before the rename to Dielify
+    if not path.exists() and legacy.exists():
+        for suffix in ("", "-wal", "-shm"):
+            old = legacy.with_name(legacy.name + suffix)
+            if old.exists():
+                old.rename(path.with_name(path.name + suffix))
+    return path
 
 
 def _fold(text: str | None) -> str | None:
@@ -159,7 +166,7 @@ class Library:
         for path in self.root.rglob("*"):
             if path.suffix.lower() not in AUDIO_EXTS or not path.is_file():
                 continue
-            if any(part.startswith(".ymp-dl-") for part in path.relative_to(self.root).parts):
+            if any(part.startswith(".dielify-dl-") for part in path.relative_to(self.root).parts):
                 continue  # download still in progress
             yield path
 

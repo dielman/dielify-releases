@@ -2,7 +2,7 @@
 
 On Windows the data is encrypted with DPAPI (CryptProtectData), so only the same
 Windows user on the same PC can decrypt it. There is no plain-text fallback on
-Windows. On other systems saving is refused unless YMP_INSECURE_DEV_STORE=1 is set,
+Windows. On other systems saving is refused unless DIELIFY_INSECURE_DEV_STORE=1 is set,
 which exists only for development and tests.
 """
 
@@ -16,7 +16,8 @@ from pathlib import Path
 
 from .paths import app_data_dir, safe_name
 
-_ENTROPY_PREFIX = b"ymp-credstore-v1:"
+_ENTROPY_PREFIX = b"dielify-credstore-v1:"
+_LEGACY_ENTROPY_PREFIX = b"ymp-credstore-v1:"  # before the rename to Dielify
 
 
 class CredentialError(Exception):
@@ -58,7 +59,7 @@ def _is_windows() -> bool:
 
 
 def _dev_store_allowed() -> bool:
-    return os.environ.get("YMP_INSECURE_DEV_STORE") == "1"
+    return os.environ.get("DIELIFY_INSECURE_DEV_STORE") == "1"
 
 
 # --- Public API -------------------------------------------------------------
@@ -71,11 +72,10 @@ def _cred_dir(store: str = "credentials") -> Path:
     return d
 
 
-def _entropy(profile: str, store: str) -> bytes:
+def _entropy(profile: str, store: str, prefix: bytes = _ENTROPY_PREFIX) -> bytes:
     # Binds each file to its name and store, so files can't be swapped between them.
-    # (The YouTube store keeps the original form so existing sign-ins still open.)
     suffix = b"" if store == "credentials" else b":" + store.encode("utf-8")
-    return _ENTROPY_PREFIX + profile.encode("utf-8") + suffix
+    return prefix + profile.encode("utf-8") + suffix
 
 
 def _cred_path(profile: str, store: str = "credentials") -> Path:
@@ -91,9 +91,9 @@ def save(profile: str, auth: dict, store: str = "credentials") -> Path:
         blob = b"INSECURE-DEV" + base64.b64encode(payload)
     else:
         raise CredentialError(
-            "Refusing to store credentials unencrypted on this OS. ymp's credential "
+            "Refusing to store credentials unencrypted on this OS. Dielify's credential "
             "store uses Windows DPAPI. For local development only, set "
-            "YMP_INSECURE_DEV_STORE=1.")
+            "DIELIFY_INSECURE_DEV_STORE=1.")
     path = _cred_path(profile, store)
     tmp = path.with_suffix(".tmp")
     tmp.write_bytes(blob)
@@ -112,7 +112,13 @@ def load(profile: str, store: str = "credentials") -> dict | None:
     if blob.startswith(b"DPAPI1"):
         if not _is_windows():
             raise CredentialError("These credentials were encrypted on Windows.")
-        payload = _dpapi(blob[6:], entropy, protect=False)
+        try:
+            payload = _dpapi(blob[6:], entropy, protect=False)
+        except CredentialError:
+            # Saved before the rename to Dielify: open it the old way, re-save the new way.
+            legacy = _entropy(profile, store, _LEGACY_ENTROPY_PREFIX)
+            payload = _dpapi(blob[6:], legacy, protect=False)
+            save(profile, json.loads(payload), store)
     elif blob.startswith(b"INSECURE-DEV"):
         if not _dev_store_allowed():
             raise CredentialError("Found a development-only credential file; refusing to use it.")

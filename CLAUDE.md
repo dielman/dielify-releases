@@ -9,8 +9,8 @@ A self-hosted YouTube Music system for Josh's Windows 11 PC. It signs in to YouT
 Music (Premium), searches and discovers music, downloads audio to a configurable
 local folder with full tags and cover art, plays it offline, and serves the library
 over LAN and Tailscale to a custom native Android app. Multi-user: each person has
-their own profile, library folder and YouTube login. Working name: **ymp** (Josh to
-choose the final name).
+their own profile, library folder and YouTube login. Name: **Dielify** (Josh's choice, 7 Nov 2026;
+the working name until then was `ymp`).
 
 The full brief is `docs/HANDOFF.md`.
 
@@ -38,7 +38,7 @@ The full brief is `docs/HANDOFF.md`.
 - Never commit secrets, the database, or music. Never log cookies or tokens.
 - In every instruction for Josh, list what he needs **before** the step: which
   password, which terminal (admin or not), whether `.venv` must be active (prefer
-  `.venv\Scripts\python` / `.venv\Scripts\ymp` so it doesn't matter), which
+  `.venv\Scripts\python` / `.venv\Scripts\dielify` so it doesn't matter), which
   site/window. Don't let him discover a requirement by failing.
 
 ## Architecture
@@ -47,7 +47,7 @@ The full brief is `docs/HANDOFF.md`.
 Android app (Kotlin) --Tailscale / LAN--> Server (Python, FastAPI)       [Phase 2+]
 Desktop GUI (web UI in native window) --> Server (same engine)           [Phase 4]
 
-src/ymp/
+src/dielify/
   yt_adapter.py   ytmusicapi + yt-dlp behind ONE interface. The only module that
                   imports them. When YouTube breaks something, fix it here.
   downloader.py   fetch -> tag -> move into Artist/Album/Track. (Queue/retries: Ph.3)
@@ -55,16 +55,22 @@ src/ymp/
   credstore.py    per-profile YouTube credentials, encrypted with Windows DPAPI
   settings.py     JSON settings: library root, quality, format, cache limit
   paths.py        app data dirs + Windows-safe filename handling
-  cli.py          `ymp` command (Phase 1 user interface)
-  library.py      SQLite index (ymp.db); files are the truth, a scan rebuilds it
+  cli.py          `dielify` command (Phase 1 user interface)
+  library.py      SQLite index (dielify.db); files are the truth, a scan rebuilds it
   auth.py         server users (Subsonic logins, DPAPI store "server_users"), lockout
   subsonic_api.py /rest/* Subsonic + OpenSubsonic, JSON and XML
   server.py       FastAPI app + uvicorn on explicit sockets (never 0.0.0.0)
   custom_api.py   /api/*: discovery, YouTube catalogue, downloads, library, settings,
                   device-token login. Pydantic models = the Android contract;
-                  regenerate docs/openapi.json with `ymp server openapi --out ...`
+                  regenerate docs/openapi.json with `dielify server openapi --out ...`
   downloads.py    persistent queue, 1 worker, 3 attempts (30s/120s back-off),
                   cancel, holds jobs while the YouTube sign-in is dead
+  desktop.py      the desktop app: pywebview window (WebView2) + pystray tray + server
+                  on a background thread; in-window YouTube sign-in (Bridge.sign_in)
+  desktop_api.py  /api/desktop/*: PC-only settings, profiles, phone logins
+                  (desktop key only; phones get 403)
+  winint.py       single instance (named mutex + show event), HKCU Run key, MessageBox
+  ui/             desktop screens: index.html, app.js, app.css (no build step)
   # planned (Phase 5): Tailscale binding, token management CLI, rate limits
 ```
 
@@ -79,7 +85,7 @@ src/ymp/
   The queue re-checks the sign-in (≤ every 10 min) and holds jobs while it's dead,
   because yt-dlp otherwise silently falls back to non-Premium formats (~128k).
 - **yt-dlp needs a JavaScript runtime for YouTube** (since 2025.11.12). Deno is the
-  default and recommended: `winget install --id=DenoLand.Deno`. `ymp doctor` checks.
+  default and recommended: `winget install --id=DenoLand.Deno`. `dielify doctor` checks.
 - **Premium quality:** with Premium cookies, YouTube offers ~256 kbps Opus (itag 774,
   verified live 7 Nov 2026) and 256 kbps AAC (itag 141). `auto` picked 774. Without
   Premium the best is ~160 kbps Opus (itag 251).
@@ -91,18 +97,18 @@ src/ymp/
   changed). `account_name()` falls back to searching the raw menu response. We pass the signed-in cookies to
   yt-dlp via a temporary Netscape cookie file that is deleted after each download.
 - **No re-encoding:** audio is remuxed only (webm/opus -> .opus, AAC -> .m4a).
-- **Custom tag `YMP_VIDEOID`** (m4a: `----:com.ymp:videoId`) in every file so the
+- **Custom tag `DIELIFY_VIDEOID`** (m4a: `----:com.dielify:videoId`) in every file so the
   Phase 2 library index can map files back to YouTube.
 
 ### Data locations (Windows)
 
-- Settings: `%LOCALAPPDATA%\ymp\settings.json`
-- Credentials: `%LOCALAPPDATA%\ymp\credentials\<profile>.dpapi` (DPAPI, current
+- Settings: `%LOCALAPPDATA%\Dielify\settings.json`
+- Credentials: `%LOCALAPPDATA%\Dielify\credentials\<profile>.dpapi` (DPAPI, current
   Windows user only)
 - Music: `<library_root>\<profile>\<Artist>\<Album>\<NN Title>.<ext>`
-- Database: `%LOCALAPPDATA%\ymp\ymp.db` (tracks keyed by profile + path relative
+- Database: `%LOCALAPPDATA%\Dielify\dielify.db` (tracks keyed by profile + path relative
   to the profile folder, so moving `library_root` keeps play counts and stars)
-- Server logins: `%LOCALAPPDATA%\ymp\server_users\<name>.dpapi`
+- Server logins: `%LOCALAPPDATA%\Dielify\server_users\<name>.dpapi`
 
 ## Phases
 
@@ -111,7 +117,7 @@ src/ymp/
 | 1 | Server core (CLI) | CLI run produces a tagged audio file that plays in VLC with no internet | **Done** 2026-11-07 (Josh confirmed VLC offline playback) |
 | 2 | Library + Subsonic API | Symfonium/Ultrasonic on the home network browses and plays | **Done** 2026-11-07 (Josh played a track in Symfonium over home Wi-Fi) |
 | 3 | Discovery + request endpoints | Test client discovers, requests, watches progress, plays | **Done** 2026-11-07 (Josh's acceptance run: PASS) |
-| 4 | Desktop GUI + Windows integration | Non-technical user installs, signs in, plays offline, no terminal | Next — waiting for Josh's go-ahead |
+| 4 | Desktop GUI + Windows integration | Non-technical user installs, signs in, plays offline, no terminal | **In progress** — app works (Josh tested); installer + updater next |
 | 5 | Secure remote access | Phone plays over mobile data, no router ports open | Not started |
 | 6 | Android app | Find, request and listen on the road | Not started |
 | 7 | Polish + multi-user install | Second PC, second profile, backups | Not started |
@@ -127,10 +133,10 @@ src/ymp/
   cover art shown.
 
 **Phase 2 — done** (7 Nov 2026):
-- Built: library index + `ymp library scan`, auto-index after download, Subsonic
+- Built: library index + `dielify library scan`, auto-index after download, Subsonic
   API (browse, folders, search3 incl. empty-query full sync, album lists, stream
   with Range, cover art with resize, star, scrobble), server users, lockout,
-  `ymp serve` (also logs to `%LOCALAPPDATA%\ymp\logs\server.log`: each Subsonic
+  `dielify serve` (also logs to `%LOCALAPPDATA%\Dielify\logs\server.log`: each Subsonic
   call with its parameters, never p/t/s/apiKey). 52 tests pass.
 - Verified live: a scripted client on the LAN address (192.168.1.249:4747) pinged,
   browsed, searched, streamed the full file, seeked (HTTP 206) and got cover art;
@@ -141,7 +147,7 @@ src/ymp/
   Phase 2 step 1 has Josh switch to Private, remove those, and add a port-4747,
   Private-only rule (admin; Claude must not change firewall settings).
 - Firewall fixed by Josh and verified: Ethernet is Private, python.exe Public rules
-  removed, only "ymp server (private networks)" (TCP 4747, Private) remains.
+  removed, only "dielify server (private networks)" (TCP 4747, Private) remains.
 - Acceptance passed: Symfonium (Subsonic API 1.13.0) synced via search3, streamed,
   fetched cover art and scrobbled; no failed or unimplemented calls in the log.
   It also called getAlbumInfo2, getArtistInfo2, getGenres, getBookmarks,
@@ -157,14 +163,21 @@ src/ymp/
 - Found during it: Josh's saved sign-in had gone stale (normal-window cookies), so
   that download silently came out at 126 kbps Opus (itag 251) instead of Premium.
   Fixed: queue holds jobs until the sign-in works; README now says Incognito.
-- Also fixed: Ctrl+C hung `ymp serve` while a paused phone held a stream open;
+- Also fixed: Ctrl+C hung `dielify serve` while a paused phone held a stream open;
   graceful shutdown now caps at 3 s (`timeout_graceful_shutdown`).
 - Acceptance passed (Josh, after Incognito sign-in): personalised home feed
   ("Listen again", "Mixed for you"), discovered "Loser" (Tame Impala), queued →
   downloading → processing → done, 264 kbps Opus (Premium), streamed + seek.
 - Still at standard quality: track 2 "Somebody To Love" (poobWJNbucs, 126 kbps).
-  Fix: `ymp download poobWJNbucs --overwrite`.
-- Next: Phase 4 (desktop GUI + Windows integration). Do not start until Josh says go.
+  Fix: `dielify download poobWJNbucs --overwrite`.
+
+**Phase 4 — in progress** (started 7 Nov 2026, branch `phase-4`):
+- Built and tested by Josh ("All worked"): `dielify-desktop` window + tray + built-in
+  server; library/player/discover/downloads/settings screens; in-window YouTube
+  sign-in with a "Use this account" bar; offline mode; start with Windows; profiles;
+  phone logins. 75 tests pass.
+- Remaining: installer (bundled Python, FFmpeg, Deno) + updater; then Josh's
+  no-terminal install test. Update hosting and code signing not yet decided by Josh.
 
 ## Open questions for Josh
 
@@ -174,23 +187,39 @@ src/ymp/
 - Default cache size limit and eviction behaviour (setting exists, not enforced yet)
 - Daughter's install: shared library or fully separate
 - Wake-on-LAN wanted?
-- Project name
 
 ## Decisions log
 
-- 2026-11-07: Working name `ymp`. Browser-header auth chosen over OAuth (see above).
+- 2026-11-07: Working name `dielify`. Browser-header auth chosen over OAuth (see above).
   Pillow added as a dependency to square-crop non-square video thumbnails for cover
   art. Credentials refuse to save unencrypted on non-Windows unless the explicit
-  dev-only env var `YMP_INSECURE_DEV_STORE=1` is set (used by tests).
+  dev-only env var `DIELIFY_INSECURE_DEV_STORE=1` is set (used by tests).
 - 2026-11-07 (Phase 2): FastAPI 0.162 / Uvicorn 0.54 / Starlette 1.10 on Python 3.15.
-  Subsonic passwords are random, ymp-generated and DPAPI-encrypted (token auth
+  Subsonic passwords are random, dielify-generated and DPAPI-encrypted (token auth
   needs the plaintext, so hashing isn't possible). No transcoding: stream always
   sends the original file. Port 4747. IDs are typed strings (ar-/al-/tr-).
   Unsupported features (playlists, genres, lyrics...) return valid empty results.
-- 2026-11-07 (Phase 3): Our API uses per-device bearer tokens (`ymp_` + 32 random
+- 2026-11-07 (Phase 3): Our API uses per-device bearer tokens (`dielify_` + 32 random
   bytes, stored as sha256) from POST /api/auth/login with the server user's password.
   Settings PUT allows quality/format/cache only; library_root is PC-only. Any server
   user may change settings (roles could come in Phase 7). Downloads are one at a time.
   /api/docs and /api/openapi.json are public on the LAN (they hold no data).
+- 2026-11-07 (Phase 4): Josh chose a **real installer with an updater** in Phase 4.
+  Sign-in: Josh rejected a hidden/headless Chrome capture ("super suspect"). Chosen:
+  sign in inside Dielify's own WebView2 window and read cookies from it (Google allowed
+  it, verified with Josh's account; tools/signin_window_test.py). Facts found: in
+  Chrome 157 merely opening --remote-debugging-port sets navigator.webdriver=true.
+  The desktop window holds a per-launch key (memory only, passed in the URL fragment);
+  media URLs accept ?token= because <audio>/<img> can't send headers. UI uses
+  textContent only + a strict CSP. Never put an object holding the window on the
+  pywebview js_api object under a public name: pywebview walks it recursively and hangs.
+- 2026-11-07: **Renamed `ymp` → Dielify** (Josh). Package `dielify`, commands `dielify` and
+  `dielify-desktop`, data folder `%LOCALAPPDATA%\Dielify`, DB `dielify.db`, tags
+  `DIELIFY_VIDEOID` / `----:com.dielify:videoId`, token prefixes `dielify_`. Old data is
+  carried over on first run: the old `%LOCALAPPDATA%\` + `ymp` folder and `ymp.db` are
+  renamed, DPAPI files saved with the old entropy prefix are re-saved, old tags are still
+  read (verified on Josh's PC: 17 tracks, YouTube and phone logins intact). Kept as-is:
+  Josh's music folder `E:\Music\ymp`, the project folder `E:\Legit\Code\` + `ymp`, and
+  his firewall rule, still named "`ymp` server (private networks)" (works the same).
 - 2026-11-07: Default `auto` keeps the Premium Opus stream (itag 774) over 256k AAC:
   same quality class, no re-encode. Josh can set `preferred_format m4a` for AAC.

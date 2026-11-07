@@ -5,11 +5,11 @@ from pathlib import Path
 import pytest
 
 from conftest import FakeAdapter, needs_ffmpeg
-from ymp import cli
-from ymp.downloader import download_track, library_relpath
-from ymp.settings import Settings
-from ymp.tagging import prepare_cover, read_tags
-from ymp.yt_adapter import TrackInfo
+from dielify import cli
+from dielify.downloader import download_track, library_relpath
+from dielify.settings import Settings
+from dielify.tagging import prepare_cover, read_tags
+from dielify.yt_adapter import TrackInfo
 
 
 def test_library_relpath(sample_info):
@@ -47,7 +47,7 @@ def test_download_track_tags_and_files(tmp_path, sample_info, codec, ext, fmt):
     assert tags["video_id"] == "abc123"
     assert tags["cover_bytes"] > 1000
     # no leftovers from the temp download folder
-    assert not any(p.name.startswith(".ymp-dl-") for p in (tmp_path / "Music/josh").iterdir())
+    assert not any(p.name.startswith(".dielify-dl-") for p in (tmp_path / "Music/josh").iterdir())
 
     again = download_track(fake, "abc123", s, profile="josh")
     assert again.already_existed and fake.fetches == 1
@@ -75,3 +75,22 @@ def test_cli_config_and_help(tmp_path, capsys):
 def test_cli_download_needs_login(capsys):
     assert cli.main(["download", "abc123"]) == 2
     assert "not signed in" in capsys.readouterr().out
+
+
+@needs_ffmpeg
+def test_legacy_videoid_tags_still_read(tmp_path):
+    import mutagen
+    from mutagen.mp4 import MP4, MP4FreeForm
+    from conftest import make_audio
+    m4a = make_audio(tmp_path, "aac", 1)
+    f = MP4(m4a)
+    if f.tags is None:
+        f.add_tags()
+    f.tags["----:com.ymp:videoId"] = [MP4FreeForm(b"old123")]
+    f.save()
+    assert read_tags(m4a)["video_id"] == "old123"
+    opus = make_audio(tmp_path, "opus", 1)
+    o = mutagen.File(opus)
+    o["YMP_VIDEOID"] = ["old456"]
+    o.save()
+    assert read_tags(opus)["video_id"] == "old456"

@@ -5,9 +5,9 @@ import sys
 
 import pytest
 
-from ymp import credstore, settings
-from ymp.paths import safe_name
-from ymp.yt_adapter import (YouTubeError, _parse_duration, cookie_header_to_netscape,
+from dielify import credstore, settings
+from dielify.paths import safe_name
+from dielify.yt_adapter import (YouTubeError, _parse_duration, cookie_header_to_netscape,
                             parse_browser_headers, upscale_cover_url)
 
 # --- paths ---
@@ -79,7 +79,7 @@ def test_credstore_roundtrip_dpapi():
 
 
 def test_credstore_roundtrip_dev(monkeypatch, isolated_home, not_windows):
-    monkeypatch.setenv("YMP_INSECURE_DEV_STORE", "1")
+    monkeypatch.setenv("DIELIFY_INSECURE_DEV_STORE", "1")
     auth = {"cookie": "SAPISID=secret; HSID=y", "x-goog-authuser": "0"}
     path = credstore.save("josh", auth)
     assert b"SAPISID=secret" not in path.read_bytes()  # at least not raw text
@@ -90,9 +90,9 @@ def test_credstore_roundtrip_dev(monkeypatch, isolated_home, not_windows):
 
 
 def test_credstore_dev_file_unusable_without_opt_in(monkeypatch, not_windows):
-    monkeypatch.setenv("YMP_INSECURE_DEV_STORE", "1")
+    monkeypatch.setenv("DIELIFY_INSECURE_DEV_STORE", "1")
     credstore.save("josh", {"cookie": "a=b"})
-    monkeypatch.delenv("YMP_INSECURE_DEV_STORE")
+    monkeypatch.delenv("DIELIFY_INSECURE_DEV_STORE")
     with pytest.raises(credstore.CredentialError):
         credstore.load("josh")
 
@@ -181,7 +181,7 @@ def test_parse_browser_headers_names_missing_without_values():
 
 
 def test_find_account_name_anywhere_in_menu():
-    from ymp.yt_adapter import _find_account_name
+    from dielify.yt_adapter import _find_account_name
     signed_in = {"actions": [{"popup": {"x": [{"activeAccountHeaderRenderer": {
         "accountName": {"runs": [{"text": "Josh"}]}}}]}}]}
     signed_out = {"actions": [{"openPopupAction": {"popup": {"multiPageMenuRenderer": {
@@ -191,7 +191,7 @@ def test_find_account_name_anywhere_in_menu():
 
 
 def test_cookie_report_lists_names_not_values():
-    from ymp.yt_adapter import _cookie_report
+    from dielify.yt_adapter import _cookie_report
     report = _cookie_report({"Cookie": "SAPISID=topsecret; SID=alsosecret; weird=a\"b", "x-goog-authuser": "1"})
     assert "3 cookies copied" in report and "x-goog-authuser=1" in report
     assert "HSID" in report and "SAPISID," not in report.split("missing:")[1]
@@ -202,3 +202,58 @@ def test_parse_browser_headers_rejects_plain_youtube():
     text = "\n".join(f"{k}: {v}" for k, v in {**_HEADERS, "x-origin": "https://www.youtube.com"}.items())
     with pytest.raises(YouTubeError, match="www.youtube.com"):
         parse_browser_headers(text)
+
+
+def test_sapisid_hash_matches_browser_format():
+    from dielify.yt_adapter import sapisid_hash
+    import hashlib
+    expected = hashlib.sha1(b"1700000000 abc/def https://music.youtube.com").hexdigest()
+    assert sapisid_hash("abc/def", now=1700000000) == f"SAPISIDHASH 1700000000_{expected}"
+
+
+def test_headers_from_window_cookies():
+    from dielify.yt_adapter import NotSignedIn, headers_from_cookies
+    auth = headers_from_cookies({"SAPISID": "a/b", "__Secure-3PAPISID": "a/b", "SID": "x"},
+                                authuser="1", pageid="1234")
+    assert auth["authorization"].startswith("SAPISIDHASH ") and "SAPISID=a/b" in auth["cookie"]
+    assert auth["x-goog-authuser"] == "1" and auth["x-goog-pageid"] == "1234"
+    with pytest.raises(NotSignedIn):
+        headers_from_cookies({"YSC": "x"})
+
+
+# --- carry-over from the old name (ymp) ---
+
+def test_legacy_data_folder_is_moved(monkeypatch, tmp_path):
+    from dielify import paths
+    monkeypatch.delenv("DIELIFY_HOME")
+    monkeypatch.setattr(paths, "user_data_dir", lambda name, appauthor=False: str(tmp_path / name))
+    (tmp_path / "ymp" / "credentials").mkdir(parents=True)
+    (tmp_path / "ymp" / "settings.json").write_text("{}")
+    d = paths.app_data_dir()
+    assert d == tmp_path / "Dielify" and (d / "settings.json").exists() and (d / "credentials").is_dir()
+    assert not (tmp_path / "ymp").exists()
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="DPAPI is Windows-only")
+def test_legacy_encrypted_login_opens_and_is_resaved():
+    legacy = credstore._entropy("josh", "credentials", credstore._LEGACY_ENTROPY_PREFIX)
+    path = credstore._cred_path("josh")
+    path.write_bytes(b"DPAPI1" + credstore._dpapi(json.dumps({"cookie": "a=b"}).encode(), legacy, True))
+    old_blob = path.read_bytes()
+    assert credstore.load("josh") == {"cookie": "a=b"}
+    assert path.read_bytes() != old_blob                   # re-saved with the new name
+    assert credstore.load("josh") == {"cookie": "a=b"}     # and opens the new way
+
+
+def test_legacy_database_is_renamed(isolated_home):
+    import sqlite3
+    from dielify.library import connect, db_path
+    isolated_home.mkdir(parents=True, exist_ok=True)
+    old = isolated_home / "ymp.db"
+    c = sqlite3.connect(old)
+    c.execute("CREATE TABLE marker (x)")
+    c.commit()
+    c.close()
+    assert db_path() == isolated_home / "dielify.db" and not old.exists()
+    with connect() as conn:
+        assert conn.execute("SELECT name FROM sqlite_master WHERE name = 'marker'").fetchone()

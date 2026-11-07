@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dielify</title>
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">Dielify</div>
+    <nav id="nav">
+      <button data-view="library" class="active">Library</button>
+      <button data-view="discover">Discover</button>
+      <button data-view="downloads">Downloads <span id="dl-badge" class="badge" hidden></span></button>
+      <button data-view="settings">Settings</button>
+    </nav>
+    <form id="search" autocomplete="off">
+      <input id="search-input" type="search" placeholder="Search your library">
+    </form>
+    <div id="offline-pill" class="pill" hidden title="Dielify isn't contacting YouTube">Offline</div>
+  </header>
+
+  <main id="main"><p class="muted pad">Loading…</p></main>
+
+  <footer class="player" id="player">
+    <img id="np-cover" alt="" hidden>
+    <div class="np-text">
+      <div id="np-title" class="np-title">Nothing playing</div>
+      <div id="np-artist" class="muted small"></div>
+    </div>
+    <div class="controls">
+      <button id="btn-prev" title="Previous" aria-label="Previous">⏮</button>
+      <button id="btn-play" class="play" title="Play" aria-label="Play">▶</button>
+      <button id="btn-next" title="Next" aria-label="Next">⏭</button>
+    </div>
+    <div class="seek">
+      <span id="t-cur" class="small muted">0:00</span>
+      <input id="seek" type="range" min="0" max="1000" value="0" aria-label="Position">
+      <span id="t-dur" class="small muted">0:00</span>
+    </div>
+    <input id="volume" type="range" min="0" max="100" value="80" title="Volume" aria-label="Volume">
+    <audio id="audio" preload="auto"></audio>
+  </footer>
+
+  <div id="toast" class="toast" hidden></div>
+  <script src="app.js"></script>
+</body>
+</html>

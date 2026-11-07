@@ -11,20 +11,26 @@ from platformdirs import user_data_dir, user_music_dir
 
 from . import APP_NAME
 
+LEGACY_APP_NAME = "ymp"  # the working name before Dielify
+
 
 def app_data_dir() -> Path:
-    """Where settings, credentials and (later) the database live.
+    """Where settings, credentials and the database live.
 
-    Windows: %LOCALAPPDATA%\\ymp. Override with YMP_HOME (used by tests).
+    Windows: %LOCALAPPDATA%\\Dielify. Override with DIELIFY_HOME (used by tests).
     """
-    override = os.environ.get("YMP_HOME")
+    override = os.environ.get("DIELIFY_HOME")
     base = Path(override) if override else Path(user_data_dir(APP_NAME, appauthor=False))
+    if not override and not base.exists():
+        legacy = base.with_name(LEGACY_APP_NAME)
+        if legacy.is_dir():
+            legacy.rename(base)  # one-off move from the old name: settings, logins, database
     base.mkdir(parents=True, exist_ok=True)
     return base
 
 
 def default_library_root() -> Path:
-    return Path(user_music_dir()) / "ymp"
+    return Path(user_music_dir()) / "Dielify"
 
 
 # --- Filename safety -------------------------------------------------------
