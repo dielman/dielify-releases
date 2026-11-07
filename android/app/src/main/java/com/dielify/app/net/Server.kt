@@ -246,14 +246,17 @@ class Server(private val context: Context, private val accounts: AccountStore) {
     suspend fun ytPlaylist(playlistId: String): YtCollection = get("api/yt/playlist/" + Uri.encode(playlistId))
 
     // Downloads (onto the PC)
-    suspend fun requestDownload(item: Item): DownloadList {
+    suspend fun requestDownload(item: Item, next: Boolean): DownloadList {
         val type = if (item.type == "video") "video" else item.type
         val body = json.encodeToString(DownloadRequest.serializer(),
-            DownloadRequest(type, item.id, item.title, item.artists, item.album))
+            DownloadRequest(type, item.id, item.title, item.artists, item.album, next))
         return json.decodeFromString(send("POST", "api/downloads", body))
     }
     suspend fun activeDownloads(): DownloadList = get("api/downloads?active=true&limit=300")
     suspend fun finishedDownloads(): DownloadList = get("api/downloads?finished=true&limit=60")
+    suspend fun moveDownloadNext(id: Long) {
+        send("POST", "api/downloads/$id/next")
+    }
     suspend fun cancelDownload(id: Long) {
         send("DELETE", "api/downloads/$id")
     }

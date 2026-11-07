@@ -157,15 +157,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Set by "artist" taps so the Search tab opens with that name filled in. */
     val searchRequest = MutableStateFlow<String?>(null)
 
-    fun download(item: Item) = viewModelScope.launch {
+    /** Single songs download next by default (you usually want to hear them now);
+     *  whole albums/playlists join the back of the line unless `next` is set. */
+    fun download(item: Item, next: Boolean = item.isSong) = viewModelScope.launch {
         try {
-            val jobs = server.requestDownload(item).downloads
+            val jobs = server.requestDownload(item, next).downloads
             val already = jobs.count { it.status == "done" }
             val queued = jobs.size - already
             messages.tryEmit(
                 when {
                     queued == 0 -> "Already in your library"
-                    item.isSong -> "Downloading \"${item.title}\" on the PC"
+                    item.isSong -> "Downloading \"${item.title}\" on the PC" + if (next) " (next in line)" else ""
                     else -> "$queued ${if (queued == 1) "song" else "songs"} added to downloads" +
                         if (already > 0) " ($already already in your library)" else ""
                 }

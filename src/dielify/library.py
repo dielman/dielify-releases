@@ -119,6 +119,13 @@ def _fold(text: str | None) -> str | None:
     return text.casefold() if text else text
 
 
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Columns added after the first release (CREATE TABLE IF NOT EXISTS won't add them)."""
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(downloads)")}
+    if "priority" not in cols:  # 0.6: "download next" (1 = jump the queue)
+        conn.execute("ALTER TABLE downloads ADD COLUMN priority INTEGER NOT NULL DEFAULT 0")
+
+
 @contextmanager
 def connect():
     conn = sqlite3.connect(db_path(), timeout=10)
@@ -127,6 +134,7 @@ def connect():
     conn.execute("PRAGMA journal_mode = WAL")
     conn.create_function("fold", 1, _fold, deterministic=True)  # Unicode-aware lower()
     conn.executescript(SCHEMA)
+    _migrate(conn)
     try:
         yield conn
         conn.commit()

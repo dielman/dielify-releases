@@ -141,6 +141,23 @@ def upscale_cover_url(url: str | None, size: int = 1200) -> str | None:
     return url
 
 
+_TITLE_NOISE = re.compile(
+    r"\s*[\(\[](?:official\s*(?:music\s*)?(?:video|audio|lyric\s*video|visualizer)|"
+    r"lyrics?|lyric\s*video|audio|hd|hq|4k|remastered(?:\s*\d{4})?)[\)\]]\s*", re.I)
+
+
+def split_video_title(title: str, channel: str | None) -> tuple[str | None, str]:
+    """'Vance Joy - Riptide (Official Video)' by 'VanceJoyVEVO' -> ('Vance Joy', 'Riptide')."""
+    clean = _TITLE_NOISE.sub(" ", title).strip()
+    for sep in (" - ", " \u2013 ", " \u2014 ", " | "):
+        if sep in clean:
+            artist, song = clean.split(sep, 1)
+            if artist.strip() and song.strip():
+                return artist.strip(), song.strip()
+    name = re.sub(r"(?:VEVO| - Topic|Official)$", "", channel or "", flags=re.I).strip() or None
+    return name, clean or title
+
+
 def _best_thumb(thumbnails: list[dict] | None) -> str | None:
     if not thumbnails:
         return None
@@ -495,11 +512,14 @@ class YTMusicAdapter:
         self._pace()
         try:
             wp = self._yt.get_watch_playlist(videoId=video_id, limit=1)
-            t = next(x for x in wp["tracks"] if x.get("videoId") == video_id)
-        except StopIteration:
-            raise YouTubeError(f"Track {video_id} not found")
-        except Exception as e:
-            raise YouTubeError(f"Couldn't load track {video_id}: {e}") from e
+            t = next((x for x in wp.get("tracks") or [] if x.get("videoId") == video_id), None)
+        except Exception as e:  # ytmusicapi can trip over unusual videos (e.g. KeyError 'videoId')
+            log.warning("Watch-playlist lookup failed for %s: %s", video_id, e)
+            t = None
+        if t is None:
+            # Videos that aren't in YouTube Music's catalogue (e.g. many VEVO uploads) get an
+            # unrelated list back; use the video's own details instead.
+            return self._track_from_video(video_id)
 
         album = t.get("album") or {}
         info = TrackInfo(
@@ -517,6 +537,23 @@ class YTMusicAdapter:
             self._enrich_from_album(info)
         info.cover_url = upscale_cover_url(info.cover_url)
         return info
+
+    def _track_from_video(self, video_id: str) -> TrackInfo:
+        self._pace()
+        try:
+            vd = (self._yt.get_song(video_id) or {}).get("videoDetails") or {}
+        except Exception as e:
+            raise YouTubeError(f"Couldn't load video {video_id}: {e}") from e
+        if not vd.get("title"):
+            raise YouTubeError(f"Video {video_id} not found")
+        artist, title = split_video_title(vd["title"], vd.get("author"))
+        try:
+            duration = int(vd.get("lengthSeconds") or 0) or None
+        except ValueError:
+            duration = None
+        cover = _best_thumb((vd.get("thumbnail") or {}).get("thumbnails"))
+        return TrackInfo(video_id=video_id, title=title, artists=[artist] if artist else [],
+                         duration_s=duration, cover_url=upscale_cover_url(cover), is_video=True)
 
     def _enrich_from_album(self, info: TrackInfo) -> None:
         self._pace()

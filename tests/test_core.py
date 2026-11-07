@@ -257,3 +257,34 @@ def test_legacy_database_is_renamed(isolated_home):
     assert db_path() == isolated_home / "dielify.db" and not old.exists()
     with connect() as conn:
         assert conn.execute("SELECT name FROM sqlite_master WHERE name = 'marker'").fetchone()
+
+
+
+def test_split_video_title():
+    from dielify.yt_adapter import split_video_title
+    assert split_video_title("Vance Joy - Riptide", "VanceJoyVEVO") == ("Vance Joy", "Riptide")
+    assert split_video_title("Queen – Bohemian Rhapsody (Official Video Remastered)", "Queen Official") == \
+        ("Queen", "Bohemian Rhapsody (Official Video Remastered)")
+    assert split_video_title("Tame Impala - The Less I Know The Better (Official Video)", "tameimpalaVEVO") == \
+        ("Tame Impala", "The Less I Know The Better")
+    assert split_video_title("Riptide", "VanceJoyVEVO") == ("VanceJoy", "Riptide")
+
+
+def test_get_track_falls_back_to_video_details():
+    from dielify.yt_adapter import YTMusicAdapter
+
+    class FakeYT:
+        def get_watch_playlist(self, videoId, limit):
+            return {"tracks": [{"videoId": "other", "title": "Unrelated"}]}
+
+        def get_song(self, video_id):
+            return {"videoDetails": {"title": "Vance Joy - Riptide", "author": "VanceJoyVEVO",
+                                     "lengthSeconds": "204",
+                                     "thumbnail": {"thumbnails": [{"url": "https://i.ytimg.com/vi/x/hq.jpg",
+                                                                   "width": 480, "height": 360}]}}}
+
+    a = YTMusicAdapter.__new__(YTMusicAdapter)
+    a._yt = FakeYT()
+    a._pace = lambda: None
+    info = a.get_track("1h8OI3ZlacI")
+    assert (info.title, info.artists, info.duration_s, info.is_video) == ("Riptide", ["Vance Joy"], 204, True)

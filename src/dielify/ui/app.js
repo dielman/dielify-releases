@@ -308,7 +308,8 @@ async function renderDownloads(active) {
   const now = running ? [h("h2", {}, "Now"), h("div", { class: "job" }, who(running),
     h("div", { class: "bar" }, h("div", { style: `width:${Math.round(running.progress * 100)}%` })), cancel(running))] : null;
   const line = waiting.length ? [h("h2", {}, `Waiting in line (${waitingTotal})`), waiting.map((d, i) => h("div", { class: "job" },
-    who(d), h("div", { class: "small muted" }, `#${i + 1} in line · ${minutes((i + 1 + (running ? 1 : 0)) * pace)}`), cancel(d))),
+    who(d), h("div", { class: "small muted" }, `#${i + 1} in line · ${minutes((i + 1 + (running ? 1 : 0)) * pace)}`),
+    h("div", {}, d.next || i === 0 ? null : h("button", { title: "Download this next", onclick: async () => { await api(`/api/downloads/${d.id}/next`, { method: "POST" }); pollDownloads(); } }, "Move up"), cancel(d)))),
     waitingTotal > waiting.length ? h("p", { class: "muted small" }, `…and ${waitingTotal - waiting.length} more`) : null] : null;
   const done = finished.length ? [h("h2", {}, "Finished"), finished.map((d) => h("div", { class: "job" }, who(d),
     h("div", { class: `small status-${d.status}` }, label[d.status]),

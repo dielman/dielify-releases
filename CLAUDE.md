@@ -129,7 +129,7 @@ src/dielify/
 | 4 | Desktop GUI + Windows integration | Non-technical user installs, signs in, plays offline, no terminal | **Done** 2026-11-07 — 0.4.3 installed + working on Josh's PC; clean-PC test waived by Josh |
 | 5 | Secure remote access | Phone plays over mobile data, no router ports open | **Done** 2026-11-07 (Josh played in Symfonium over mobile data via Tailscale) |
 | 6 | Android app | Find, request and listen on the road | **Done** 2026-11-08 — closed by Josh before the car test ("assume it works"); Android Auto untested |
-| 7 | Polish + multi-user install | Second PC, second profile, backups | Not started |
+| 7 | Polish (scope set by Josh 8 Nov) | Backups to E:, signed phone release with in-app updates, download-next, playlists, music-video fix | In progress (branch `phase-7`) |
 
 ## Current status
 
@@ -305,3 +305,8 @@ src/dielify/
   0.5.0/0.5.1 installed from dist\ locally; not published to GitHub yet.
 - 2026-11-07: Default `auto` keeps the Premium Opus stream (itag 774) over 256k AAC:
   same quality class, no re-encode. Josh can set `preferred_format m4a` for AAC.
+- 2026-11-08 (Phase 7 scope, Josh): multi-user / second PC **not needed yet** (skip). Backups:
+  daily copy of database + settings to a folder on E:. Phone app: signed release build with
+  in-app updates from the same GitHub releases. Backlog in: download next (phone requests
+  jump the queue), YouTube playlists in Library, music-video "Track not found" fix. Not in:
+  cache size limit enforcement.
