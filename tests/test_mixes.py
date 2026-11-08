@@ -94,3 +94,25 @@ def test_musicbrainz_needs_an_exact_match_and_retries_when_busy(monkeypatch):
     assert mb.artist("Nobody") == (None, [])
     assert tags.genre_tags([("producer", 3), ("hip hop", 32), ("1990s", 9), ("Hip-Hop", 1)]) == ["hip hop"]
     assert tags.split_artists("Justice, Tame Impala & Djo feat. Someone") == ["Justice", "Tame Impala", "Djo", "Someone"]
+
+
+def test_genre_lookup_does_the_whole_library_in_one_go(monkeypatch):
+    """0.8.2 stopped after 300 artists and waited 30 minutes for the next 300."""
+    import threading
+    add_library()
+    with connect() as conn:
+        conn.execute("DELETE FROM artist_tags")
+        for i in range(450):
+            conn.execute("INSERT INTO artists (profile, name) VALUES (?, ?)", ("josh", f"Extra artist {i}"))
+
+    class CountingMB:
+        calls = 0
+
+        def artist(self, name):
+            CountingMB.calls += 1
+            return ("id", [("rock", 1)])
+
+    done = tags.tag_some(CountingMB(), threading.Event())
+    assert done == CountingMB.calls == len(tags.library_artists()) > 450
+    st = tags.status()
+    assert st["looked_up"] == st["artists"]

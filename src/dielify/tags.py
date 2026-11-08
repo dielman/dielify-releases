@@ -139,12 +139,16 @@ def status() -> dict:
     return {"artists": len(names), "looked_up": looked_up}
 
 
-def tag_some(mb: MusicBrainz, stop: threading.Event, limit: int = 300) -> int:
-    """Look up artists not done yet (or done long ago). Returns how many were looked up."""
+def tag_some(mb: MusicBrainz, stop: threading.Event, limit: int | None = None) -> int:
+    """Look up artists not done yet (or done long ago), all of them unless `limit` is
+    given (one per second: a 1,000-artist library takes about 20 minutes). Stops early
+    when asked to, or when MusicBrainz can't be reached. Returns how many were done."""
     cutoff = time.time() - REFRESH_DAYS * 86400
     with connect() as conn:
         fresh = {r[0] for r in conn.execute("SELECT name_key FROM artist_tags WHERE fetched_at > ?", (cutoff,))}
-    todo = [n for n in library_artists() if norm(n) not in fresh][:limit]
+    todo = [n for n in library_artists() if norm(n) not in fresh]
+    if limit is not None:
+        todo = todo[:limit]
     n = 0
     for name in todo:
         if stop.is_set():

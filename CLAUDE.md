@@ -318,7 +318,9 @@ src/dielify/
   up, rebuilds weekly. GET /api/mixes, POST /api/mixes/refresh. Apps: "Made for you"
   on Discover, "Dielify mixes" in Library > Playlists. Also fixed: settings.json save
   retries when Windows briefly locks it (intermittent Access denied). Published
-  **v0.8.2**; not yet confirmed by Josh (mixes need ~15 min of MusicBrainz lookups).
+  **v0.8.2**. On Josh's PC it stopped at 300 artists: tag_some had limit=300 and the loop
+  waits 30 min, and his library has 1,084 album artists (so ~2 h to the 80% needed).
+  0.8.3: looks up the whole library in one pass (~20-25 min at 1/s), then builds mixes.
 - Idea for later: pre-resolve the next song in a list so skipping feels instant.
 
 ## Open questions for Josh
