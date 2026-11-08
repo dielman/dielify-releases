@@ -294,7 +294,7 @@ src/dielify/
   it applies when updating FROM any version): [Code] InitializeSetup waits up to 60 s
   for the mutex when silent; updater passes /LOG=updates\install.log. First proof will
   be the next PC update (0.8.0 -> next).
-- Item 4 built (0.9.0): two-way playlist sync. `playlists.py` (+ tables playlists /
+- Item 4 built (0.8.1): two-way playlist sync. `playlists.py` (+ tables playlists /
   playlist_items / playlist_ops in library.py), `playlist_api.py` (/api/playlists...),
   adapter write calls (create/add/remove/rename/delete, playlist_entries with
   setVideoId). YouTube is master for synced lists: Dielify edits go out at once or wait in
@@ -392,3 +392,6 @@ src/dielify/
   reachable; the phone while playing, for a while after pausing, and optionally via a
   "Stay reachable" setting (notification + Unrestricted battery). Verify Android 17
   Doze behaviour on Josh's Pixel before promising times. Volume = Dielify's own.
+- 2026-11-08: **Version numbers** (Josh): we're far from 1.0, so releases now count up the
+  last number (0.8.1, 0.8.2, ...) instead of the middle one. 0.9.0 was built but never
+  published; it went out as 0.8.1.
