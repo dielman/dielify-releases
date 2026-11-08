@@ -340,7 +340,7 @@ src/dielify/
   the next 5 songs in play order (shuffle-aware, saved songs skipped, retry every 20 s).
   The player also buffers 15 min ahead, so the current song is fully read at once.
   Prefetching a YouTube song also asks the PC to download it (same as playing it).
-  Shown in phone Settings ("Kept from streaming"). Published **v0.8.5** (8 Nov). Not yet tested on the phone.
+  Shown in phone Settings ("Kept from streaming"). Published **v0.8.5** (8 Nov). **Confirmed by Josh** ("all working"): PC log showed the playing song + next 5 fetched within 75 s, then quiet; played in flight mode.
 - Idea for later: pre-resolve the next song in a list so skipping feels instant (the
   0.8.5 prefetch now covers this for the phone).
 
