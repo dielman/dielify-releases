@@ -259,6 +259,11 @@ def _queue(request: Request) -> DownloadQueue:
     return request.app.state.queue
 
 
+def _ratings(s: Session):
+    from .ratings import Ratings
+    return Ratings(s.user.profile)
+
+
 def _items(items: list[YTItem], lib: Library) -> list[Item]:
     have = lib.video_ids()
     return [Item(**vars(i), library_track_id=have.get(i.id) if i.type in ("song", "video") else None)
@@ -308,14 +313,15 @@ def revoke_device(device_id: int, s: Session = Depends(session)) -> Response:
 def discover_home(shelves: int = Query(6, ge=1, le=20), s: Session = Depends(session)) -> HomeFeed:
     """YouTube Music's personalised home feed: mixes, playlists, new releases."""
     feed = youtube.call(s.user.profile, "home", shelves)
-    return HomeFeed(shelves=[Shelf(title=sh.title, items=_items(sh.items, s.lib)) for sh in feed])
+    r = _ratings(s)
+    return HomeFeed(shelves=[Shelf(title=sh.title, items=_items(r.arrange(sh.items), s.lib)) for sh in feed])
 
 
 @router.get("/discover/similar/{video_id}", response_model=ItemList, tags=["discover"])
 def discover_similar(video_id: str, limit: int = Query(25, ge=1, le=50),
                      s: Session = Depends(session)) -> ItemList:
     """Songs like this one (its YouTube Music radio)."""
-    return ItemList(items=_items(youtube.call(s.user.profile, "similar", video_id, limit), s.lib))
+    return ItemList(items=_items(_ratings(s).arrange(youtube.call(s.user.profile, "similar", video_id, limit)), s.lib))
 
 
 @router.get("/discover/charts", response_model=Charts, tags=["discover"])
@@ -735,6 +741,48 @@ def get_stats(period: Literal["week", "month", "year", "all"] = "month",
                  top_songs=songs, top_artists=artists, top_albums=albums)
 
 
+# --- ratings: thumbs up / down / ban --------------------------------------------------
+
+class Rating(BaseModel):
+    kind: Literal["song", "artist"]
+    key: str
+    name: str
+    value: int = Field(description="1 up, -1 down, -2 banned")
+    updated_at: float
+
+
+class RatingList(BaseModel):
+    ratings: list[Rating]
+
+
+class RatingIn(BaseModel):
+    kind: Literal["song", "artist"]
+    name: str = Field(max_length=300, description='song: "Title - Artist"; artist: its name')
+    video_id: str | None = None
+    track_id: int | None = None
+    value: int = Field(ge=-2, le=1, description="1 up, -1 down, -2 ban, 0 clear")
+
+
+@router.get("/ratings", response_model=RatingList, tags=["ratings"])
+def get_ratings(s: Session = Depends(session)) -> RatingList:
+    from . import ratings
+    return RatingList(ratings=[Rating(**r) for r in ratings.listing(s.user.profile)])
+
+
+@router.put("/ratings", response_model=RatingList, tags=["ratings"])
+def put_rating(body: RatingIn, s: Session = Depends(session)) -> RatingList:
+    """Thumbs up (1), down (-1), ban (-2) or clear (0) a song or an artist. Returns all."""
+    from . import ratings
+    if body.kind == "artist":
+        key = ratings.artist_key(body.name)
+    else:
+        key = ratings.song_key(body.video_id, body.track_id)
+    if not key:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Which song? (video_id or track_id)")
+    ratings.set_rating(s.user.profile, body.kind, key, body.name.strip(), body.value)
+    return get_ratings(s)
+
+
 class OutsideShelf(BaseModel):
     key: str
     title: str
@@ -771,9 +819,11 @@ class ForYou(BaseModel):
 
 @router.get("/discover/for-you", response_model=ForYou, tags=["discover"])
 def discover_for_you(s: Session = Depends(session)) -> ForYou:
-    from . import history
-    on_repeat = [_track_out(t) for t in map(s.lib.track, history.on_repeat(s.lib)) if t is not None]
-    forgotten = [_track_out(t) for t in map(s.lib.track, history.forgotten(s.lib)) if t is not None]
+    from . import history, ratings
+    r = _ratings(s)
+    ok = lambda t: t is not None and r.value(t["video_id"], t["artist"], t["id"]) != ratings.BAN  # noqa: E731
+    on_repeat = [_track_out(t) for t in map(s.lib.track, history.on_repeat(s.lib)) if ok(t)]
+    forgotten = [_track_out(t) for t in map(s.lib.track, history.forgotten(s.lib)) if ok(t)]
     have, seen, more = s.lib.video_ids(), set(), []
     for vid in history.seeds(s.lib):
         try:
@@ -784,7 +834,7 @@ def discover_for_you(s: Session = Depends(session)) -> ForYou:
             if it.id not in have and it.id not in seen:
                 seen.add(it.id)
                 more.append(it)
-    return ForYou(on_repeat=on_repeat, forgotten=forgotten, more_like=_items(more[:40], s.lib))
+    return ForYou(on_repeat=on_repeat, forgotten=forgotten, more_like=_items(r.arrange(more)[:40], s.lib))
 
 
 @router.get("/library/tracks/{track_id}/stream", tags=["library"],

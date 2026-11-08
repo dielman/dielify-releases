@@ -113,6 +113,9 @@ def create_app(queue: DownloadQueue | None = None) -> FastAPI:
                  response.status_code, (time.perf_counter() - start) * 1000)
         if request.url.path.startswith("/ui"):
             response.headers["Content-Security-Policy"] = UI_CSP
+            # the window must never mix an old cached page with new code after an update:
+            # always ask (a 304 when nothing changed, so it costs nothing)
+            response.headers["Cache-Control"] = "no-cache"
         return response
 
     return app

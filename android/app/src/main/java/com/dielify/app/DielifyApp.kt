@@ -27,6 +27,8 @@ class DielifyApp : Application(), SingletonImageLoader.Factory {
     val songCache by lazy { com.dielify.app.playback.SongCache(this) }
     /** Remote control between devices (connected while the playback service runs). */
     val remote by lazy { com.dielify.app.net.RemoteClient(this, server) }
+    /** Thumbs up / down / ban (the player skips banned songs). */
+    val ratings by lazy { com.dielify.app.net.Ratings(server) }
 
     override fun onCreate() {
         super.onCreate()

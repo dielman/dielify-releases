@@ -56,13 +56,21 @@ def _tracks(profile: str) -> list[dict]:
             "SELECT t.id, t.video_id, t.title, t.artist, t.year, t.duration_s, t.play_count, al.name AS album, "
             "ar.name AS album_artist FROM tracks t JOIN albums al ON al.id = t.album_id "
             "JOIN artists ar ON ar.id = t.artist_id WHERE t.profile = ? AND t.video_id IS NOT NULL", (profile,)).fetchall()
-    return [dict(r) for r in rows]
+    from .ratings import Ratings
+    r = Ratings(profile)
+    out = []
+    for row in rows:
+        t = dict(row)
+        t["factor"] = r.factor(t["video_id"], t["artist"], t["id"])
+        if t["factor"] > 0:  # banned songs/artists never go in a mix
+            out.append(t)
+    return out
 
 
 def _pick(tracks: list[dict], seed: str, size: int = SIZE) -> list[dict]:
     """A weighted sample: songs you play more are more likely, but it changes weekly."""
     rnd = random.Random(seed)
-    keyed = [(rnd.random() ** (1.0 / (1 + (t["play_count"] or 0))), t) for t in tracks]
+    keyed = [(rnd.random() ** (1.0 / ((1 + (t["play_count"] or 0)) * t.get("factor", 1.0))), t) for t in tracks]
     return [t for _, t in sorted(keyed, key=lambda k: -k[0])[:size]]
 
 
@@ -150,6 +158,10 @@ def rebuild(profile: str, similar: Callable[[str], list[YTItem]] | None = None) 
     for key, name, description, picked in mixes:
         seeds = sorted(picked, key=lambda t: -(t["play_count"] or 0))[:2]
         finds = _new_finds(similar, seeds, have) if key.startswith("genre:") else []
+        if finds:
+            from .ratings import DOWN, Ratings
+            r = Ratings(profile)
+            finds = [f for f in r.arrange(finds) if r.value(f.id, f.artists) != DOWN]
         if finds:
             description += f", plus {len(finds)} new finds"
         entries = [YTItem("song", t["video_id"], t["title"], tags.split_artists(t["artist"])[:3] or [t["artist"]],

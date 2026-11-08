@@ -405,20 +405,28 @@ src/dielify/
   read the YouTube sign-in of josh: DPAPI decrypt failed (Windows error 13)" from
   desktop_api, several times an hour. Not investigated yet.
 
-## Backlog (Josh, 8 Nov; after Phase 8 item 6). Build together: they share one ratings table.
+## Backlog (Josh, 8 Nov; after Phase 8 item 6)
 
-- **Ratings:** thumbs up / down for songs and for artists. Thumbed-down ones can still
-  appear in discovery but are weighted low (mixes, For you, outside lists, radio).
-- **Ban ("mega dislike"):** hold the thumb down for a while: that song or artist never plays
-  again (skipped in any list, left out of discovery).
+- **Built in 0.8.11 (not yet confirmed by Josh): ratings + ban.** `ratings.py` (table
+  `ratings`: profile, kind song|artist, key = video id / tr-<id> / artist_key(name),
+  value 1 up / -1 down / -2 ban). GET/PUT /api/ratings. Discovery (home, similar, For
+  you) drops banned and moves thumbs-down to the back (`Ratings.arrange`); mixes leave
+  banned out and weight picks by FACTOR (up x3, down x0.2). Both players skip banned songs
+  in any list (PC playAt/nextPlayable; phone onMediaItemTransition). PC: player-bar
+  thumbs (hold thumbs down 0.7 s -> "ban this song / the artist"), artist-page thumbs,
+  Settings > Ratings with Unban. Phone: same on Now playing (long press), artist page,
+  Settings. Key rule is shared by ratings.py / app.js / Ratings.kt (NFKC, lower, & -> and).
 - **Never-ending discovery play:** keeps playing new songs (not in the library) and
   downloads them for Josh to check out; thumbs down on one removes its download from the
   PC. To ask when building: delete only songs this mode downloaded (not ones already
   kept)? Thumbs up = keep, no rating = keep or expire?
 
-- **Icons (Josh, 8 Nov: "this looks shit"):** replace text buttons with icons, starting
-  with the PC song rows (stacked "▶ Play" / "+ Playlist" / "Download" buttons make each
-  row three lines tall); same pass over the phone screens.
+- **Icons (Josh, 8 Nov: "this looks shit"): built in 0.8.11.** PC song rows are one line
+  (tap the title to play; icons for add to playlist / download / ✓ in library / remove),
+  inline SVG icons (Material Symbols paths) for the player bar, downloads and big buttons;
+  phone's last text-only buttons got icons. Also: /ui files are sent with
+  Cache-Control: no-cache (a cached old index.html with a new app.js broke the page in
+  testing; would do the same in the WebView after an update).
 
 ## Open questions for Josh
 

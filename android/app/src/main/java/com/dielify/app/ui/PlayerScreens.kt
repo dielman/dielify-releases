@@ -135,6 +135,7 @@ fun NowPlayingScreen(vm: AppViewModel) {
                 p.album, style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center,
             )
+            SongThumbs(vm)
             p.error?.let {
                 Spacer(Modifier.height(8.dp))
                 Text(it, color = MaterialTheme.colorScheme.error, textAlign = TextAlign.Center)
@@ -214,6 +215,7 @@ fun SettingsScreen(vm: AppViewModel) {
             if (songs.isNotEmpty()) OutlinedButton(onClick = { vm.saved.removeAll() }) {
                 Text("Remove all songs from this phone")
             }
+            BannedList(vm)
             val cached = androidx.compose.ui.platform.LocalContext.current.dielify.songCache.cache.cacheSpace
             Setting("Kept from streaming", "${formatBytes(cached)} (up to 500 MB). The next 5 songs " +
                 "of whatever is playing are fetched ahead, so short reception drops don't stop the music.")

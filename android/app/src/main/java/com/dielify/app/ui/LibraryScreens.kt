@@ -500,7 +500,10 @@ fun ArtistScreen(vm: AppViewModel, page: Screen.ArtistPage) {
     Page(vm, page.name) { pad ->
         Box(Modifier.padding(pad)) {
             Loaded(vm, page.id, { vm.server.artist(page.id) }) { detail ->
-                AlbumGrid(vm, detail.albums)
+                Column {
+                    ArtistThumbs(vm, page.name)
+                    AlbumGrid(vm, detail.albums)
+                }
             }
         }
     }

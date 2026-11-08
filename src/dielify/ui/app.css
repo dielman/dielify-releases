@@ -86,6 +86,10 @@ button.ib, span.ib { background: none; border: none; width: 34px; height: 34px; 
   color: var(--muted); display: inline-flex; align-items: center; justify-content: center; vertical-align: middle; }
 button.ib:hover { color: var(--text); background: var(--panel-2); }
 span.ib.in-lib { color: #1db954; }
+button.ib.on, .controls button.thumb.on { color: #1db954; }
+.controls button.thumb { background: none; border: none; color: var(--muted); }
+.controls button.thumb:hover { color: var(--text); }
+.thumbs { display: inline-flex; gap: 2px; vertical-align: middle; font-size: 14px; font-weight: 400; }
 .tracks .title { cursor: pointer; }
 
 .hero { display: flex; gap: 20px; align-items: flex-end; margin-bottom: 20px; }

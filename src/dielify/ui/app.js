@@ -62,6 +62,8 @@ const ICONS = {
   sync: "M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z",
   edit: "M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z",
   back: "M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z",
+  thumbUp: "M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z",
+  thumbDown: "M15 3H6c-.83 0-1.54.5-1.84 1.22l-3.02 7.05c-.09.23-.14.47-.14.73v2c0 1.1.9 2 2 2h6.31l-.95 4.57-.03.32c0 .41.17.79.44 1.06L9.83 23l6.59-6.59c.36-.36.58-.86.58-1.41V5c0-1.1-.9-2-2-2zm4 0v12h4V3h-4z",
 };
 function icon(name, cls = "ico") {
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -198,7 +200,7 @@ async function viewArtist(id) {
   try {
     const { artist, albums } = await api(`/api/library/artists/${id}`);
     show(h("button", { onclick: () => viewLibrary("artists") }, icon("back", "ico lead"), "Artists"),
-      h("h1", { style: "margin-top:16px" }, artist.name), h("div", { class: "grid" }, albums.map(albumCard)));
+      h("h1", { style: "margin-top:16px" }, artist.name, " ", artistThumbs(artist.name)), h("div", { class: "grid" }, albums.map(albumCard)));
   } catch (e) { failed(e); }
 }
 
@@ -663,7 +665,8 @@ async function viewSettings() {
     const about = h("div", { class: "panel" }, h("h2", {}, "About"), setting("Version", `Dielify ${s.version}`),
       setting("Data folder", s.data_folder), setting("Log file", s.log_file),
       await updateSetting(setting));
-    show(h("h1", {}, "Settings"), youtube, music, windows, phones, backups, about);
+    await refreshRatings();
+    show(h("h1", {}, "Settings"), youtube, music, windows, phones, backups, ratingsPanel(), about);
   } catch (e) { failed(e); }
 }
 
@@ -769,6 +772,10 @@ function reportPlay() {
 window.addEventListener("beforeunload", reportPlay);
 
 function playAt(i) {
+  if (i >= 0 && i < player.list.length && banned(player.list[i])) {  // banned: never plays, wherever it is
+    toast(`Skipped “${player.list[i].title}”: it's banned (Settings > Ratings)`);
+    i = nextPlayable(i);
+  }
   if (i < 0 || i >= player.list.length) return;
   reportPlay();
   const t = player.list[i];
@@ -811,6 +818,7 @@ function paintBar() {
     showTime(nowPos(st) / 1000, (st.duration_ms || 0) / 1000, !!st.playing);
     if (document.activeElement !== $("volume")) $("volume").value = Math.round((st.volume ?? 1) * 100);
     document.querySelectorAll("tr[data-track]").forEach((r) => r.classList.toggle("playing", !!s && Number(r.dataset.track) === s.track_id));
+    paintThumbs();
     return;
   }
   const t = player.current;
@@ -818,6 +826,7 @@ function paintBar() {
   showTime(audio.currentTime, audio.duration || 0, !!t && !audio.paused);
   if (document.activeElement !== $("volume")) $("volume").value = Math.round(audio.volume * 100);
   document.querySelectorAll("tr[data-track]").forEach((r) => r.classList.toggle("playing", !!t && Number(r.dataset.track) === t.id));
+  paintThumbs();
 }
 setInterval(() => { if (elsewhere()) paintBar(); }, 500);
 
@@ -832,7 +841,7 @@ $("btn-play").addEventListener("click", () => {
   if (!player.current) return;
   audio.paused ? audio.play() : audio.pause();
 });
-$("btn-next").addEventListener("click", () => control({ action: "next" }) || playAt(player.index + 1));
+$("btn-next").addEventListener("click", () => control({ action: "next" }) || playAt(nextPlayable(player.index)));
 $("btn-prev").addEventListener("click", () => control({ action: "previous" })
   || (audio.currentTime > 3 ? (audio.currentTime = 0) : playAt(player.index - 1)));
 $("btn-addpl").addEventListener("click", () => {
@@ -845,7 +854,7 @@ $("btn-addpl").addEventListener("click", () => {
 });
 audio.addEventListener("play", () => { if (!elsewhere()) paintBar(); });
 audio.addEventListener("pause", () => { if (!elsewhere()) paintBar(); });
-audio.addEventListener("ended", () => { reportPlay(); playAt(player.index + 1); });
+audio.addEventListener("ended", () => { reportPlay(); playAt(nextPlayable(player.index)); });
 audio.addEventListener("timeupdate", () => {
   const now = audio.currentTime;
   if (lastTick !== null && !audio.paused && now > lastTick && now - lastTick < 2) heard += now - lastTick;
@@ -928,7 +937,7 @@ function runCommand(c, from) {
   switch (c.action) {
     case "play": if (player.current) audio.play().catch(() => {}); break;
     case "pause": audio.pause(); break;
-    case "next": playAt(player.index + 1); break;
+    case "next": playAt(nextPlayable(player.index)); break;
     case "previous": if (audio.currentTime > 3) audio.currentTime = 0; else playAt(player.index - 1); break;
     case "seek": audio.currentTime = c.position_ms / 1000; break;
     case "volume": audio.volume = c.value; break;
@@ -985,10 +994,138 @@ $("btn-devices").addEventListener("click", () => {
   document.addEventListener("mousedown", pickerOutside, true);
 });
 
+// --- ratings: thumbs up / down, hold thumbs down to ban (dielify/ratings.py) ----------------
+const rated = { songs: new Map(), artists: new Map(), list: [] };
+const UP = 1, DOWN = -1, BAN = -2;
+// Same rules as ratings.py: artist_key and split_artists.
+const artistKey = (name) => (name || "").normalize("NFKC").toLowerCase().replace(/&/g, "and").replace(/\s+/g, " ").trim();
+const splitArtists = (text) => (text || "").split(/,|;| & | x | feat\.? | ft\.? | featuring | with /i).map((s) => s.trim()).filter(Boolean);
+function loadRatings(list) {
+  rated.list = list; rated.songs.clear(); rated.artists.clear();
+  for (const r of list) (r.kind === "song" ? rated.songs : rated.artists).set(r.key, r.value);
+}
+async function refreshRatings() {
+  try { loadRatings((await api("/api/ratings")).ratings); } catch { /* offline from the server: keep what we had */ }
+  paintThumbs();
+}
+// song: { video_id, id (library track id), artist }
+function ratingOf(song) {
+  if (!song) return 0;
+  const s = rated.songs.get(song.video_id || (song.id ? `tr-${song.id}` : "")) || 0;
+  const a = splitArtists(song.artist).map((n) => rated.artists.get(artistKey(n)) || 0);
+  if (s === BAN || a.includes(BAN)) return BAN;
+  if (s) return s;
+  return a.includes(DOWN) ? DOWN : Math.max(0, ...a);
+}
+const banned = (song) => ratingOf(song) === BAN;
+async function rate(kind, body, value, msg) {
+  try {
+    loadRatings((await api("/api/ratings", { method: "PUT", body: { kind, value, ...body } })).ratings);
+    if (msg) toast(msg);
+  } catch (e) { toast(e.message); }
+  paintThumbs();
+}
+const songBody = (s) => ({ name: [s.title, s.artist].filter(Boolean).join(" - "), video_id: s.video_id || null, track_id: s.id || null });
+
+// What's playing now, here or on the active device.
+function nowSong() {
+  const d = elsewhere();
+  if (d) {
+    const st = d.state || {};
+    const s = st.queue && st.index >= 0 ? st.queue[st.index] : null;
+    return s && { video_id: s.video_id || null, id: s.track_id || null, title: s.title, artist: s.artist || "" };
+  }
+  const t = player.current;
+  return t && { video_id: t.video_id || null, id: t.id || null, title: t.title, artist: t.artist || "" };
+}
+function paintThumbs() {
+  const s = nowSong();
+  const own = s ? (rated.songs.get(s.video_id || (s.id ? `tr-${s.id}` : "")) || 0) : 0;
+  $("btn-up").classList.toggle("on", own === UP);
+  $("btn-down").classList.toggle("on", own === DOWN);
+  $("btn-up").disabled = $("btn-down").disabled = !s;
+}
+function skipNow() {
+  if (!control({ action: "next" })) playAt(nextPlayable(player.index));
+}
+// The next song in the list that isn't banned (or past the end).
+function nextPlayable(from) {
+  let i = from + 1;
+  while (i < player.list.length && banned(player.list[i])) i++;
+  return i;
+}
+
+$("btn-up").replaceChildren(icon("thumbUp"));
+$("btn-down").replaceChildren(icon("thumbDown"));
+$("btn-up").addEventListener("click", () => {
+  const s = nowSong();
+  if (s) rate("song", songBody(s), $("btn-up").classList.contains("on") ? 0 : UP);
+});
+// Thumbs down: a click rates the song; holding it for 0.7 s offers a ban.
+let holdTimer = null, held = false;
+$("btn-down").addEventListener("pointerdown", () => {
+  held = false;
+  holdTimer = setTimeout(() => { held = true; banChooser(); }, 700);
+});
+["pointerup", "pointerleave"].forEach((e) => $("btn-down").addEventListener(e, () => clearTimeout(holdTimer)));
+$("btn-down").addEventListener("click", () => {
+  if (held) return;
+  const s = nowSong();
+  if (s) rate("song", songBody(s), $("btn-down").classList.contains("on") ? 0 : DOWN);
+});
+function banChooser() {
+  const s = nowSong();
+  if (!s) return;
+  const close = () => box.remove();
+  const artists = splitArtists(s.artist);
+  const box = h("div", { class: "modal", onclick: (e) => { if (e.target === box) close(); } },
+    h("div", { class: "panel" }, h("h2", {}, "Never play again?"),
+      h("div", { class: "pick" },
+        h("button", { class: "pick-row", onclick: async () => { close(); await rate("song", songBody(s), BAN, `Banned “${s.title}”`); skipNow(); } },
+          h("div", {}, `This song: ${s.title}`), h("div", { class: "muted small" }, "Skipped in every list, left out of discovery and mixes")),
+        artists.map((a) => h("button", { class: "pick-row", onclick: async () => { close(); await rate("artist", { name: a }, BAN, `Banned ${a}`); skipNow(); } },
+          h("div", {}, `The artist: ${a}`), h("div", { class: "muted small" }, "All their songs, everywhere")))),
+      h("p", { class: "muted small" }, "Undo in Settings > Ratings."),
+      h("div", { class: "row", style: "margin-top:10px" }, h("button", { onclick: close }, "Cancel"))));
+  document.body.append(box);
+}
+// Thumbs on an artist's page (hold thumbs down to ban the artist).
+function artistThumbs(name) {
+  const key = artistKey(name);
+  const box = h("span", { class: "thumbs" });
+  const paint = () => {
+    const v = rated.artists.get(key) || 0;
+    box.replaceChildren(
+      ib("thumbUp", v === UP ? "You like this artist (click to clear)" : "Like this artist",
+        async () => { await rate("artist", { name }, v === UP ? 0 : UP); paint(); }, { class: `ib${v === UP ? " on" : ""}` }),
+      ib("thumbDown", v === DOWN ? "Thumbed down (click to clear)" : "Less of this artist (hold to ban)",
+        async () => { if (!heldA) { await rate("artist", { name }, v === DOWN ? 0 : DOWN); paint(); } }, { class: `ib${v === DOWN ? " on" : ""}` }),
+      v === BAN ? h("span", { class: "muted small" }, " Banned · ",
+        h("button", { class: "link", onclick: async () => { await rate("artist", { name }, 0, `Unbanned ${name}`); paint(); } }, "unban")) : null);
+    const down = box.children[1];
+    let t = null, heldA = false;
+    down.addEventListener("pointerdown", () => { heldA = false; t = setTimeout(async () => { heldA = true; await rate("artist", { name }, BAN, `Banned ${name}`); paint(); }, 700); });
+    ["pointerup", "pointerleave"].forEach((e) => down.addEventListener(e, () => clearTimeout(t)));
+  };
+  paint();
+  return box;
+}
+function ratingsPanel() {
+  const bans = rated.list.filter((r) => r.value === BAN);
+  const ups = rated.list.filter((r) => r.value === UP).length, downs = rated.list.filter((r) => r.value === DOWN).length;
+  return h("div", { class: "panel" }, h("h2", {}, "Ratings"),
+    h("p", { class: "muted small" }, `${ups} thumbs up · ${downs} thumbs down. Thumbs up: mixes play it more. `
+      + "Thumbs down: it goes to the back of discovery. Banned: never played, never suggested."),
+    bans.length ? bans.map((r) => h("div", { class: "setting" }, h("div", { class: "label" }, r.kind === "artist" ? "Artist" : "Song"),
+      h("div", { class: "value" }, r.name),
+      h("button", { onclick: async () => { await rate(r.kind, r.kind === "artist" ? { name: r.name } : { name: r.name, video_id: r.key.startsWith("tr-") ? null : r.key, track_id: r.key.startsWith("tr-") ? Number(r.key.slice(3)) : null }, 0, `Unbanned ${r.name}`); viewSettings(); } }, "Unban")))
+      : h("p", { class: "muted small" }, "Nothing banned. Hold thumbs down (player bar, or an artist's page) to ban."));
+}
+
 // --- start ----------------------------------------------------------------------------------------
 if (!KEY) show(h("p", { class: "pad warn" }, "Open Dielify from its desktop app."));
 else {
-  go("library"); pollDownloads(); remoteConnect();
+  go("library"); pollDownloads(); remoteConnect(); refreshRatings();
   $("update-pill").addEventListener("click", () => go("settings"));
   // the app checks in the background shortly after starting; pick up the result
   setTimeout(() => api("/api/desktop/update").then(showUpdatePill).catch(() => {}), 45000);

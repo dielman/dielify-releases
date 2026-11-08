@@ -53,6 +53,7 @@ data class PlayerUi(
     val artist: String = "",
     val album: String = "",
     val trackId: Long? = null,
+    val videoId: String? = null,
     val isPlaying: Boolean = false,
     val buffering: Boolean = false,
     val hasNext: Boolean = false,
@@ -107,6 +108,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         app.dielify.plays.flush()
+        viewModelScope.launch { app.dielify.ratings.refresh() }
         viewModelScope.launch {
             updater.check()
             val s = updater.state.value
@@ -134,6 +136,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             artist = m.artist?.toString() ?: "",
             album = m.albumTitle?.toString() ?: "",
             trackId = MediaItems.trackId(c.currentMediaItem),
+            videoId = MediaItems.videoId(c.currentMediaItem),
             isPlaying = c.isPlaying,
             buffering = c.playbackState == Player.STATE_BUFFERING,
             hasNext = c.hasNextMediaItem(),

@@ -174,6 +174,17 @@ CREATE TABLE IF NOT EXISTS discovery_lists (
     PRIMARY KEY (profile, key)
 );
 
+-- Thumbs up / down / ban (ratings.py), per profile, for songs and artists.
+CREATE TABLE IF NOT EXISTS ratings (
+    profile    TEXT NOT NULL,
+    kind       TEXT NOT NULL,      -- song | artist
+    key        TEXT NOT NULL,      -- video id (or tr-<id>) | ratings.artist_key(name)
+    name       TEXT NOT NULL,      -- for showing it (song: "Title - Artist")
+    value      INTEGER NOT NULL,   -- 1 up, -1 down, -2 banned
+    updated_at REAL NOT NULL,
+    PRIMARY KEY (profile, kind, key)
+);
+
 -- Logins for our own API (auth.py): only a hash of each token is kept.
 CREATE TABLE IF NOT EXISTS device_tokens (
     id           INTEGER PRIMARY KEY,

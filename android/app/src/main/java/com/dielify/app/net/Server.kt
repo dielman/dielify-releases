@@ -294,6 +294,9 @@ class Server(private val context: Context, private val accounts: AccountStore) {
         send("POST", "api/plays", json.encodeToString(PlayBatch.serializer(), PlayBatch(plays)))
     }
     suspend fun stats(period: String): Stats = get("api/stats?limit=25&period=$period")
+    suspend fun ratings(): List<Rating> = get<RatingList>("api/ratings").ratings
+    suspend fun rate(r: RatingIn): List<Rating> =
+        json.decodeFromString(RatingList.serializer(), send("PUT", "api/ratings", json.encodeToString(RatingIn.serializer(), r))).ratings
     suspend fun forYou(): ForYou = get("api/discover/for-you")
 
     companion object {
