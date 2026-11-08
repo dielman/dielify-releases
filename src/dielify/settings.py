@@ -9,6 +9,7 @@ import ipaddress
 import json
 import os
 import tempfile
+import time
 from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 
@@ -103,7 +104,17 @@ def save(s: Settings) -> None:
     fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
     with os.fdopen(fd, "w", encoding="utf-8") as f:
         json.dump(asdict(s), f, indent=2)
-    os.replace(tmp, path)
+    # Windows refuses to replace a file another thread has open for reading at that
+    # instant (background parts of Dielify read settings often): retry briefly.
+    for attempt in range(40):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError:
+            if attempt == 39:
+                os.unlink(tmp)
+                raise
+            time.sleep(0.05)
 
 
 def set_value(key: str, value: str) -> Settings:
