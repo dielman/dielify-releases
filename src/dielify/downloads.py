@@ -164,6 +164,13 @@ class DownloadQueue:
         gaps = [a - b for a, b in zip(recent, recent[1:]) if 0 < a - b < 600]
         return {"active": active, "seconds_per_song": sum(gaps) / len(gaps) if gaps else None}
 
+    def clear_finished(self, profile: str) -> int:
+        """Take downloaded and cancelled songs off the list (the songs stay in the library;
+        failed ones stay so you can see what went wrong). Returns how many were removed."""
+        with connect() as conn:
+            return conn.execute("DELETE FROM downloads WHERE profile = ? AND status IN ('done', 'cancelled')",
+                                (profile,)).rowcount
+
     def get(self, profile: str, job_id: int) -> dict | None:
         with connect() as conn:
             row = conn.execute("SELECT * FROM downloads WHERE id = ? AND profile = ?",

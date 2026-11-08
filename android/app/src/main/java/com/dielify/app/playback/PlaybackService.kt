@@ -414,6 +414,48 @@ class PlaybackService : MediaLibraryService() {
     }
 
     private inner class Callback : MediaLibrarySession.Callback {
+        /**
+         * While the session controls another device, play/pause/stop only count from this
+         * app, the notification / lock screen (System UI) and Android Auto. Anything else
+         * (e.g. earbuds or a watch pausing because "music started" while they're not in
+         * use) would otherwise pause the PC the moment it starts. Each request is noted in
+         * the PC's log with who sent it.
+         */
+        /**
+         * Headphone / Bluetooth / earbud buttons (including automatic "pause" when earbuds
+         * come out) only ever control music on this phone. While the session shows another
+         * device they're ignored: taking your earbuds out must not stop the PC.
+         * The notification's own buttons arrive here too and still work.
+         */
+        override fun onMediaButtonEvent(
+            session: MediaSession,
+            controllerInfo: MediaSession.ControllerInfo,
+            intent: Intent,
+        ): Boolean {
+            if (session.player is RemoteDevicePlayer && !session.isMediaNotificationController(controllerInfo)) {
+                dielify.remote.note("ignored a headphone/media button for the other device from ${controllerInfo.packageName}")
+                return true  // handled: do nothing
+            }
+            return super.onMediaButtonEvent(session, controllerInfo, intent)
+        }
+
+        @Deprecated("Media3 still calls it; used to filter remote play/pause")
+        override fun onPlayerCommandRequest(
+            session: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            playerCommand: Int,
+        ): Int {
+            if (session.player is RemoteDevicePlayer &&
+                (playerCommand == Player.COMMAND_PLAY_PAUSE || playerCommand == Player.COMMAND_STOP)
+            ) {
+                val pkg = controller.packageName
+                val ok = pkg == packageName || pkg in TRUSTED_CONTROLLERS
+                dielify.remote.note("${if (ok) "accepted" else "ignored"} play/pause/stop for the other device from $pkg")
+                if (!ok) return androidx.media3.session.SessionResult.RESULT_ERROR_PERMISSION_DENIED
+            }
+            return androidx.media3.session.SessionResult.RESULT_SUCCESS
+        }
+
         override fun onGetLibraryRoot(
             session: MediaLibrarySession,
             browser: MediaSession.ControllerInfo,
@@ -549,6 +591,7 @@ class PlaybackService : MediaLibraryService() {
         const val PHONE = "phone"
         const val ALBUM = "album:"
         const val PHONE_ALBUM = "phone-album:"
+        val TRUSTED_CONTROLLERS = setOf("com.android.systemui", "com.google.android.projection.gearhead")
         const val BUFFER_MS = 15 * 60_000
     }
 }

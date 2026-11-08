@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.material3.TextButton
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -237,7 +238,6 @@ private data class DiscoverData(
     val charts: com.dielify.app.net.Charts?,
     val forYou: com.dielify.app.net.ForYou?,
     val mixes: List<com.dielify.app.net.PlaylistSummary>,
-    val outside: List<com.dielify.app.net.OutsideShelf>,
 )
 
 @Composable
@@ -249,27 +249,14 @@ fun DiscoverScreen(vm: AppViewModel) {
                 val charts = runCatching { vm.server.charts() }.getOrNull()
                 val forYou = runCatching { vm.server.forYou() }.getOrNull()
                 val mixes = runCatching { vm.server.mixes().mixes }.getOrDefault(emptyList())
-                val outside = runCatching { vm.server.outside() }.getOrDefault(emptyList())
-                DiscoverData(home, charts, forYou, mixes, outside)
-            }) { (home, charts, forYou, mixes, outside) ->
+                DiscoverData(home, charts, forYou, mixes)
+            }) { (home, charts, forYou, mixes) ->
                 LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) {
                     item(key = "mixes") { MixShelf(vm, mixes) }
                     if (forYou != null) {
                         item(key = "fy-repeat") { TrackShelf(vm, "On repeat", forYou.onRepeat) }
                         item(key = "fy-more") { ShelfRow(vm, "More like your top songs", forYou.moreLike) }
                         item(key = "fy-forgotten") { TrackShelf(vm, "Forgotten favourites", forYou.forgotten) }
-                    }
-                    if (outside.isNotEmpty()) item(key = "outside-head") {
-                        Text("From around the web", style = MaterialTheme.typography.titleLarge,
-                            modifier = Modifier.padding(start = 16.dp, top = 28.dp))
-                        Text("Radio charts and ListenBrainz, found on YouTube Music. Updated daily.",
-                            Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    items(outside, key = { "out-" + it.key }) { ShelfRow(vm, it.title, it.items) }
-                    if (outside.isNotEmpty()) item(key = "yt-head") {
-                        Text("From YouTube Music", style = MaterialTheme.typography.titleLarge,
-                            modifier = Modifier.padding(start = 16.dp, top = 28.dp))
                     }
                     items(home.shelves, key = { "shelf-" + it.title }) { ShelfRow(vm, it.title, it.items) }
                     if (charts != null) {
@@ -489,7 +476,18 @@ fun DownloadsScreen(vm: AppViewModel) {
                 }
             }
             if (finished.isNotEmpty()) {
-                item { Section("Finished") }
+                item {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Section("Finished")
+                        Spacer(Modifier.weight(1f))
+                        TextButton(onClick = {
+                            scope.launch {
+                                try { vm.server.clearFinishedDownloads() } catch (e: ApiError) { vm.messages.tryEmit(e.message ?: "Couldn't clear") }
+                                tick++
+                            }
+                        }, modifier = Modifier.padding(end = 8.dp)) { Text("Clear finished") }
+                    }
+                }
                 items(finished, key = { "f${it.id}" }) { d ->
                     DownloadRow(d, onClick = d.trackId?.let { id -> { vm.playLibrary(listOf(id)) } }) {
                         when (d.status) {

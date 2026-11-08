@@ -438,6 +438,17 @@ def download_next(job_id: int, request: Request, s: Session = Depends(session)) 
     return _download_out(job)
 
 
+class Cleared(BaseModel):
+    removed: int
+
+
+@router.post("/downloads/clear-finished", response_model=Cleared, tags=["downloads"])
+def clear_finished_downloads(request: Request, s: Session = Depends(session)) -> Cleared:
+    """Remove downloaded and cancelled songs from the list. The songs stay in the library;
+    failed downloads stay listed."""
+    return Cleared(removed=_queue(request).clear_finished(s.user.profile))
+
+
 @router.delete("/downloads/{job_id}", response_model=Download, tags=["downloads"])
 def cancel_download(job_id: int, request: Request, s: Session = Depends(session)) -> Download:
     """Cancel a queued or running download. Finished ones are left as they are."""

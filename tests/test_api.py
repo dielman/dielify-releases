@@ -507,3 +507,20 @@ def test_library_plays_count_and_feed_for_you(monkeypatch):
         assert fy["forgotten"] == []
         assert all(i["id"] != "s1" for i in fy["more_like"])   # suggestions are new to you
         assert fy["more_like"]                                  # FakeYT.similar of your top song
+
+
+def test_clear_finished_downloads_keeps_failed_and_waiting():
+    with make_client() as c:
+        h = login(c)
+        from dielify.library import connect
+        now = time.time()
+        with connect() as conn:
+            for vid, st in (("a", "done"), ("b", "cancelled"), ("c", "failed"), ("d", "queued")):
+                conn.execute("INSERT INTO downloads (profile, video_id, title, request_id, request_type, status, progress, "
+                             "created_at, updated_at, not_before) VALUES ('josh', ?, ?, 'r', 'song', ?, 0, ?, ?, ?)",
+                             (vid, vid, st, now, now, now + 9999))
+        r = c.post("/api/downloads/clear-finished", headers=h)
+        assert r.status_code == 200 and r.json() == {"removed": 2}
+        left = {d["video_id"]: d["status"] for d in c.get("/api/downloads", headers=h).json()["downloads"]}
+        assert left == {"c": "failed", "d": "queued"}
+        assert c.post("/api/downloads/clear-finished").status_code == 401

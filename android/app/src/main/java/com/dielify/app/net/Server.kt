@@ -282,6 +282,10 @@ class Server(private val context: Context, private val accounts: AccountStore) {
     suspend fun moveDownloadNext(id: Long) {
         send("POST", "api/downloads/$id/next")
     }
+    suspend fun clearFinishedDownloads() {
+        send("POST", "api/downloads/clear-finished")
+    }
+
     suspend fun cancelDownload(id: Long) {
         send("DELETE", "api/downloads/$id")
     }

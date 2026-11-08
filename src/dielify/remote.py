@@ -258,6 +258,8 @@ class Hub:
                 await self.send(d, {"type": "error", "message": f"Nothing is playing on {src.name}"})
                 return
             await self.broadcast(d.profile)
+        elif kind == "note":  # a device explaining itself, for the log
+            log.info("Remote: %s says: %s", d.name, str(msg.get("text") or "")[:200])
         elif kind == "select":
             dst = self.find(d.profile, msg.get("device"))
             if dst is None:

@@ -333,7 +333,7 @@ src/dielify/
   match); lists in discovery_lists, rebuilt daily (first run 3 min after start). Live
   trial: triple j top 8 all matched correctly. GET /api/discover/outside (+ /refresh).
   Apps: "From around the web" section in Discover.
-  Published **v0.8.4** (8 Nov). Not yet confirmed by Josh.
+  Published **v0.8.4** (8 Nov). Removed from Discover in 0.8.9 at Josh's request.
 - Bug/feature from Josh's bike ride (lost reception, nothing on the phone): 0.8.5 keeps
   streamed songs in a phone cache (`SongCache`: Media3 SimpleCache in cacheDir/songs,
   500 MB LRU, keyed by the dielify://server/... URI so cached songs play with no
@@ -373,6 +373,28 @@ src/dielify/
   remembers each pause it sends (`told_pause_at`) and ignores "playing" reports from that
   device until it reports paused or PAUSE_GRACE_S (3 s) pass. dielify.remote now logs
   at INFO (moves, commands, connects) to server.log. Published **v0.8.8** (8 Nov).
+- Still pausing on 0.8.8 (Josh: "if im on the phone and i play a song on the pc, its
+  less than a second before the pause"). The new remote log showed the PHONE sending
+  "Pixel 9 Pro -> Gamerig: pause" 0.05-0.5 s after each start/play. Not app code (only
+  the play button pauses): Media3 pauses only for controller requests, so something
+  outside the app (likely earbuds/watch auto-pause, via the platform session) paused the
+  session's RemoteDevicePlayer. 0.8.9: Callback.onPlayerCommandRequest accepts
+  play/pause/stop for the remote player only from this app, System UI and Android Auto,
+  and every request is logged on the PC ("Remote: Pixel 9 Pro says: ... from <package>").
+  Josh: "headphones on my phone shouldnt cause the pc audio to break". Also
+  Callback.onMediaButtonEvent: while the session shows another device, every hardware /
+  Bluetooth media button (incl. earbud auto-pause) is ignored; only the media
+  notification's own buttons pass. Headphones still control music playing on the phone.
+  Not yet confirmed on device.
+- 0.8.9 also (Josh, 8 Nov): "From around the web" removed from Discover in both apps
+  ("i wanted playlists not a fucktonne of single songs"); the daily Discovery thread is
+  no longer started (discovery.py and /api/discover/outside kept). Downloads: "Clear
+  finished" (POST /api/downloads/clear-finished) removes done + cancelled rows (songs
+  stay in the library; failed rows stay).
+- GitHub's australiaeast edge returned 504 for .../releases/download/*/manifest.json (all
+  versions; APK, .sig and the API asset route were fine) on 8 Nov evening, so the phone's
+  update check failed. The APK can be installed from the release page in the phone's
+  browser meanwhile. Idea offered: fall back to the API asset route.
 - Seen in Josh's real server.log since 7 Nov (not new, everything still works): "Can't
   read the YouTube sign-in of josh: DPAPI decrypt failed (Windows error 13)" from
   desktop_api, several times an hour. Not investigated yet.

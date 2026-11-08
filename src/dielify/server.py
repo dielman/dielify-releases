@@ -57,9 +57,9 @@ def create_app(queue: DownloadQueue | None = None) -> FastAPI:
         queue.start()
         playlists.start()
         mix_maker.start()
-        outside.start()
+        # outside discovery (radio charts, ListenBrainz) is off: Josh didn't want single-song
+        # shelves on Discover (8 Nov). The code and /api/discover/outside stay for now.
         yield
-        outside.stop()
         mix_maker.stop()
         playlists.stop()
         queue.stop()

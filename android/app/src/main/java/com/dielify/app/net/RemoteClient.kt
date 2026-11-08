@@ -186,6 +186,12 @@ class RemoteClient(context: Context, private val server: Server) {
         return st.durationMs?.let { pos.coerceAtMost(it) } ?: pos
     }
 
+    /** A line for the PC's log (to find out what's going on; no personal data). */
+    fun note(text: String) {
+        Log.i(TAG, text)
+        send(buildJsonObject { put("type", "note"); put("text", text.take(200)) })
+    }
+
     fun clearError() { _errors.value = null }
 
     private fun send(msg: JsonObject): Boolean = socket?.send(msg.toString()) ?: false
