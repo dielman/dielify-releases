@@ -304,7 +304,9 @@ src/dielify/
   yet. Subsonic getPlaylists/getPlaylist (library songs only). Phone: Library >
   Playlists (yours + "on YouTube, not synced" with Sync), playlist page, Add to playlist
   (song menus + Now playing). PC: same + "+ Playlist" buttons + player-bar ＋. Tested
-  with a fake YouTube (tests/test_playlists.py); not yet against Josh's real account.
+  with a fake YouTube (tests/test_playlists.py). Published as **v0.8.1**. **Confirmed by
+  Josh** ("both work"): the PC updated 0.8.0 -> 0.8.1 by itself and restarted (the
+  installer mutex-wait fix works), and playlist sync works with his real YouTube account.
 - Idea for later: pre-resolve the next song in a list so skipping feels instant.
 
 ## Open questions for Josh
