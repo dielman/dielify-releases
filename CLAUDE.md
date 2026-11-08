@@ -396,7 +396,7 @@ src/dielify/
   other YouTube call (one at a time per profile) waited behind it (home 34 s, For you
   41 s). Fix 0.8.10: `playlist()` caps RD ids at MIX_LIMIT = 100. Lesson: I first assumed
   the PC was still on 0.8.8 from the install log; Josh had installed 0.8.9 by hand. Ask
-  which version is running instead of inferring it.
+  which version is running instead of inferring it. Published **v0.8.10** (8 Nov).
 - GitHub's australiaeast edge returned 504 for .../releases/download/*/manifest.json (all
   versions; APK, .sig and the API asset route were fine) on 8 Nov evening, so the phone's
   update check failed. The APK can be installed from the release page in the phone's
@@ -415,6 +415,10 @@ src/dielify/
   downloads them for Josh to check out; thumbs down on one removes its download from the
   PC. To ask when building: delete only songs this mode downloaded (not ones already
   kept)? Thumbs up = keep, no rating = keep or expire?
+
+- **Icons (Josh, 8 Nov: "this looks shit"):** replace text buttons with icons, starting
+  with the PC song rows (stacked "▶ Play" / "+ Playlist" / "Download" buttons make each
+  row three lines tall); same pass over the phone screens.
 
 ## Open questions for Josh
 
