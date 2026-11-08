@@ -15,6 +15,7 @@ import androidx.media3.datasource.DataSourceBitmapLoader
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.ResolvingDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.CacheBitmapLoader
@@ -140,6 +141,7 @@ object MediaItems {
 class PlaybackService : MediaLibraryService() {
     private var session: MediaLibrarySession? = null
     private var watcher: Watcher? = null
+    private var prefetcher: Prefetcher? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     /** Items handed to the car, so a tap (which sends only the id) can be played in full. */
@@ -151,14 +153,29 @@ class PlaybackService : MediaLibraryService() {
         super.onCreate()
         val server = dielify.server
         val saved = dielify.saved
-        // DefaultDataSource reads files and content:// (cover art) itself and hands http to OkHttp.
-        val upstream = DefaultDataSource.Factory(this, OkHttpDataSource.Factory(server.http))
-        val dataSource = ResolvingDataSource.Factory(upstream) { spec ->
+        // Saved songs -> file:// (read by DefaultDataSource itself, like content:// cover art).
+        // Everything else goes through the song cache, still as dielify://server/... so a
+        // cached song plays with no connection; the PC's real address is looked up only
+        // when bytes are missing.
+        val network = ResolvingDataSource.Factory(OkHttpDataSource.Factory(server.http)) { spec ->
+            spec.withUri(server.resolveMedia(spec.uri))
+        }
+        val songs = dielify.songCache
+        val dataSource = ResolvingDataSource.Factory(DefaultDataSource.Factory(this, songs.forPlayer(network))) { spec ->
             val local = MediaItems.localFile(spec.uri, saved)
-            spec.withUri(if (local != null) Uri.fromFile(local) else server.resolveMedia(spec.uri))
+            if (local != null) spec.withUri(Uri.fromFile(local)) else spec
         }
         val player = ExoPlayer.Builder(this)
             .setMediaSourceFactory(DefaultMediaSourceFactory(dataSource))
+            // Read the whole song as soon as it starts (not just the next 50 s), so it is
+            // already on the phone if reception drops halfway through.
+            .setLoadControl(
+                DefaultLoadControl.Builder()
+                    .setBufferDurationsMs(BUFFER_MS, BUFFER_MS, 2_500, 5_000)
+                    .setTargetBufferBytes(48 * 1024 * 1024)
+                    .setPrioritizeTimeOverSizeThresholds(true)
+                    .build()
+            )
             .setAudioAttributes(
                 AudioAttributes.Builder().setUsage(C.USAGE_MEDIA)
                     .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build(),
@@ -169,6 +186,8 @@ class PlaybackService : MediaLibraryService() {
             .build()
         watcher = Watcher(player, server)
         player.addListener(watcher!!)
+        prefetcher = Prefetcher(player, songs, songs.forPrefetch(network), saved, scope)
+        player.addListener(prefetcher!!)
 
         val bitmaps = CacheBitmapLoader(
             DataSourceBitmapLoader.Builder(this)
@@ -199,6 +218,7 @@ class PlaybackService : MediaLibraryService() {
 
     override fun onDestroy() {
         watcher?.finish()
+        prefetcher?.stop()
         scope.cancel()
         session?.run {
             player.release()
@@ -407,5 +427,6 @@ class PlaybackService : MediaLibraryService() {
         const val PHONE = "phone"
         const val ALBUM = "album:"
         const val PHONE_ALBUM = "phone-album:"
+        const val BUFFER_MS = 15 * 60_000
     }
 }

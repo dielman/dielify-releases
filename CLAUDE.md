@@ -332,7 +332,17 @@ src/dielify/
   match); lists in discovery_lists, rebuilt daily (first run 3 min after start). Live
   trial: triple j top 8 all matched correctly. GET /api/discover/outside (+ /refresh).
   Apps: "From around the web" section in Discover.
-- Idea for later: pre-resolve the next song in a list so skipping feels instant.
+  Published **v0.8.4** (8 Nov). Not yet confirmed by Josh.
+- Bug/feature from Josh's bike ride (lost reception, nothing on the phone): 0.8.5 keeps
+  streamed songs in a phone cache (`SongCache`: Media3 SimpleCache in cacheDir/songs,
+  500 MB LRU, keyed by the dielify://server/... URI so cached songs play with no
+  connection; the PC address is only resolved on a cache miss) and `Prefetcher` fetches
+  the next 5 songs in play order (shuffle-aware, saved songs skipped, retry every 20 s).
+  The player also buffers 15 min ahead, so the current song is fully read at once.
+  Prefetching a YouTube song also asks the PC to download it (same as playing it).
+  Shown in phone Settings ("Kept from streaming"). Not yet tested on the phone.
+- Idea for later: pre-resolve the next song in a list so skipping feels instant (the
+  0.8.5 prefetch now covers this for the phone).
 
 ## Open questions for Josh
 

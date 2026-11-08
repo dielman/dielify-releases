@@ -23,6 +23,8 @@ class DielifyApp : Application(), SingletonImageLoader.Factory {
         private set
     lateinit var plays: PlayReporter
         private set
+    /** Streamed songs kept for a while + the next few fetched ahead (one per process). */
+    val songCache by lazy { com.dielify.app.playback.SongCache(this) }
 
     override fun onCreate() {
         super.onCreate()

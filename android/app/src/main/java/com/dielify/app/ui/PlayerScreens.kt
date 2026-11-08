@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.Player
 import com.dielify.app.BuildConfig
+import com.dielify.app.dielify
 import com.dielify.app.net.Link
 import com.dielify.app.update.UpdateState
 import kotlinx.coroutines.delay
@@ -205,6 +206,9 @@ fun SettingsScreen(vm: AppViewModel) {
             if (songs.isNotEmpty()) OutlinedButton(onClick = { vm.saved.removeAll() }) {
                 Text("Remove all songs from this phone")
             }
+            val cached = androidx.compose.ui.platform.LocalContext.current.dielify.songCache.cache.cacheSpace
+            Setting("Kept from streaming", "${formatBytes(cached)} (up to 500 MB). The next 5 songs " +
+                "of whatever is playing are fetched ahead, so short reception drops don't stop the music.")
             Setting("App version", BuildConfig.VERSION_NAME)
             UpdateSection(vm)
             OutlinedButton(
