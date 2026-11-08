@@ -317,7 +317,8 @@ src/dielify/
   genre mixes. MixMaker: every 30 min tags up to 300 artists, builds once >=80% looked
   up, rebuilds weekly. GET /api/mixes, POST /api/mixes/refresh. Apps: "Made for you"
   on Discover, "Dielify mixes" in Library > Playlists. Also fixed: settings.json save
-  retries when Windows briefly locks it (intermittent Access denied).
+  retries when Windows briefly locks it (intermittent Access denied). Published
+  **v0.8.2**; not yet confirmed by Josh (mixes need ~15 min of MusicBrainz lookups).
 - Idea for later: pre-resolve the next song in a list so skipping feels instant.
 
 ## Open questions for Josh
