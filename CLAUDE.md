@@ -391,6 +391,12 @@ src/dielify/
   no longer started (discovery.py and /api/discover/outside kept). Downloads: "Clear
   finished" (POST /api/downloads/clear-finished) removes done + cancelled rows (songs
   stay in the library; failed rows stay). Published **v0.8.9** (8 Nov).
+- "Nothing loading" on Discover (8 Nov, PC on 0.8.9): opening a YouTube mix (id "RD...")
+  asked ytmusicapi for 5,000 songs; mixes never end, so ~50 paced pages = 97 s, and every
+  other YouTube call (one at a time per profile) waited behind it (home 34 s, For you
+  41 s). Fix 0.8.10: `playlist()` caps RD ids at MIX_LIMIT = 100. Lesson: I first assumed
+  the PC was still on 0.8.8 from the install log; Josh had installed 0.8.9 by hand. Ask
+  which version is running instead of inferring it.
 - GitHub's australiaeast edge returned 504 for .../releases/download/*/manifest.json (all
   versions; APK, .sig and the API asset route were fine) on 8 Nov evening, so the phone's
   update check failed. The APK can be installed from the release page in the phone's

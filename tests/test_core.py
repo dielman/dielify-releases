@@ -332,3 +332,20 @@ def test_backup_keeps_the_newest(tmp_path, monkeypatch):
     names = [p.name for p in backup.backups(folder)]
     assert len(names) == 3 and names[0] == f"{backup.PREFIX}2026-01-04_000000.zip"
     assert not backup.is_due(folder)
+
+
+def test_youtube_mixes_load_one_page_not_5000_songs():
+    from dielify.yt_adapter import YTMusicAdapter
+    asked = []
+
+    class FakeYT:
+        def get_playlist(self, playlist_id, limit):
+            asked.append((playlist_id, limit))
+            return {"title": "x", "tracks": []}
+
+    a = YTMusicAdapter.__new__(YTMusicAdapter)
+    a._yt = FakeYT()
+    a._pace = lambda: None
+    a.playlist("RDTMAK5uy_kset8DisdE7LSD4TNjEVvrKRTmG7a56sY")
+    a.playlist("PLmyOwnPlaylist")
+    assert asked == [("RDTMAK5uy_kset8DisdE7LSD4TNjEVvrKRTmG7a56sY", 100), ("PLmyOwnPlaylist", 5000)]

@@ -374,6 +374,8 @@ def _pkg_version(name: str) -> str | None:
 
 # --- the adapter ------------------------------------------------------------
 
+MIX_LIMIT = 100  # songs loaded from a YouTube mix (they are endless)
+
 class YTMusicAdapter:
     def __init__(self, auth: dict | None = None, request_delay_s: float = 1.5,
                  language: str = "en"):
@@ -500,7 +502,12 @@ class YTMusicAdapter:
         return info, tracks
 
     def playlist(self, playlist_id: str, limit: int = 5000) -> tuple[YTItem, list[YTItem]]:
-        # ytmusicapi fetches pages of 100 until it has `limit`: ask for (practically) all
+        # ytmusicapi fetches pages of 100 until it has `limit`: ask for (practically) all.
+        # Except YouTube's mixes/radios (ids "RD..."): they never end, so asking for 5,000
+        # meant ~50 paced pages (97 s on Josh's PC, 8 Nov) with every other YouTube call
+        # waiting behind it. One page, like YouTube shows.
+        if playlist_id.startswith("RD"):
+            limit = min(limit, MIX_LIMIT)
         raw = self._call("Loading the playlist", self._yt.get_playlist, playlist_id, limit=limit)
         info = to_item({**raw, "playlistId": playlist_id}) or YTItem("playlist", playlist_id, "")
         tracks = _items(t for t in raw.get("tracks") or [] if t.get("isAvailable", True))
