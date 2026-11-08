@@ -416,7 +416,7 @@ src/dielify/
   thumbs (hold thumbs down 0.7 s -> "ban this song / the artist"), artist-page thumbs,
   Settings > Ratings with Unban. Phone: same on Now playing (long press), artist page,
   Settings. Key rule is shared by ratings.py / app.js / Ratings.kt (NFKC, lower, & -> and).
-- **Built in 0.8.12 (not published): never-ending discovery play.** `explore.py` +
+- **Published v0.8.12 (9 Nov; not yet confirmed by Josh): never-ending discovery play.** `explore.py` +
   POST /api/discover/endless {seeds, exclude, count}: new songs (not in the library, no
   ban / thumbs down) from YouTube radio of the songs heard (thumbs-up first; else top
   plays, else random library songs), queued for download (request_type "discovery"),
