@@ -724,6 +724,34 @@ def get_stats(period: Literal["week", "month", "year", "all"] = "month",
                  top_songs=songs, top_artists=artists, top_albums=albums)
 
 
+class OutsideShelf(BaseModel):
+    key: str
+    title: str
+    subtitle: str | None
+    items: list[Item]
+    updated_at: float
+
+
+class OutsideDiscovery(BaseModel):
+    shelves: list[OutsideShelf]
+
+
+@router.get("/discover/outside", response_model=OutsideDiscovery, tags=["discover"])
+def discover_outside(s: Session = Depends(session)) -> OutsideDiscovery:
+    """Radio charts (triple j, Double J, Unearthed) and ListenBrainz (trending, artists like
+    yours), matched on YouTube Music. Rebuilt daily on the PC."""
+    from . import discovery
+    return OutsideDiscovery(shelves=[OutsideShelf(key=l["key"], title=l["title"], subtitle=l["subtitle"],
+                                                  items=_items(l["items"], s.lib), updated_at=l["updated_at"])
+                                     for l in discovery.lists(s.user.profile)])
+
+
+@router.post("/discover/outside/refresh", status_code=202, tags=["discover"])
+def refresh_outside(request: Request, s: Session = Depends(session)) -> Response:
+    request.app.state.discovery.refresh_soon()
+    return Response(status_code=202)
+
+
 class ForYou(BaseModel):
     on_repeat: list[Track] = Field(description="Your songs you've played most in the last 2 weeks")
     forgotten: list[Track] = Field(description="Songs you played a lot, but not for 2 months")

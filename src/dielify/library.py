@@ -156,6 +156,24 @@ CREATE TABLE IF NOT EXISTS artist_tags (
     fetched_at REAL NOT NULL
 );
 
+-- Outside discovery (discovery.py): YouTube Music matches for outside songs/artists,
+-- and the daily lists (radio charts, ListenBrainz) per profile.
+CREATE TABLE IF NOT EXISTS ext_matches (
+    key        TEXT PRIMARY KEY,   -- song:<artist>|<title> or artist:<artist>
+    item       TEXT,               -- JSON YTItem (or list); NULL = nothing found
+    matched_at REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS discovery_lists (
+    profile    TEXT NOT NULL,
+    key        TEXT NOT NULL,
+    title      TEXT NOT NULL,
+    subtitle   TEXT,
+    items      TEXT NOT NULL,
+    position   INTEGER NOT NULL,
+    updated_at REAL NOT NULL,
+    PRIMARY KEY (profile, key)
+);
+
 -- Logins for our own API (auth.py): only a hash of each token is kept.
 CREATE TABLE IF NOT EXISTS device_tokens (
     id           INTEGER PRIMARY KEY,

@@ -198,7 +198,7 @@ def test_discover_request_progress_play():
         song = c.get("/api/discover/similar/s2", headers=h).json()["items"][0]
         jobs = c.post("/api/downloads", headers=h, json={"type": "song", "id": song["id"],
                                                           "title": song["title"]}).json()["downloads"]
-        assert len(jobs) == 1 and jobs[0]["status"] == "queued"
+        assert len(jobs) == 1 and jobs[0]["status"] in ("queued", "downloading")  # the worker may already have it
         job = wait_done(c, h, jobs[0]["id"])
         assert job["status"] == "done" and job["progress"] == 1.0 and job["track_id"]
         assert (job["title"], job["artist"], job["album"]) == ("Song One", "Band", "Debut")

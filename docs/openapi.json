@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Dielify",
-    "version": "0.8.2"
+    "version": "0.8.3"
   },
   "paths": {
     "/api/auth/login": {
@@ -1358,6 +1358,57 @@
             }
           }
         }
+      }
+    },
+    "/api/discover/outside": {
+      "get": {
+        "tags": [
+          "discover"
+        ],
+        "summary": "Discover Outside",
+        "description": "Radio charts (triple j, Double J, Unearthed) and ListenBrainz (trending, artists like\nyours), matched on YouTube Music. Rebuilt daily on the PC.",
+        "operationId": "discover_outside_api_discover_outside_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OutsideDiscovery"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/discover/outside/refresh": {
+      "post": {
+        "tags": [
+          "discover"
+        ],
+        "summary": "Refresh Outside",
+        "operationId": "refresh_outside_api_discover_outside_refresh_post",
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/discover/for-you": {
@@ -3830,6 +3881,65 @@
           "name"
         ],
         "title": "NewProfile"
+      },
+      "OutsideDiscovery": {
+        "properties": {
+          "shelves": {
+            "items": {
+              "$ref": "#/components/schemas/OutsideShelf"
+            },
+            "type": "array",
+            "title": "Shelves"
+          }
+        },
+        "type": "object",
+        "required": [
+          "shelves"
+        ],
+        "title": "OutsideDiscovery"
+      },
+      "OutsideShelf": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "subtitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subtitle"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Item"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "updated_at": {
+            "type": "number",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "title",
+          "subtitle",
+          "items",
+          "updated_at"
+        ],
+        "title": "OutsideShelf"
       },
       "PhoneDevice": {
         "properties": {
