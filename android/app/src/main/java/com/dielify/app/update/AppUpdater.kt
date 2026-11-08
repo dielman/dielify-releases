@@ -69,7 +69,7 @@ class AppUpdater(private val context: Context) {
      * Nov 2026 while the API worked), the same file comes through GitHub's API instead.
      */
     private fun open(url: String): okhttp3.Response {
-        val problem: Exception
+        var problem: Exception
         try {
             val r = http.newCall(Request.Builder().url(url).build()).execute()
             if (r.isSuccessful || r.code < 500) return r
