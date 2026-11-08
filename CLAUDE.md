@@ -372,7 +372,7 @@ src/dielify/
   Reproduced in test_stale_playing_report_after_a_pause_is_ignored. Fix (0.8.8): hub
   remembers each pause it sends (`told_pause_at`) and ignores "playing" reports from that
   device until it reports paused or PAUSE_GRACE_S (3 s) pass. dielify.remote now logs
-  at INFO (moves, commands, connects) to server.log.
+  at INFO (moves, commands, connects) to server.log. Published **v0.8.8** (8 Nov).
 - Seen in Josh's real server.log since 7 Nov (not new, everything still works): "Can't
   read the YouTube sign-in of josh: DPAPI decrypt failed (Windows error 13)" from
   desktop_api, several times an hour. Not investigated yet.
