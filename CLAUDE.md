@@ -130,7 +130,7 @@ src/dielify/
 | 5 | Secure remote access | Phone plays over mobile data, no router ports open | **Done** 2026-11-07 (Josh played in Symfonium over mobile data via Tailscale) |
 | 6 | Android app | Find, request and listen on the road | **Done** 2026-11-08 — closed by Josh before the car test ("assume it works"); Android Auto untested |
 | 7 | Polish (scope set by Josh 8 Nov) | Backups to E:, signed phone release with in-app updates, download-next, playlists, music-video fix | **Done** 2026-11-08 — 0.6.0 published; phone self-update to be confirmed with the first Phase 8 release (Josh) |
-| 8 | Listening features (Josh, 8 Nov) | 1 instant play + download, 2 play history + stats, 4 two-way playlist sync, 3 Dielify-made genre/vibe playlists, 5 outside discovery | In progress (branch `phase-8`) |
+| 8 | Listening features (Josh, 8 Nov) | 1 instant play + download, 2 play history + stats, 4 two-way playlist sync, 3 Dielify-made genre/vibe playlists, 5 outside discovery, 6 remote control between devices | In progress (branch `phase-8`) |
 
 ## Current status
 
@@ -372,3 +372,12 @@ src/dielify/
   3. Dielify-made playlists by genre/vibe; tags from MusicBrainz (free, no account).
   5. Outside discovery: **ListenBrainz** and **radio charts** (e.g. triple j). Not Last.fm
      (Josh didn't pick it), not Spotify (recommendation API closed to new apps).
+- 2026-11-08 (Phase 8, Josh): **item 6 added: remote control between devices**
+  (Spotify-Connect style), last in the order unless Josh moves it. Every player (PC app,
+  phones) keeps a live connection to the server and reports its state; a devices
+  button lists the user's own online devices: control (play/pause/skip/seek/volume,
+  now playing), "Play on <device>", move playback with queue + position. Step 2: phone
+  lock screen/notification controls the PC. No Google push (Firebase): the PC is always
+  reachable; the phone while playing, for a while after pausing, and optionally via a
+  "Stay reachable" setting (notification + Unrestricted battery). Verify Android 17
+  Doze behaviour on Josh's Pixel before promising times. Volume = Dielify's own.
