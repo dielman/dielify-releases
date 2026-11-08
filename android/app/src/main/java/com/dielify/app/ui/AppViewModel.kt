@@ -12,6 +12,9 @@ import com.dielify.app.Account
 import com.dielify.app.dielify
 import com.dielify.app.net.ApiError
 import com.dielify.app.net.Item
+import com.dielify.app.net.PlaylistEntry
+import com.dielify.app.net.PlaylistSummary
+import com.dielify.app.net.SongIn
 import com.dielify.app.net.Track
 import com.dielify.app.playback.MediaItems
 import com.dielify.app.playback.PlaybackService
@@ -41,6 +44,7 @@ sealed interface Screen {
     data class SimilarPage(val videoId: String, val name: String) : Screen
     data class SavedAlbumPage(val album: String, val artist: String) : Screen
     data object StatsPage : Screen
+    data class PlaylistPage(val id: Long, val name: String) : Screen
 }
 
 data class PlayerUi(
@@ -172,6 +176,69 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         c.play()
         if (first.libraryTrackId == null) messages.tryEmit("Playing \"${first.title}\", and saving it on your PC")
     }
+
+    // --- playlists --------------------------------------------------------------------------
+
+    /** Songs waiting for the "Add to playlist" picker (shown over any screen). */
+    val addToPlaylist = MutableStateFlow<List<SongIn>?>(null)
+
+    /** Bumped when playlists change, so open lists reload. */
+    val playlistsVersion = MutableStateFlow(0)
+
+    fun pickPlaylistFor(items: List<Item>) {
+        addToPlaylist.value = items.filter { it.isSong }.map {
+            SongIn(it.id, if (it.type == "video") "video" else "song", it.title, it.artists, it.album, it.durationS, it.thumbnail)
+        }.ifEmpty { null }
+    }
+
+    /** The song playing now (library or YouTube), for "Add to playlist" on Now playing. */
+    fun pickPlaylistForCurrent() {
+        val c = controller ?: return
+        val m = c.mediaMetadata
+        val vid = MediaItems.videoId(c.currentMediaItem)
+        if (vid == null) { messages.tryEmit("This song can't go in a YouTube playlist (no YouTube id)"); return }
+        addToPlaylist.value = listOf(SongIn(vid, "song", m.title?.toString() ?: vid,
+            listOfNotNull(m.artist?.toString()), m.albumTitle?.toString(), m.durationMs?.let { (it / 1000).toInt() }))
+    }
+
+    private fun playlistJob(done: String?, block: suspend () -> Unit) = viewModelScope.launch {
+        try {
+            block()
+            done?.let { messages.tryEmit(it) }
+            playlistsVersion.value++
+        } catch (e: ApiError) {
+            if (e.code == 401) tokenRejected()
+            messages.tryEmit(e.message ?: "That didn't work")
+        }
+    }
+
+    fun addSongsTo(p: PlaylistSummary, songs: List<SongIn>) = playlistJob(
+        if (songs.size == 1) "Added to ${p.name}" else "${songs.size} songs added to ${p.name}",
+    ) { server.addToPlaylist(p.id, songs) }
+
+    fun newPlaylistWith(name: String, onYoutube: Boolean, songs: List<SongIn>) = playlistJob("Created \"$name\"") {
+        val d = server.createPlaylist(name, onYoutube)
+        if (songs.isNotEmpty()) server.addToPlaylist(d.playlist.id, songs)
+    }
+
+    fun importPlaylist(item: Item) = playlistJob("Syncing \"${item.title}\": its songs will download to your PC") {
+        server.importPlaylist(item.id)
+    }
+
+    fun removeEntry(p: PlaylistSummary, entry: PlaylistEntry) = playlistJob("Removed from ${p.name}") {
+        server.removeFromPlaylist(p.id, entry.entryId, onYoutube = p.ytId != null)
+    }
+
+    fun renamePlaylist(p: PlaylistSummary, name: String) = playlistJob("Renamed") { server.renamePlaylist(p.id, name) }
+
+    fun deletePlaylist(p: PlaylistSummary, onYoutube: Boolean) = playlistJob(
+        if (onYoutube) "Deleted here and on YouTube Music" else "Deleted from Dielify",
+    ) {
+        server.deletePlaylist(p.id, onYoutube)
+        back()
+    }
+
+    fun syncPlaylist(p: PlaylistSummary) = playlistJob("Synced") { server.syncPlaylist(p.id) }
 
     /** Set by "artist" taps so the Search tab opens with that name filled in. */
     val searchRequest = MutableStateFlow<String?>(null)

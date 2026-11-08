@@ -206,3 +206,38 @@ data class ForYou(
     val forgotten: List<Track>,
     @SerialName("more_like") val moreLike: List<Item>,
 )
+
+// --- playlists (synced with YouTube Music) ---------------------------------------------
+
+@Serializable
+data class PlaylistSummary(
+    val id: Long,
+    val name: String,
+    @SerialName("yt_id") val ytId: String? = null,
+    @SerialName("read_only") val readOnly: Boolean = false,
+    val count: Int = 0,
+    val pending: Int = 0,
+    @SerialName("synced_at") val syncedAt: Double? = null,
+    @SerialName("sync_error") val syncError: String? = null,
+    val thumbnail: String? = null,
+)
+
+@Serializable data class PlaylistList(val playlists: List<PlaylistSummary>)
+@Serializable data class PlaylistEntry(@SerialName("entry_id") val entryId: Long, val item: Item)
+@Serializable data class PlaylistDetail(val playlist: PlaylistSummary, val entries: List<PlaylistEntry>)
+@Serializable data class NewPlaylist(val name: String, @SerialName("on_youtube") val onYoutube: Boolean)
+@Serializable data class ImportPlaylist(@SerialName("yt_id") val ytId: String)
+@Serializable data class RenamePlaylist(val name: String)
+
+@Serializable
+data class SongIn(
+    val id: String,
+    val type: String = "song",
+    val title: String,
+    val artists: List<String> = emptyList(),
+    val album: String? = null,
+    @SerialName("duration_s") val durationS: Int? = null,
+    val thumbnail: String? = null,
+)
+
+@Serializable data class AddSongs(val songs: List<SongIn>)

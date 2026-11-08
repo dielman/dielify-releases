@@ -196,13 +196,7 @@ fun LibraryScreen(vm: AppViewModel) {
                 when (tab) {
                     0 -> Loaded(vm, "albums", { vm.server.albums() }) { AlbumGrid(vm, it) }
                     1 -> Loaded(vm, "artists", { vm.server.artists() }) { ArtistList(vm, it) }
-                    2 -> Loaded(vm, "playlists", { vm.server.myPlaylists() }) { items ->
-                        if (items.isEmpty()) Box(Modifier.fillMaxSize().padding(32.dp), Alignment.Center) {
-                            Text("No playlists on your YouTube Music account.")
-                        } else LazyColumn(Modifier.fillMaxSize()) {
-                            items(items, key = { it.id }) { ItemRow(vm, it) }
-                        }
-                    }
+                    2 -> PlaylistsTab(vm)
                     3 -> Loaded(vm, "recent", { vm.server.recentAlbums() }) { AlbumGrid(vm, it) }
                     else -> SavedAlbums(vm)
                 }

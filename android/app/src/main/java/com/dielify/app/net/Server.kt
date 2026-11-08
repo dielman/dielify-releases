@@ -243,6 +243,28 @@ class Server(private val context: Context, private val accounts: AccountStore) {
     suspend fun ytSearch(q: String, type: String): List<Item> =
         get<ItemList>("api/yt/search?limit=40&type=$type&q=" + Uri.encode(q)).items
     suspend fun myPlaylists(): List<Item> = get<ItemList>("api/yt/my-playlists").items
+
+    // Playlists in Dielify (synced with YouTube Music when ytId is set)
+    suspend fun playlists(): List<PlaylistSummary> = get<PlaylistList>("api/playlists").playlists
+    suspend fun playlist(id: Long): PlaylistDetail = get("api/playlists/$id")
+    suspend fun createPlaylist(name: String, onYoutube: Boolean): PlaylistDetail =
+        json.decodeFromString(send("POST", "api/playlists",
+            json.encodeToString(NewPlaylist.serializer(), NewPlaylist(name, onYoutube))))
+    suspend fun importPlaylist(ytId: String): PlaylistDetail =
+        json.decodeFromString(send("POST", "api/playlists/import",
+            json.encodeToString(ImportPlaylist.serializer(), ImportPlaylist(ytId))))
+    suspend fun renamePlaylist(id: Long, name: String): PlaylistDetail =
+        json.decodeFromString(send("PATCH", "api/playlists/$id",
+            json.encodeToString(RenamePlaylist.serializer(), RenamePlaylist(name))))
+    suspend fun deletePlaylist(id: Long, onYoutube: Boolean) {
+        send("DELETE", "api/playlists/$id?on_youtube=$onYoutube")
+    }
+    suspend fun addToPlaylist(id: Long, songs: List<SongIn>): PlaylistDetail =
+        json.decodeFromString(send("POST", "api/playlists/$id/songs",
+            json.encodeToString(AddSongs.serializer(), AddSongs(songs))))
+    suspend fun removeFromPlaylist(id: Long, entryId: Long, onYoutube: Boolean): PlaylistDetail =
+        json.decodeFromString(send("DELETE", "api/playlists/$id/entries/$entryId?on_youtube=$onYoutube"))
+    suspend fun syncPlaylist(id: Long): PlaylistDetail = json.decodeFromString(send("POST", "api/playlists/$id/sync"))
     suspend fun ytAlbum(browseId: String): YtCollection = get("api/yt/album/" + Uri.encode(browseId))
     suspend fun ytPlaylist(playlistId: String): YtCollection = get("api/yt/playlist/" + Uri.encode(playlistId))
 

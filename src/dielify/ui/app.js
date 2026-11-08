@@ -112,12 +112,30 @@ async function viewLibrary(tab = libTab) {
         { albums: "Albums", artists: "Artists", playlists: "Playlists", recent: "Recently played" }[t])));
     let body;
     if (tab === "playlists") {
-      show(welcome(), h("h1", {}, "Library"), tabs, h("p", { class: "muted" }, "Loading your YouTube Music playlists…"));
-      const { items } = await api("/api/yt/my-playlists");
-      body = items.length
-        ? [h("p", { class: "muted small" }, "Your playlists on YouTube Music. Open one to download the songs you don't have yet."),
-           h("div", { class: "grid" }, items.map((it) => ytCard(it, "library")))]
-        : empty("No playlists on your YouTube Music account.");
+      show(welcome(), h("h1", {}, "Library"), tabs, h("p", { class: "muted" }, "Loading playlists…"));
+      const [{ playlists }, yt] = await Promise.all([api("/api/playlists"),
+        api("/api/yt/my-playlists").catch(() => ({ items: [] }))]);
+      const synced = new Set(playlists.map((p) => p.yt_id).filter(Boolean));
+      const notSynced = yt.items.filter((i) => !synced.has(i.id));
+      body = [
+        h("div", { class: "row" }, h("h2", { style: "flex:1" }, "Your playlists"),
+          h("button", { class: "primary", onclick: () => newPlaylist([]) }, "New playlist")),
+        playlists.length ? h("div", { class: "grid" }, playlists.map((p) =>
+          h("div", { class: "card", onclick: () => viewPlaylist(p.id) }, art(p.thumbnail),
+            h("div", { class: "t" }, p.name), h("div", { class: "s" }, describePlaylist(p)))))
+          : h("p", { class: "muted" }, "None yet. Make one, or sync one of your YouTube Music playlists below."),
+        notSynced.length ? [h("h2", {}, "On YouTube Music, not synced"),
+          h("p", { class: "muted small" }, "Sync one to keep it in Dielify: its songs download to this PC, and changes go both ways."),
+          h("div", { class: "grid" }, notSynced.map((it) => h("div", { class: "card" },
+            h("div", { onclick: () => viewCollection("playlist", it.id, "library") }, art(it.thumbnail),
+              h("div", { class: "t" }, it.title), h("div", { class: "s" }, it.subtitle || "")),
+            h("button", { style: "margin-top:6px", onclick: async () => {
+              toast(`Syncing “${it.title}”…`);
+              try { const d = await api("/api/playlists/import", { method: "POST", body: { yt_id: it.id } });
+                toast(`Syncing “${d.playlist.name}”: its songs are downloading`); viewPlaylist(d.playlist.id);
+              } catch (e) { toast(e.message, 6000); }
+            } }, "Sync"))))] : null,
+      ];
       if (view !== "library" || libTab !== "playlists") return;
     } else if (tab === "artists") {
       const { artists } = await api("/api/library/artists");
@@ -284,6 +302,7 @@ function ytTrackTable(items) {
       h("td", {}, t.title, h("div", { class: "muted small" }, t.artists.join(", "), t.album ? ` · ${t.album}` : "")),
       h("td", { class: "d" }, dur(t.duration_s)),
       h("td", { class: "a" }, h("button", { onclick: () => songActions(t, items) }, "▶ Play"),
+        h("button", { title: "Add to playlist", onclick: () => addToPlaylist([t]) }, "+ Playlist"),
         t.library_track_id ? null : h("button", { onclick: () => requestDownload(
           { type: t.type, id: t.id, title: t.title, artists: t.artists, album: t.album, next: true }) }, "Download"))))));
 }
@@ -351,6 +370,87 @@ async function renderDownloads(active) {
   const keep = main.scrollTop;  // re-drawn every 1.5 s: don't jump back to the top
   show(h("h1", {}, "Downloads"), summary, now, line, done);
   main.scrollTop = keep;
+}
+
+// --- playlists ---------------------------------------------------------------------------------
+function describePlaylist(p) {
+  return [`${p.count} songs`, p.read_only ? "from YouTube Music (one way)" : p.yt_id ? "synced with YouTube Music" : "only in Dielify",
+    p.pending ? `${p.pending} change${p.pending === 1 ? "" : "s"} waiting` : null].filter(Boolean).join(" · ");
+}
+const songIn = (i) => ({ id: i.id, type: i.type === "video" ? "video" : "song", title: i.title, artists: i.artists,
+  album: i.album, duration_s: i.duration_s, thumbnail: i.thumbnail });
+
+async function playlistAction(fn, done) {
+  try { const r = await fn(); if (done) toast(done); return r; } catch (e) { toast(e.message, 6000); return null; }
+}
+
+async function newPlaylist(items) {
+  const name = (prompt("Name of the new playlist:") || "").trim();
+  if (!name) return;
+  const onYoutube = confirm("Also create it on YouTube Music (private) and keep it in sync?\n\nOK = yes, Cancel = only in Dielify");
+  const d = await playlistAction(() => api("/api/playlists", { method: "POST", body: { name, on_youtube: onYoutube } }), `Created “${name}”`);
+  if (d && items.length) await playlistAction(() => api(`/api/playlists/${d.playlist.id}/songs`, { method: "POST", body: { songs: items.map(songIn) } }),
+    `Added to “${name}”`);
+  if (d && view === "library") viewLibrary("playlists");
+}
+
+// "Add to playlist" chooser (a small pop-up over the current screen)
+async function addToPlaylist(items) {
+  const songs = items.filter((i) => i.type === "song" || i.type === "video");
+  if (!songs.length) return;
+  const { playlists } = await api("/api/playlists");
+  const close = () => box.remove();
+  const box = h("div", { class: "modal", onclick: (e) => { if (e.target === box) close(); } },
+    h("div", { class: "panel" }, h("h2", {}, songs.length === 1 ? `Add “${songs[0].title}” to…` : `Add ${songs.length} songs to…`),
+      h("button", { class: "primary", onclick: () => { close(); newPlaylist(songs); } }, "+ New playlist"),
+      h("div", { class: "pick" }, playlists.filter((p) => !p.read_only).map((p) => h("button", { class: "pick-row", onclick: async () => {
+        close();
+        await playlistAction(() => api(`/api/playlists/${p.id}/songs`, { method: "POST", body: { songs: songs.map(songIn) } }), `Added to “${p.name}”`);
+      } }, h("div", {}, p.name), h("div", { class: "muted small" }, describePlaylist(p))))),
+      h("div", { class: "row", style: "margin-top:10px" }, h("button", { onclick: close }, "Cancel"))));
+  document.body.append(box);
+}
+
+async function viewPlaylist(id) {
+  try {
+    const { playlist: p, entries } = await api(`/api/playlists/${id}`);
+    const songs = entries.map((e) => e.item);
+    const have = songs.filter((s) => s.library_track_id).length;
+    const rename = async () => {
+      const name = (prompt("New name:", p.name) || "").trim();
+      if (name && await playlistAction(() => api(`/api/playlists/${id}`, { method: "PATCH", body: { name } }), "Renamed")) viewPlaylist(id);
+    };
+    const del = async () => {
+      if (!confirm(`Delete “${p.name}” from Dielify? Your downloaded songs are kept.`)) return;
+      const both = p.yt_id && !p.read_only && confirm(`Also delete it on YouTube Music?\n\nOK = delete there too, Cancel = keep it on YouTube Music (it just stops syncing)`);
+      if (await playlistAction(() => api(`/api/playlists/${id}?on_youtube=${!!both}`, { method: "DELETE" }), "Deleted") !== null) {
+        go("library"); viewLibrary("playlists");
+      }
+    };
+    const remove = async (e) => {
+      if (p.yt_id && !confirm(`Remove “${e.item.title}”? This playlist is synced, so it's also removed on YouTube Music. The song stays in your library.`)) return;
+      if (await playlistAction(() => api(`/api/playlists/${id}/entries/${e.entry_id}?on_youtube=${!!p.yt_id}`, { method: "DELETE" }), "Removed")) viewPlaylist(id);
+    };
+    show(h("button", { onclick: () => { go("library"); viewLibrary("playlists"); } }, "← Playlists"),
+      h("div", { class: "hero", style: "margin-top:16px" }, art(p.thumbnail, "♪", ""),
+        h("div", {}, h("div", { class: "muted small" }, "PLAYLIST"), h("h1", {}, p.name),
+          h("div", { class: "muted" }, describePlaylist(p)),
+          p.sync_error ? h("div", { class: "warn small" }, `Couldn't reach YouTube: ${p.sync_error}`) : null,
+          have < songs.length ? h("div", { class: "muted small" }, `${songs.length - have} not on this PC yet: they're downloading. Play works anyway.`) : null,
+          h("div", { class: "row", style: "margin-top:12px" },
+            h("button", { class: "primary", disabled: !songs.length, onclick: () => songActions(songs[0], songs) }, "▶ Play"),
+            h("button", { disabled: !songs.length, onclick: () => { const s = shuffle(songs); songActions(s[0], s); } }, "Shuffle"),
+            p.yt_id ? h("button", { onclick: async () => { if (await playlistAction(() => api(`/api/playlists/${id}/sync`, { method: "POST" }), "Synced")) viewPlaylist(id); } }, "Sync now") : null,
+            p.read_only ? null : h("button", { onclick: rename }, "Rename"),
+            h("button", { onclick: del }, "Delete")))),
+      h("table", { class: "tracks" }, h("tbody", {}, entries.map((e, i) => h("tr", {},
+        h("td", { class: "n" }, i + 1),
+        h("td", {}, e.item.title, h("div", { class: "muted small" }, e.item.artists.join(", "), e.item.album ? ` · ${e.item.album}` : "",
+          e.item.library_track_id ? " · ✓ in library" : "")),
+        h("td", { class: "d" }, dur(e.item.duration_s)),
+        h("td", { class: "a" }, h("button", { onclick: () => songActions(e.item, songs) }, "▶ Play"),
+          p.read_only ? null : h("button", { onclick: () => remove(e) }, "Remove")))))));
+  } catch (e) { failed(e); }
 }
 
 // --- stats -------------------------------------------------------------------------------------
@@ -615,6 +715,11 @@ $("btn-play").addEventListener("click", () => {
   audio.paused ? audio.play() : audio.pause();
 });
 $("btn-next").addEventListener("click", () => playAt(player.index + 1));
+$("btn-addpl").addEventListener("click", () => {
+  const t = player.current;
+  if (!t || !t.video_id) return toast(t ? "This song has no YouTube id, so it can't go in a playlist." : "Nothing playing");
+  addToPlaylist([{ type: "song", id: t.video_id, title: t.title, artists: t.artist ? [t.artist] : [], album: t.album || null }]);
+});
 $("btn-prev").addEventListener("click", () => (audio.currentTime > 3 ? (audio.currentTime = 0) : playAt(player.index - 1)));
 audio.addEventListener("play", () => ($("btn-play").textContent = "⏸"));
 audio.addEventListener("pause", () => ($("btn-play").textContent = "▶"));

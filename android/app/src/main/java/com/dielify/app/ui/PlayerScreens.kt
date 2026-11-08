@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Repeat
@@ -166,6 +167,9 @@ fun NowPlayingScreen(vm: AppViewModel) {
                 }
                 IconButton(onClick = { vm.next() }, enabled = p.hasNext) {
                     Icon(Icons.Filled.SkipNext, "Next", Modifier.size(36.dp))
+                }
+                IconButton(onClick = { vm.pickPlaylistForCurrent() }) {
+                    Icon(Icons.AutoMirrored.Filled.PlaylistAdd, "Add to playlist")
                 }
                 IconButton(onClick = { vm.cycleRepeat() }) {
                     Icon(

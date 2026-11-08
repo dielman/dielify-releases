@@ -133,3 +133,9 @@ input[type=range] { accent-color: var(--accent); }
 .hours .bar { flex: 1; background: var(--accent, #e0464e); border-radius: 2px 2px 0 0; min-height: 2px; }
 .hours-axis { display: grid; grid-template-columns: repeat(4, 1fr) 0; margin-top: 4px; }
 img.mini, .mini.ph { width: 44px; height: 44px; border-radius: 4px; object-fit: cover; display: grid; place-items: center; }
+
+/* pop-up (add to playlist) */
+.modal { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.55); display: grid; place-items: center; z-index: 50; }
+.modal .panel { width: min(440px, 90vw); max-height: 80vh; overflow: auto; margin: 0; }
+.modal .pick { display: grid; gap: 6px; margin-top: 10px; }
+.modal .pick-row { text-align: left; display: block; width: 100%; }

@@ -294,6 +294,17 @@ src/dielify/
   it applies when updating FROM any version): [Code] InitializeSetup waits up to 60 s
   for the mutex when silent; updater passes /LOG=updates\install.log. First proof will
   be the next PC update (0.8.0 -> next).
+- Item 4 built (0.9.0): two-way playlist sync. `playlists.py` (+ tables playlists /
+  playlist_items / playlist_ops in library.py), `playlist_api.py` (/api/playlists...),
+  adapter write calls (create/add/remove/rename/delete, playlist_entries with
+  setVideoId). YouTube is master for synced lists: Dielify edits go out at once or wait in
+  playlist_ops; sync every 20 min + "Sync now" pushes waiting edits then takes YouTube's
+  list (+ waiting adds); new songs download; removing on a synced list / deleting on
+  YouTube needs on_youtube=true (apps ask first). Liked Music (LM) is one-way. No reorder
+  yet. Subsonic getPlaylists/getPlaylist (library songs only). Phone: Library >
+  Playlists (yours + "on YouTube, not synced" with Sync), playlist page, Add to playlist
+  (song menus + Now playing). PC: same + "+ Playlist" buttons + player-bar ＋. Tested
+  with a fake YouTube (tests/test_playlists.py); not yet against Josh's real account.
 - Idea for later: pre-resolve the next song in a list so skipping feels instant.
 
 ## Open questions for Josh

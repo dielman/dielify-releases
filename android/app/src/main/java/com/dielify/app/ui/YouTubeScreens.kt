@@ -115,6 +115,7 @@ private fun subtitleOf(item: Item): String = when (item.type) {
 /** A row for a song/album/playlist/artist, with a menu (download, similar songs). */
 @Composable
 fun ItemRow(vm: AppViewModel, item: Item, queue: List<Item> = listOf(item),
+            extra: List<Pair<String, () -> Unit>> = emptyList(),
             onClick: () -> Unit = { vm.openItem(item, queue) }) {
     var menu by remember { mutableStateOf(false) }
     Row(
@@ -152,6 +153,12 @@ fun ItemRow(vm: AppViewModel, item: Item, queue: List<Item> = listOf(item),
                     DropdownMenuItem(
                         text = { Text(if (item.isSong) "Download (back of the line)" else "Download all") },
                         onClick = { menu = false; vm.download(item, next = false) })
+                }
+                if (item.isSong) DropdownMenuItem(
+                    text = { Text("Add to playlist…") },
+                    onClick = { menu = false; vm.pickPlaylistFor(listOf(item)) })
+                extra.forEach { (label, action) ->
+                    DropdownMenuItem(text = { Text(label) }, onClick = { menu = false; action() })
                 }
                 if (item.isSong) DropdownMenuItem(
                     text = { Text("Similar songs") },
