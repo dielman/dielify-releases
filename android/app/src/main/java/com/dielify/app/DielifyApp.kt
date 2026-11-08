@@ -30,6 +30,14 @@ class DielifyApp : Application(), SingletonImageLoader.Factory {
     /** Thumbs up / down / ban (the player skips banned songs). */
     val ratings by lazy { com.dielify.app.net.Ratings(server) }
     /** Never-ending discovery play (Discover). */
+    /** Lyrics, kept on the phone once seen (Now playing > lyrics). */
+    val lyrics by lazy { com.dielify.app.net.LyricsStore(this, server) }
+    /** Sleep timer (Now playing); the playback service pauses. */
+    val sleep by lazy { com.dielify.app.playback.SleepTimer() }
+    /** "Even out volume" (Settings). */
+    val levelPrefs by lazy { getSharedPreferences("playback", MODE_PRIVATE) }
+    /** Keep favourites on the phone automatically (Settings). */
+    val keep by lazy { com.dielify.app.saved.KeepOnPhone(this) }
     val endless by lazy { com.dielify.app.playback.EndlessPlay(server) }
 
     override fun onCreate() {
@@ -39,6 +47,7 @@ class DielifyApp : Application(), SingletonImageLoader.Factory {
         saved = SavedSongs(this)
         updater = AppUpdater(this)
         plays = PlayReporter(this, server)
+        if (keep.enabled) keep.schedule()
     }
 
     // Cover art goes through the server's HTTP client, which adds the sign-in token

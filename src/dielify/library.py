@@ -185,6 +185,16 @@ CREATE TABLE IF NOT EXISTS ratings (
     PRIMARY KEY (profile, kind, key)
 );
 
+-- Lyrics (lyrics.py), kept so they show offline. key = video id, or tr-<track id> for
+-- library songs without one. body = JSON {"lines": [[ms, text], ...] | null, "text": ...};
+-- NULL = looked, none found (looked again after a while).
+CREATE TABLE IF NOT EXISTS lyrics (
+    key        TEXT PRIMARY KEY,
+    body       TEXT,
+    source     TEXT,
+    fetched_at REAL NOT NULL
+);
+
 -- Songs never-ending discovery play brought in (explore.py): thumbs down deletes these.
 CREATE TABLE IF NOT EXISTS explore_songs (
     profile  TEXT NOT NULL,
@@ -234,6 +244,9 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE playlists ADD COLUMN kind TEXT NOT NULL DEFAULT 'user'")
         conn.execute("ALTER TABLE playlists ADD COLUMN mix_key TEXT")
         conn.execute("ALTER TABLE playlists ADD COLUMN description TEXT")
+    tcols = {r[1] for r in conn.execute("PRAGMA table_info(tracks)")}
+    if "loudness" not in tcols:  # 0.9: volume levelling (leveller.py); NULL = not measured yet
+        conn.execute("ALTER TABLE tracks ADD COLUMN loudness REAL")
 
 
 @contextmanager
@@ -376,6 +389,9 @@ class Library:
             return conn.execute(f"INSERT INTO tracks ({cols}) VALUES ({marks})",
                                 tuple(values.values())).lastrowid
         sets = ", ".join(f"{k} = ?" for k in values)
+        # the file changed: measure its loudness again (leveller.py)
+        conn.execute("UPDATE tracks SET loudness = NULL WHERE id = ? AND (mtime != ? OR size != ?)",
+                     (track_id, st.st_mtime, st.st_size))
         conn.execute(f"UPDATE tracks SET {sets} WHERE id = ?", (*values.values(), track_id))
         return track_id
 

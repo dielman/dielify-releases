@@ -90,12 +90,13 @@ class SavedSongs(private val context: Context) {
     fun totalBytes(): Long = _songs.value.values.sumOf { it.bytes }
 
     /** Queue songs to be copied to the phone (in the background; survives leaving the app). */
-    fun save(tracks: List<Track>) {
+    fun save(tracks: List<Track>, unmetered: Boolean = false) {
         for (t in tracks) {
             if (_songs.value.containsKey(t.id)) continue
             val request = OneTimeWorkRequestBuilder<SaveWorker>()
                 .setInputData(workDataOf(KEY_TRACK to Server.json.encodeToString(Track.serializer(), t)))
-                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+                .setConstraints(Constraints.Builder()
+                    .setRequiredNetworkType(if (unmetered) NetworkType.UNMETERED else NetworkType.CONNECTED).build())
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
                 .addTag(TAG).addTag(TRACK_TAG + t.id)
                 .build()
@@ -165,6 +166,10 @@ class SaveWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         return try {
             app.server.ensureConnected()
             app.saved.download(app.server, track)
+            runCatching {  // lyrics too, so they show with no connection
+                app.lyrics.get(com.dielify.app.net.LyricsStore.Song(track.videoId, track.id, track.title,
+                    track.artist, track.album, track.durationS))
+            }
             Result.success()
         } catch (e: ApiError) {
             if (e.code == 401 || e.code == 404) Result.failure()

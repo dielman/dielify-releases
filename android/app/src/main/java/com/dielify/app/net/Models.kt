@@ -59,8 +59,10 @@ data class Track(
     val starred: Boolean = false,
     @SerialName("stream_url") val streamUrl: String,
     @SerialName("cover_url") val coverUrl: String? = null,
+    @SerialName("gain_db") val gainDb: Double? = null,
 )
 
+@Serializable data class TrackList(val tracks: List<Track>)
 @Serializable data class ArtistList(val artists: List<Artist>)
 @Serializable data class AlbumList(val albums: List<Album>)
 @Serializable data class ArtistDetail(val artist: Artist, val albums: List<Album>)

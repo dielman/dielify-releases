@@ -58,6 +58,11 @@ object MediaItems {
 
     private const val YT_PREFIX = "yt-"
     const val VIDEO_ID = "video_id"
+    const val GAIN_DB = "gain_db"
+
+    /** Volume levelling (leveller.py on the PC): dB to add, if the song has been measured. */
+    fun gainDb(item: MediaItem?): Double? =
+        item?.mediaMetadata?.extras?.takeIf { it.containsKey(GAIN_DB) }?.getDouble(GAIN_DB)
 
     fun videoId(item: MediaItem?): String? =
         item?.mediaMetadata?.extras?.getString(VIDEO_ID) ?: item?.mediaId?.takeIf { it.startsWith(YT_PREFIX) }?.removePrefix(YT_PREFIX)
@@ -98,7 +103,10 @@ object MediaItems {
                 .setArtist(t.artist)
                 .setAlbumTitle(t.album)
                 .setAlbumArtist(t.albumArtist.ifEmpty { null })
-                .setExtras(android.os.Bundle().apply { t.videoId?.let { putString(VIDEO_ID, it) } })
+                .setExtras(android.os.Bundle().apply {
+                    t.videoId?.let { putString(VIDEO_ID, it) }
+                    t.gainDb?.let { putDouble(GAIN_DB, it) }
+                })
                 .setTrackNumber(t.trackNo)
                 .setReleaseYear(t.year)
                 .setDurationMs(t.durationS?.let { it * 1000L })
@@ -120,6 +128,10 @@ object MediaItems {
         return if (m.groupValues[2] == "stream") saved.audioFile(id) else saved.coverFile(id)
     }
 
+    fun lyricsSong(m: MediaItem) = com.dielify.app.net.LyricsStore.Song(
+        videoId(m), trackId(m), m.mediaMetadata.title?.toString() ?: "", m.mediaMetadata.artist?.toString(),
+        m.mediaMetadata.albumTitle?.toString(), m.mediaMetadata.durationMs?.let { (it / 1000).toInt() })
+
     fun trackId(item: MediaItem?): Long? = item?.mediaId?.takeIf { it.startsWith(PREFIX) }?.removePrefix(PREFIX)?.toLongOrNull()
 
     /** A song sent by another device (remote control). */
@@ -137,7 +149,10 @@ object MediaItems {
                     .setAlbumTitle(s.album)
                     .setDurationMs(s.durationS?.let { it * 1000L })
                     .setArtworkUri(if (id != null) ArtProvider.trackArt(id) else s.thumbnail?.let(Uri::parse))
-                    .setExtras(android.os.Bundle().apply { video?.let { putString(VIDEO_ID, it) } })
+                    .setExtras(android.os.Bundle().apply {
+                        video?.let { putString(VIDEO_ID, it) }
+                        s.gainDb?.let { putDouble(GAIN_DB, it) }
+                    })
                     .setIsPlayable(true)
                     .setIsBrowsable(false)
                     .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
@@ -153,6 +168,7 @@ object MediaItems {
             artist = m.artist?.toString(), album = m.albumTitle?.toString(),
             durationS = m.durationMs?.let { (it / 1000).toInt() },
             thumbnail = m.artworkUri?.takeIf { it.scheme == "https" }?.toString(),
+            gainDb = gainDb(i),
         )
     }
 
@@ -227,9 +243,16 @@ class PlaybackService : MediaLibraryService() {
         prefetcher = Prefetcher(player, songs, songs.forPrefetch(network), saved, scope)
         player.addListener(prefetcher!!)
         startRemote(player)
+        local = player
+        startSleepTimer(player)
         player.addListener(object : Player.Listener {
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 dielify.endless.onTransition(player, mediaItem, scope)
+                applyVolume()
+                // lyrics for this song and the next two, ready for when there's no signal
+                val i = player.currentMediaItemIndex
+                val ahead = (i until minOf(i + 3, player.mediaItemCount)).map { player.getMediaItemAt(it) }
+                scope.launch { ahead.forEach { dielify.lyrics.get(MediaItems.lyricsSong(it)) } }
                 val m = mediaItem ?: return
                 if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT) return
                 if (dielify.ratings.banned(MediaItems.videoId(m), MediaItems.trackId(m), m.mediaMetadata.artist?.toString())) {
@@ -307,6 +330,58 @@ class PlaybackService : MediaLibraryService() {
         super.onDestroy()
     }
 
+    // --- volume: other devices' volume x levelling (only turns loud songs down) x sleep fade ---
+
+    private var local: ExoPlayer? = null
+    private var userVolume = 1f
+    private var fade = 1f
+
+    private fun applyVolume() {
+        val p = local ?: return
+        val g = MediaItems.gainDb(p.currentMediaItem)?.takeIf { dielify.levelPrefs.getBoolean("level", true) } ?: 0.0
+        val level = Math.pow(10.0, minOf(0.0, g) / 20).toFloat()
+        p.volume = (userVolume * level * fade).coerceIn(0f, 1f)
+    }
+
+    // --- sleep timer -------------------------------------------------------------------------------
+
+    private fun startSleepTimer(player: ExoPlayer) {
+        val timer = dielify.sleep
+        player.addListener(object : Player.Listener {
+            override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+                if (reason == Player.PLAY_WHEN_READY_CHANGE_REASON_END_OF_MEDIA_ITEM && timer.state.value.songEnd) {
+                    player.pauseAtEndOfMediaItems = false
+                    timer.off()
+                }
+            }
+        })
+        scope.launch {
+            timer.state.collect { s ->  // end of song on this phone: Media3 stops exactly there
+                player.pauseAtEndOfMediaItems = s.songEnd
+                if (!s.on && fade != 1f) { fade = 1f; applyVolume() }
+            }
+        }
+        scope.launch {
+            while (true) {
+                kotlinx.coroutines.delay(1000)
+                val s = timer.state.value
+                val p = session?.player ?: continue
+                val here = p === player
+                if (s.songEnd && !here &&
+                    (p.currentMediaItemIndex != s.songIndex || p.currentMediaItem?.mediaId != s.songId)) {
+                    p.pause(); timer.off()  // another device moved on to the next song
+                } else if (s.endsAt > 0) {
+                    val left = s.endsAt - System.currentTimeMillis()
+                    if (left <= 0) { p.pause(); timer.off(); fade = 1f; applyVolume() }
+                    else if (here) {
+                        val f = if (left < SleepTimer.FADE_MS) maxOf(0.05f, left.toFloat() / SleepTimer.FADE_MS) else 1f
+                        if (f != fade) { fade = f; applyVolume() }
+                    }
+                }
+            }
+        }
+    }
+
     // --- remote control: other devices see and control this phone ------------------------------
 
     private fun startRemote(player: ExoPlayer) {
@@ -332,7 +407,7 @@ class PlaybackService : MediaLibraryService() {
                     playing = player.isPlaying || (player.playWhenReady && player.playbackState == Player.STATE_BUFFERING),
                     positionMs = player.currentPosition,
                     durationMs = player.duration.takeIf { it > 0 },
-                    volume = player.volume,
+                    volume = userVolume,
                     index = if (count > 0) at else -1,
                     queue = o.map { MediaItems.toSong(player.getMediaItemAt(it)) },
                 )
@@ -345,7 +420,7 @@ class PlaybackService : MediaLibraryService() {
                     "next" -> player.seekToNextMediaItem()
                     "previous" -> player.seekToPrevious()
                     "seek" -> command.positionMs?.let { player.seekTo(it) }
-                    "volume" -> command.value?.let { player.volume = it.coerceIn(0f, 1f) }
+                    "volume" -> command.value?.let { userVolume = it.coerceIn(0f, 1f); applyVolume() }
                     "jump" -> {
                         val i = command.index?.let { order.getOrNull(it) } ?: return
                         player.seekTo(i, command.positionMs ?: 0)

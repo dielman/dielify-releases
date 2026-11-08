@@ -54,7 +54,7 @@ ACTIONS = {"play", "pause", "next", "previous", "seek", "volume", "load", "jump"
 MAX_QUEUE = 1000
 PAUSE_GRACE_S = 3.0
 MAX_MESSAGE = 512 * 1024
-SONG_KEYS = ("track_id", "video_id", "title", "artist", "album", "duration_s", "thumbnail")
+SONG_KEYS = ("track_id", "video_id", "title", "artist", "album", "duration_s", "thumbnail", "gain_db")
 
 
 def clean_song(s) -> dict | None:
@@ -64,6 +64,11 @@ def clean_song(s) -> dict | None:
     for k in ("title", "artist", "album", "video_id", "thumbnail"):
         if k in out:
             out[k] = str(out[k])[:500]
+    if "gain_db" in out:
+        try:
+            out["gain_db"] = max(-20.0, min(8.0, float(out["gain_db"])))
+        except (TypeError, ValueError):
+            out.pop("gain_db")
     for k in ("track_id", "duration_s"):
         if k in out:
             try:

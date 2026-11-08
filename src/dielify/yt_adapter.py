@@ -61,6 +61,7 @@ class TrackInfo:
     duration_s: int | None = None
     cover_url: str | None = None
     is_video: bool = False  # music video rather than an album track
+    lyrics_id: str | None = None  # YouTube Music's lyrics page ("MPLYt..."), if it has lyrics
 
     @property
     def artist(self) -> str:
@@ -485,6 +486,23 @@ class YTMusicAdapter:
                          videoId=video_id, radio=True, limit=limit + 1)
         return [i for i in _items(raw.get("tracks")) if i.id != video_id][:limit]
 
+    def lyrics(self, video_id: str, lyrics_id: str | None = None) -> dict | None:
+        """The song's lyrics: {"lines": [(start_ms, text), ...] or None, "text": str, "source"}.
+        Synced (timed) when YouTube Music has them. None: no lyrics. lyrics_id saves a lookup."""
+        if not lyrics_id:
+            wp = self._call("Looking up lyrics", self._yt.get_watch_playlist, videoId=video_id, limit=1)
+            lyrics_id = wp.get("lyrics")
+            if not lyrics_id:
+                return None
+        raw = self._call("Loading lyrics", self._yt.get_lyrics, lyrics_id, timestamps=True)
+        if not raw or not raw.get("lyrics"):
+            return None
+        source = (raw.get("source") or "").removeprefix("Source: ").strip() or "YouTube Music"
+        if raw.get("hasTimestamps"):
+            lines = [(int(x.start_time), x.text) for x in raw["lyrics"]]
+            return {"lines": lines, "text": "\n".join(t for _, t in lines if t != "♪"), "source": source}
+        return {"lines": None, "text": str(raw["lyrics"]), "source": source}
+
     def search_items(self, query: str, kind: str = "song", limit: int = 20) -> list[YTItem]:
         if kind not in ITEM_TYPES:
             raise ValueError(f"type must be one of {ITEM_TYPES}")
@@ -607,6 +625,7 @@ class YTMusicAdapter:
             duration_s=_parse_duration(t.get("length")),
             cover_url=_best_thumb(t.get("thumbnail")),
             is_video=t.get("videoType") not in (None, "MUSIC_VIDEO_TYPE_ATV"),
+            lyrics_id=wp.get("lyrics"),
         )
         if info.album_id:
             self._enrich_from_album(info)

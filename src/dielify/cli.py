@@ -56,7 +56,7 @@ def cmd_doctor(args) -> int:
     _out(f"Dielify {__version__}   Python {sys.version.split()[0]}")
     for name in ("yt-dlp", "ytmusicapi", "mutagen"):
         _out(f"  [ok]  {name:<11} {rt[name]}")
-    for name, why in (("ffmpeg", "needed to remux audio"), ("ffprobe", "ships with FFmpeg")):
+    for name, why in (("ffmpeg", "needed to remux audio and measure loudness"),):
         if rt[name]:
             _out(f"  [ok]  {name:<11} {rt[name]}")
         else:

@@ -108,6 +108,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
     val showDevices = MutableStateFlow(false)
     val showUpNext = MutableStateFlow(false)
+    val showLyrics = MutableStateFlow(false)
+    fun sleepAtSongEnd() {
+        val c = controller ?: return
+        if (c.currentMediaItem == null) { messages.tryEmit("Nothing playing"); return }
+        getApplication<Application>().dielify.sleep.endOfSong(c.currentMediaItemIndex, c.currentMediaItem?.mediaId)
+        messages.tryEmit("Sleep timer: stops at the end of this song")
+    }
+    fun positionMs(): Long = controller?.currentPosition ?: 0L
+    fun durationS(): Int? = controller?.duration?.takeIf { it > 0 }?.let { (it / 1000).toInt() }
     private val _upNext = MutableStateFlow(UpNext())
     /** The song playing now and the ones coming up, in play order (shuffle included). */
     val upNext: StateFlow<UpNext> = _upNext
@@ -271,6 +280,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val cur = c.currentMediaItemIndex
         if (i == cur) return
         c.moveMediaItem(i, if (i > cur) cur + 1 else cur)
+    }
+
+    /** Drag in Up next: move the song at position [from] of the coming songs to [to]. */
+    fun queueMove(from: Int, to: Int) {
+        val c = controller ?: return
+        if (from == to) return
+        flattenShuffle(c)
+        val base = c.currentMediaItemIndex + 1
+        val last = c.mediaItemCount - 1
+        val a = (base + from).coerceIn(base, last)
+        val b = (base + to).coerceIn(base, last)
+        if (a != b) c.moveMediaItem(a, b)
     }
 
     fun queueClear() {

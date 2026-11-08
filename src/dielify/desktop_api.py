@@ -100,11 +100,19 @@ class ScanResult(BaseModel):
 
 
 def _profiles(s: settings_mod.Settings) -> list[str]:
-    names = set(credstore.list_profiles()) | {s.active_profile}
+    """Profiles: sign-in files, the active one, and folders in the music folder. Windows
+    names ignore case, so "josh" (a folder) and "Josh" (the sign-in) are one profile, named
+    as the sign-in / settings have it (checking "josh" against Josh.dpapi failed: the file
+    is locked to its exact name)."""
+    names: dict[str, str] = {}
+    for n in [*credstore.list_profiles(), s.active_profile]:
+        names.setdefault(n.casefold(), n)
     root = Path(s.library_root)
     if root.exists():
-        names |= {p.name for p in root.iterdir() if p.is_dir() and not p.name.startswith(".")}
-    return sorted(names, key=str.casefold)
+        for p in root.iterdir():
+            if p.is_dir() and not p.name.startswith("."):
+                names.setdefault(p.name.casefold(), p.name)
+    return sorted(names.values(), key=str.casefold)
 
 
 def _signed_in(profile: str) -> bool:

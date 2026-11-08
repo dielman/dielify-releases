@@ -15,6 +15,19 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DragHandle
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.layout.Box
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.zIndex
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -58,6 +71,7 @@ fun UpNextSheet(vm: AppViewModel) {
     if (!open) return
     val q by vm.upNext.collectAsStateWithLifecycle()
     val playingOn by vm.playingOn.collectAsStateWithLifecycle()
+    val drag = remember { DragState() }
     ModalBottomSheet(onDismissRequest = { vm.showUpNext.value = false },
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.fillMaxHeight(0.9f).navigationBarsPadding()) {
@@ -77,7 +91,30 @@ fun UpNextSheet(vm: AppViewModel) {
                     item(key = "label-next") {
                         Label("Next · ${q.next.size} ${if (q.next.size == 1) "song" else "songs"}${if (q.shuffled) " · shuffled" else ""}")
                     }
-                    itemsIndexed(q.next, key = { i, e -> "n$i-${e.index}" }) { _, e -> Entry(vm, e, isNow = false) }
+                    itemsIndexed(q.next, key = { i, e -> "n$i-${e.index}" }) { i, e ->
+                        val dragged = drag.from == i
+                        val target = drag.target(q.next.size)
+                        Box(
+                            Modifier.zIndex(if (dragged) 1f else 0f).graphicsLayer {
+                                translationY = when {
+                                    dragged -> drag.offset
+                                    drag.from in 0 until i && i <= target -> -drag.rowPx
+                                    drag.from > i && i >= target && drag.from >= 0 -> drag.rowPx
+                                    else -> 0f
+                                }
+                            }.background(if (dragged) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent)
+                                .onSizeChanged { if (it.height > 0) drag.rowPx = it.height.toFloat() },
+                        ) {
+                            Entry(vm, e, isNow = false, handle = Modifier.pointerInput(e.index, i) {
+                                detectDragGestures(
+                                    onDragStart = { drag.from = i; drag.offset = 0f },
+                                    onDrag = { change, amount -> change.consume(); drag.offset += amount.y },
+                                    onDragEnd = { val t = drag.target(q.next.size); val f = drag.from; drag.reset(); vm.queueMove(f, t) },
+                                    onDragCancel = { drag.reset() },
+                                )
+                            })
+                        }
+                    }
                 } else if (q.now != null) item(key = "empty") {
                     Text("Nothing after this song. Use Play next or Add to queue in any song's ⋮ menu.",
                         Modifier.padding(24.dp), style = MaterialTheme.typography.bodySmall,
@@ -97,8 +134,17 @@ private fun Label(text: String) {
         style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
+/** A row being dragged in Up next: where it started and how far it has moved. */
+private class DragState {
+    var from by mutableIntStateOf(-1)
+    var offset by mutableFloatStateOf(0f)
+    var rowPx = 1f
+    fun target(size: Int) = if (from < 0) -1 else (from + Math.round(offset / rowPx)).coerceIn(0, size - 1)
+    fun reset() { from = -1; offset = 0f }
+}
+
 @Composable
-private fun Entry(vm: AppViewModel, e: QueueEntry, isNow: Boolean) {
+private fun Entry(vm: AppViewModel, e: QueueEntry, isNow: Boolean, handle: Modifier = Modifier) {
     val color = if (isNow) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
     Row(
         Modifier.fillMaxWidth().clickable(enabled = !isNow) { vm.queueJump(e.index) }
@@ -115,6 +161,7 @@ private fun Entry(vm: AppViewModel, e: QueueEntry, isNow: Boolean) {
         if (isNow) {
             Icon(Icons.Filled.GraphicEq, "Playing", Modifier.padding(12.dp), tint = MaterialTheme.colorScheme.primary)
         } else {
+            Icon(Icons.Filled.DragHandle, "Drag to move", handle.padding(12.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             IconButton(onClick = { vm.queuePlayNext(e.index) }) { Icon(Icons.AutoMirrored.Filled.PlaylistPlay, "Play next") }
             IconButton(onClick = { vm.queueRemove(e.index) }) { Icon(Icons.Filled.Close, "Remove from the queue") }
         }

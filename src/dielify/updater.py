@@ -16,6 +16,7 @@ import json
 import logging
 import subprocess
 import sys
+import re
 import threading
 import time
 from dataclasses import asdict, dataclass
@@ -82,6 +83,9 @@ def verify_manifest(manifest: bytes, signature_b64: str, public_key_pem: str) ->
     return data
 
 
+GITHUB_FILE = re.compile(r"^https://github\.com/([^/]+)/([^/]+)/releases/(?:latest/download|download/([^/]+))/([^/?#]+)$")
+
+
 def _session() -> requests.Session:
     from .httpclient import retrying_session
     return retrying_session()
@@ -97,6 +101,33 @@ class Updater:
         self._run_installer = run_installer or _launch_installer
         self.on_installer_started: Callable[[], None] = lambda: None  # desktop app quits
 
+    # --- fetching release files ------------------------------------------------------
+
+    def _get(self, url: str, **kw) -> requests.Response:
+        """GET a release file; if GitHub's download link fails (504s for days in Nov 2026
+        while the API worked), get the same file through GitHub's API instead."""
+        try:
+            r = self.http.get(url, **kw)
+            if r.status_code < 500:
+                return r
+            r.close()
+            problem: Exception = requests.HTTPError(f"GitHub answered HTTP {r.status_code}")
+        except requests.RequestException as e:
+            problem = e
+        m = GITHUB_FILE.match(url)
+        if not m:
+            raise problem
+        owner, repo, tag, name = m.groups()
+        api = f"https://api.github.com/repos/{owner}/{repo}/releases/" + (f"tags/{tag}" if tag else "latest")
+        rel = self.http.get(api, headers={"Accept": "application/vnd.github+json"}, timeout=20)
+        if not rel.ok:
+            raise problem
+        asset = next((a for a in rel.json().get("assets", []) if a.get("name") == name), None)
+        if not asset:
+            raise problem
+        log.info("Update: %s failed (%s); using GitHub's API link instead", name, problem)
+        return self.http.get(asset["url"], headers={"Accept": "application/octet-stream"}, **kw)
+
     # --- checking ---------------------------------------------------------------
 
     def check(self) -> UpdateStatus:
@@ -110,9 +141,9 @@ class Updater:
                 st.error = "Offline mode is on, so Dielify didn't check for updates."
                 return st
             try:
-                r = self.http.get(update_config.MANIFEST_URL, timeout=20)
+                r = self._get(update_config.MANIFEST_URL, timeout=20)
                 r.raise_for_status()
-                s = self.http.get(update_config.MANIFEST_URL + ".sig", timeout=20)
+                s = self._get(update_config.MANIFEST_URL + ".sig", timeout=20)
                 s.raise_for_status()
                 manifest = verify_manifest(r.content, s.text, update_config.PUBLIC_KEY_PEM)
             except UpdateError as e:
@@ -154,7 +185,7 @@ class Updater:
         dest = folder / f"Dielify-setup-{m['version']}.exe"
         tmp = dest.with_suffix(".part")
         digest, total = hashlib.sha256(), 0
-        with self.http.get(m["url"], stream=True, timeout=60) as r:
+        with self._get(m["url"], stream=True, timeout=60) as r:
             r.raise_for_status()
             with open(tmp, "wb") as f:
                 for chunk in r.iter_content(1 << 20):

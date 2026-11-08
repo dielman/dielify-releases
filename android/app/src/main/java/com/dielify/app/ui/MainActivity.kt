@@ -76,6 +76,7 @@ fun App(vm: AppViewModel) {
     AddToPlaylistDialog(vm)
     DevicePicker(vm)
     UpNextSheet(vm)
+    LyricsSheet(vm)
     CompositionLocalProvider(LocalSnackbar provides snackbar) { Box(Modifier.fillMaxSize()) {
         when (val screen = stack.last()) {
             Screen.Library -> RootScreen(vm)

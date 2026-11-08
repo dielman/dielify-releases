@@ -20,7 +20,8 @@ from pydantic import BaseModel, Field
 from . import auth
 from . import settings as settings_mod
 from .downloads import DownloadQueue
-from .library import CONTENT_TYPES, Library
+from .leveller import gain_db
+from .library import CONTENT_TYPES, Library, connect
 from .yt_adapter import NotSignedIn, Offline, YouTubeError, YTItem, YTMusicAdapter
 
 router = APIRouter(prefix="/api")
@@ -171,6 +172,8 @@ class Track(BaseModel):
     starred: bool
     stream_url: str
     cover_url: str | None
+    gain_db: float | None = Field(None, description="Volume levelling: play this song this many dB "
+                                                    "louder (negative = quieter). None: not measured yet")
 
 
 # --- session + YouTube access -----------------------------------------------------
@@ -513,6 +516,10 @@ class AlbumDetail(BaseModel):
     tracks: list[Track]
 
 
+class TrackList(BaseModel):
+    tracks: list[Track]
+
+
 class LibrarySearch(BaseModel):
     artists: list[Artist]
     albums: list[Album]
@@ -531,7 +538,8 @@ def _track_out(t) -> Track:
                  size=t["size"], video_id=t["video_id"], play_count=t["play_count"],
                  starred=t["starred_at"] is not None,
                  stream_url=f"/api/library/tracks/{t['id']}/stream",
-                 cover_url=f"/api/library/tracks/{t['id']}/cover" if t["has_cover"] else None)
+                 cover_url=f"/api/library/tracks/{t['id']}/cover" if t["has_cover"] else None,
+                 gain_db=gain_db(t["loudness"]) if "loudness" in t.keys() else None)
 
 
 def _album_out(a) -> Album:
@@ -787,6 +795,74 @@ def put_rating(body: RatingIn, request: Request, s: Session = Depends(session)) 
         from . import explore
         out.removed = explore.disliked(s.user.profile, s.lib, _queue(request), body.video_id, body.track_id)
     return out
+
+
+class LyricLine(BaseModel):
+    ms: int = Field(description="When the line starts, from the start of the song")
+    text: str
+
+
+class Lyrics(BaseModel):
+    synced: bool = Field(description="lines have times (scroll along with the song)")
+    lines: list[LyricLine] = Field(description="Empty when not synced: show `text`")
+    text: str
+    source: str | None = None
+
+
+@router.get("/lyrics", response_model=Lyrics, tags=["library"],
+            responses={404: {"description": "No lyrics for this song"}})
+def get_lyrics(video_id: str | None = Query(None, max_length=64), track_id: int | None = None,
+               title: str | None = Query(None, max_length=300), artist: str | None = Query(None, max_length=300),
+               album: str | None = Query(None, max_length=300), duration_s: int | None = Query(None, ge=0, le=36000),
+               s: Session = Depends(session)) -> Lyrics:
+    """The song's lyrics (YouTube Music, else LRCLIB), synced when possible. Kept on the PC,
+    so songs looked up before (and every downloaded song) have them offline. A YouTube song
+    that isn't in the library: pass video_id plus title / artist."""
+    from . import lyrics
+    t = s.lib.track(track_id) if track_id else (s.lib.track_by_video(video_id) if video_id else None)
+    if t is not None:
+        video_id = video_id or t["video_id"]
+        title, artist, album, duration_s = t["title"], t["artist"], t["album"], t["duration_s"]
+    key = lyrics.key_of(video_id, t["id"] if t is not None else track_id)
+    if not key:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Which song? (video_id or track_id)")
+    if settings_mod.load().offline:
+        found = lyrics.cached(key)[1]
+    else:
+        yt = (lambda: youtube.call(s.user.profile, "lyrics", video_id)) if video_id else None
+        found = lyrics.find(key, yt, artist, title, album, duration_s)
+    if not found:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No lyrics for this song")
+    lines = [LyricLine(ms=ms, text=txt) for ms, txt in (found["lines"] or [])]
+    return Lyrics(synced=bool(lines), lines=lines, text=found["text"], source=found.get("source"))
+
+
+@router.get("/keep", response_model=TrackList, tags=["library"])
+def keep_on_phone(liked: bool = False, top: int = Query(0, ge=0, le=500),
+                  playlists: str = Query("", max_length=2000, description="Dielify playlist ids, comma-separated"),
+                  s: Session = Depends(session)) -> TrackList:
+    """Songs a phone keeps saved automatically: your thumbs-up songs, your most played (last
+    30 days), and the downloaded songs of chosen playlists. Library songs only."""
+    from . import history
+    ids: list[int] = []
+    have = s.lib.video_ids()
+    with connect() as conn:
+        if liked:
+            for r in conn.execute("SELECT key FROM ratings WHERE profile = ? AND kind = 'song' AND value = 1",
+                                  (s.user.profile,)):
+                k = r["key"]
+                tid = int(k[3:]) if k.startswith("tr-") and k[3:].isdigit() else have.get(k)
+                if tid:
+                    ids.append(tid)
+        wanted = [int(x) for x in playlists.split(",") if x.strip().isdigit()][:100]
+        for pid in wanted:
+            rows = conn.execute("SELECT i.video_id FROM playlist_items i JOIN playlists p ON p.id = i.playlist_id "
+                                "WHERE p.id = ? AND p.profile = ? ORDER BY i.position", (pid, s.user.profile))
+            ids += [have[r["video_id"]] for r in rows if r["video_id"] in have]
+    if top:
+        ids += history.on_repeat(s.lib, days=30, limit=top)
+    tracks = [t for t in (s.lib.track(i) for i in dict.fromkeys(ids)) if t is not None]
+    return TrackList(tracks=[_track_out(t) for t in tracks])
 
 
 class EndlessIn(BaseModel):

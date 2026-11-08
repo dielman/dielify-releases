@@ -14,6 +14,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
@@ -49,6 +52,8 @@ sealed interface UpdateState {
  * and Android itself refuses an update that isn't signed with the same key as the
  * installed app (the key never leaves Josh's PC). You confirm every install.
  */
+private val GITHUB_FILE = Regex("""^https://github\.com/([^/]+)/([^/]+)/releases/(?:latest/download|download/([^/]+))/([^/?#]+)$""")
+
 class AppUpdater(private val context: Context) {
     private val http = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS).readTimeout(60, TimeUnit.SECONDS).build()
@@ -59,6 +64,33 @@ class AppUpdater(private val context: Context) {
     /** Test builds (".debug") are installed over USB, not updated. */
     val enabled get() = BuildConfig.MANIFEST_URL.isNotEmpty() && !BuildConfig.APPLICATION_ID.endsWith(".debug")
 
+    /**
+     * GET a release file. When GitHub's download link fails (it returned 504 for days in
+     * Nov 2026 while the API worked), the same file comes through GitHub's API instead.
+     */
+    private fun open(url: String): okhttp3.Response {
+        val problem: Exception
+        try {
+            val r = http.newCall(Request.Builder().url(url).build()).execute()
+            if (r.isSuccessful || r.code < 500) return r
+            r.close()
+            problem = IllegalStateException("GitHub answered HTTP ${r.code}")
+        } catch (e: java.io.IOException) {
+            problem = e
+        }
+        val m = GITHUB_FILE.find(url) ?: throw problem
+        val (owner, repo, tag, name) = m.destructured
+        val api = "https://api.github.com/repos/$owner/$repo/releases/" + if (tag.isEmpty()) "latest" else "tags/$tag"
+        val asset = http.newCall(Request.Builder().url(api).header("Accept", "application/vnd.github+json").build())
+            .execute().use { r ->
+                if (!r.isSuccessful) throw problem
+                Server.json.parseToJsonElement(r.body.string()).jsonObject["assets"]?.jsonArray
+                    ?.map { it.jsonObject }?.firstOrNull { it["name"]?.jsonPrimitive?.content == name }
+                    ?.get("url")?.jsonPrimitive?.content ?: throw problem
+            }
+        return http.newCall(Request.Builder().url(asset).header("Accept", "application/octet-stream").build()).execute()
+    }
+
     /** At most once a day, unless asked. */
     suspend fun check(force: Boolean = false) {
         if (!enabled) { _state.value = UpdateState.NotSetUp; return }
@@ -67,7 +99,7 @@ class AppUpdater(private val context: Context) {
         _state.value = UpdateState.Checking
         _state.value = try {
             val m = withContext(Dispatchers.IO) {
-                http.newCall(Request.Builder().url(BuildConfig.MANIFEST_URL).build()).execute().use { r ->
+                open(BuildConfig.MANIFEST_URL).use { r ->
                     if (!r.isSuccessful) throw IllegalStateException("GitHub answered HTTP ${r.code}")
                     Server.json.decodeFromString(ReleaseManifest.serializer(), r.body.string())
                 }
@@ -95,7 +127,7 @@ class AppUpdater(private val context: Context) {
         val apk = File(dir, "Dielify-${release.version}.apk")
         return try {
             withContext(Dispatchers.IO) {
-                http.newCall(Request.Builder().url(release.url).build()).execute().use { r ->
+                open(release.url).use { r ->
                     if (!r.isSuccessful) throw IllegalStateException("GitHub answered HTTP ${r.code}")
                     val digest = MessageDigest.getInstance("SHA-256")
                     var done = 0L

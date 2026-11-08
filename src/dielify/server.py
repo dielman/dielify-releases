@@ -43,6 +43,7 @@ def create_app(queue: DownloadQueue | None = None) -> FastAPI:
     from .playlist_api import router as playlist_router
     from .remote import router as remote_router
     from .discovery import Discovery
+    from .leveller import Leveller
     from .mixes import MixMaker
     from .playlists import Playlists
     from .subsonic_api import router as subsonic_router
@@ -51,15 +52,18 @@ def create_app(queue: DownloadQueue | None = None) -> FastAPI:
     playlists = Playlists(youtube.call, queue)
     mix_maker = MixMaker(youtube.call)
     outside = Discovery(youtube.call)
+    leveller = Leveller()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         queue.start()
         playlists.start()
         mix_maker.start()
+        leveller.start()
         # outside discovery (radio charts, ListenBrainz) is off: Josh didn't want single-song
         # shelves on Discover (8 Nov). The code and /api/discover/outside stay for now.
         yield
+        leveller.stop()
         mix_maker.stop()
         playlists.stop()
         queue.stop()
@@ -70,6 +74,7 @@ def create_app(queue: DownloadQueue | None = None) -> FastAPI:
     app.state.queue = queue
     app.state.playlists = playlists
     app.state.mixes = mix_maker
+    app.state.leveller = leveller
     app.state.discovery = outside
     app.include_router(subsonic_router)
     app.include_router(custom_router)

@@ -28,6 +28,8 @@ def manifest(version="9.9.9", payload=INSTALLER, **overrides) -> bytes:
 
 
 class FakeResponse:
+    status_code = 200
+
     def __init__(self, body: bytes):
         self.content, self.text = body, body.decode("latin-1")
 
@@ -144,3 +146,27 @@ def test_update_session_retries_dropped_connections():
     from dielify.updater import _session
     adapter = _session().get_adapter("https://github.com/x")
     assert adapter.max_retries.total == 3 and "GET" in adapter.max_retries.allowed_methods
+
+
+def test_release_files_fall_back_to_the_github_api():
+    """GitHub's download links returned 504 for days (Nov 2026) while its API worked."""
+    from types import SimpleNamespace
+    from dielify import updater
+
+    calls = []
+
+    class Http:
+        def get(self, url, **kw):
+            calls.append((url, kw.get("headers")))
+            if "/releases/download/" in url or "/latest/download/" in url:
+                return SimpleNamespace(status_code=504, ok=False, close=lambda: None)
+            if url.endswith("/releases/tags/v1.2.3"):
+                return SimpleNamespace(status_code=200, ok=True, json=lambda: {"assets": [
+                    {"name": "other.exe", "url": "https://api.github.com/a/1"},
+                    {"name": "manifest.json", "url": "https://api.github.com/a/2"}]})
+            return SimpleNamespace(status_code=200, ok=True, url=url)
+
+    u = updater.Updater(http=Http())
+    r = u._get("https://github.com/o/r/releases/download/v1.2.3/manifest.json", timeout=5)
+    assert r.url == "https://api.github.com/a/2"
+    assert calls[-1][1] == {"Accept": "application/octet-stream"}

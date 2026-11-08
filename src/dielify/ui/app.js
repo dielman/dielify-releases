@@ -62,6 +62,8 @@ const ICONS = {
   sync: "M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z",
   edit: "M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z",
   back: "M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z",
+  bedtime: "M12.34 2.02C6.59 1.82 2 6.42 2 12c0 5.52 4.48 10 10 10 3.71 0 6.93-2.02 8.66-5.02-7.51-.25-12.09-8.43-8.32-14.96z",
+  mic: "M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z",
   queueMusic: "M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zM17 6v8.18c-.31-.11-.65-.18-1-.18-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3V8h3V6h-5z",
   queueAdd: "M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9h-4v4h-2v-4H9V9h4V5h2v4h4v2z",
   playNext: "M3 10h11v2H3zm0-4h11v2H3zm0 8h7v2H3zm13-1v8l6-4z",
@@ -675,7 +677,7 @@ async function viewSettings() {
       setting("Data folder", s.data_folder), setting("Log file", s.log_file),
       await updateSetting(setting));
     await refreshRatings();
-    show(h("h1", {}, "Settings"), youtube, music, windows, phones, backups, ratingsPanel(), about);
+    show(h("h1", {}, "Settings"), youtube, music, playbackPanel(), windows, phones, backups, ratingsPanel(), about);
   } catch (e) { failed(e); }
 }
 
@@ -742,11 +744,16 @@ function showPassword(login) {
 // Like Spotify Connect: the player bar shows and controls the *active* device, which may be
 // this PC or a phone. Songs started here play on the active device; the device button in the
 // bar moves the music between devices.
-const audio = $("audio");
+// Two audio elements: the next song loads in the spare one near the end of this one, so it
+// starts without a gap (gapless albums, no loading pause). `audio` is the one playing.
+const audios = [$("audio"), new Audio()];
+audios[1].preload = "auto";
+let audio = audios[0];
+const onAudio = (ev, fn) => audios.forEach((a) => a.addEventListener(ev, (e) => { if (e.target === audio) fn(e); }));
 [["btn-prev", "prev"], ["btn-play", "play"], ["btn-next", "next"], ["btn-addpl", "playlistAdd"], ["btn-devices", "devices"]]
   .forEach(([id, name]) => $(id).replaceChildren(icon(name)));
 const player = { list: [], index: -1, current: null, counted: false, endless: false, fetching: false };
-audio.volume = 0.8;
+player.vol = 0.8;  // the volume slider; the element's volume also has levelling and fades in it
 
 const remote = { ws: null, you: null, active: null, devices: [], at: 0, retry: 1000, timer: null, picker: null };
 // The active device, if it's another one and in use (playing, or paused under 10 minutes ago).
@@ -807,6 +814,29 @@ function reportPlay() {
 }
 window.addEventListener("beforeunload", reportPlay);
 
+// --- volume: slider x levelling (leveller.py) x sleep-timer fade --------------------------------
+let fade = 1;
+const levelOn = () => { try { return localStorage.getItem("level") !== "off"; } catch { return true; } };
+function levelFactor(t) {  // only turns loud songs down (an <audio> can't go above 100%)
+  const g = t && typeof t.gain_db === "number" && levelOn() ? t.gain_db : 0;
+  return Math.min(1, Math.pow(10, g / 20));
+}
+function applyVolume() {
+  audio.volume = Math.max(0, Math.min(1, player.vol * levelFactor(player.current) * fade));
+}
+const keyOf = (t) => t && (t.id ? `tr-${t.id}` : t.video_id);
+// Near the end of a song: load the next one in the spare element.
+function preloadNext() {
+  if (elsewhere() || !player.current || !audio.duration || audio.duration - audio.currentTime > 25) return;
+  const n = nextPlayable(player.index);
+  const t = player.list[n];
+  const spare = audios.find((a) => a !== audio);
+  if (!t || spare.dataset.key === keyOf(t)) return;
+  spare.dataset.key = keyOf(t);
+  spare.src = media(t.stream_url);
+  spare.load();
+}
+
 function playAt(i) {
   if (i >= 0 && i < player.list.length && banned(player.list[i])) {  // banned: never plays, wherever it is
     toast(`Skipped “${player.list[i].title}”: it's banned (Settings > Ratings)`);
@@ -817,7 +847,17 @@ function playAt(i) {
   const t = player.list[i];
   player.index = i; player.current = t; player.counted = false;
   heard = 0; lastTick = null; startedAt = Date.now() / 1000;
-  audio.src = media(t.stream_url);
+  const spare = audios.find((a) => a !== audio);
+  if (spare.dataset.key && spare.dataset.key === keyOf(t)) {  // already loaded: switch, no gap
+    const old = audio;
+    audio = spare;
+    old.pause(); old.removeAttribute("src"); old.load(); delete old.dataset.key;
+  } else {
+    audio.src = media(t.stream_url);
+    if (spare.dataset.key) { spare.removeAttribute("src"); spare.load(); delete spare.dataset.key; }
+  }
+  delete audio.dataset.key;
+  applyVolume();
   audio.play().catch((e) => toast(`Can't play: ${e.message}`));
   paintBar();
   topUpEndless();
@@ -861,7 +901,7 @@ function paintBar() {
   const t = player.current;
   showSong(t && { title: t.title, artist: t.artist, album: t.album, cover: t.cover_url, thumb: t.thumb });
   showTime(audio.currentTime, audio.duration || 0, !!t && !audio.paused);
-  if (document.activeElement !== $("volume")) $("volume").value = Math.round(audio.volume * 100);
+  if (document.activeElement !== $("volume")) $("volume").value = Math.round(player.vol * 100);
   document.querySelectorAll("tr[data-track]").forEach((r) => r.classList.toggle("playing", !!t && Number(r.dataset.track) === t.id));
   paintThumbs(); renderUpnext();
 }
@@ -889,10 +929,15 @@ $("btn-addpl").addEventListener("click", () => {
   if (!t || !t.video_id) return toast(t ? "This song has no YouTube id, so it can't go in a playlist." : "Nothing playing");
   addToPlaylist([{ type: "song", id: t.video_id, title: t.title, artists: t.artist ? [t.artist] : [], album: t.album || null }]);
 });
-audio.addEventListener("play", () => { if (!elsewhere()) paintBar(); });
-audio.addEventListener("pause", () => { if (!elsewhere()) paintBar(); });
-audio.addEventListener("ended", () => { reportPlay(); playAt(nextPlayable(player.index)); });
-audio.addEventListener("timeupdate", () => {
+onAudio("play", () => { if (!elsewhere()) paintBar(); });
+onAudio("pause", () => { if (!elsewhere()) paintBar(); });
+onAudio("ended", () => {
+  reportPlay();
+  if (sleepAtSongEnd()) return;
+  playAt(nextPlayable(player.index));
+});
+onAudio("timeupdate", () => {
+  preloadNext();
   const now = audio.currentTime;
   if (lastTick !== null && !audio.paused && now > lastTick && now - lastTick < 2) heard += now - lastTick;
   lastTick = now;
@@ -910,7 +955,7 @@ $("seek").addEventListener("change", (e) => {
 $("volume").addEventListener("input", (e) => {
   const v = e.target.value / 100;
   if (elsewhere()) { clearTimeout(remote.vol); remote.vol = setTimeout(() => control({ action: "volume", value: v }), 150); }
-  else audio.volume = v;
+  else { player.vol = v; applyVolume(); }
 });
 document.addEventListener("keydown", (e) => {
   if (e.code === "Space" && !["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement.tagName)) {
@@ -921,18 +966,20 @@ document.addEventListener("keydown", (e) => {
 // --- the connection to the other devices (dielify/remote.py) -----------------------------------
 function songOut(t) {
   return { track_id: t.id || undefined, video_id: t.video_id || undefined, title: t.title,
-    artist: t.artist || undefined, album: t.album || undefined, thumbnail: t.thumb || undefined };
+    artist: t.artist || undefined, album: t.album || undefined, thumbnail: t.thumb || undefined,
+    gain_db: typeof t.gain_db === "number" ? t.gain_db : undefined };
 }
 function remoteTrack(s) {
   const lib = s.track_id;
   return { id: lib || null, video_id: s.video_id || null, title: s.title || "", artist: s.artist || "", album: s.album || "",
     stream_url: lib ? `/api/library/tracks/${lib}/stream` : `/api/yt/stream/${encodeURIComponent(s.video_id)}`,
-    cover_url: lib ? `/api/library/tracks/${lib}/cover` : null, thumb: lib ? null : (s.thumbnail || null) };
+    cover_url: lib ? `/api/library/tracks/${lib}/cover` : null, thumb: lib ? null : (s.thumbnail || null),
+    gain_db: typeof s.gain_db === "number" ? s.gain_db : null };
 }
 function myState() {
   const on = !!player.current;
   return { playing: on && !audio.paused, position_ms: Math.round(audio.currentTime * 1000),
-    duration_ms: Math.round((audio.duration || 0) * 1000) || null, volume: audio.volume,
+    duration_ms: Math.round((audio.duration || 0) * 1000) || null, volume: player.vol,
     index: on ? player.index : -1, queue: on ? player.list.map(songOut) : [] };
 }
 function remoteSend(msg) {
@@ -942,7 +989,7 @@ function sendState(now) {
   clearTimeout(remote.timer);
   remote.timer = setTimeout(() => remoteSend({ type: "state", state: myState() }), now === true ? 0 : 150);
 }
-["play", "pause", "seeked", "volumechange", "loadedmetadata", "ended"].forEach((e) => audio.addEventListener(e, sendState));
+["play", "pause", "seeked", "volumechange", "loadedmetadata", "ended"].forEach((e) => onAudio(e, sendState));
 setInterval(() => sendState(true), 10000);
 
 function remoteConnect() {
@@ -977,7 +1024,7 @@ function runCommand(c, from) {
     case "next": playAt(nextPlayable(player.index)); break;
     case "previous": if (audio.currentTime > 3) audio.currentTime = 0; else playAt(player.index - 1); break;
     case "seek": audio.currentTime = c.position_ms / 1000; break;
-    case "volume": audio.volume = c.value; break;
+    case "volume": player.vol = c.value; applyVolume(); sendState(true); break;
     case "queue": {  // Up next edited on another device: new list around the song playing here
       if (!player.current || !c.queue[c.index]) break;
       const list = c.queue.map(remoteTrack);
@@ -1160,6 +1207,18 @@ function artistThumbs(name) {
   paint();
   return box;
 }
+function playbackPanel() {
+  const box = h("input", { type: "checkbox", id: "level-on" });
+  box.checked = levelOn();
+  box.addEventListener("change", () => {
+    try { localStorage.setItem("level", box.checked ? "on" : "off"); } catch { /* private mode: this session only */ }
+    applyVolume();
+  });
+  return h("div", { class: "panel" }, h("h2", {}, "Playback on this PC"),
+    h("label", { class: "row", style: "gap:8px" }, box, "Even out volume"),
+    h("p", { class: "muted small" }, "Loud songs are turned down to match the rest, so the volume doesn't jump between songs. "
+      + "Dielify measures each song once in the background (new downloads within a few minutes)."));
+}
 function ratingsPanel() {
   const bans = rated.list.filter((r) => r.value === BAN);
   const ups = rated.list.filter((r) => r.value === UP).length, downs = rated.list.filter((r) => r.value === DOWN).length;
@@ -1284,6 +1343,163 @@ $("btn-queue").addEventListener("click", () => {
   document.body.append(upnext.box);
   $("btn-queue").classList.add("on");
   renderUpnext();
+});
+
+// --- lyrics (dielify/lyrics.py): over the page, scrolling along with the song ----------------------
+const lyr = { box: null, key: "", data: null, cache: new Map(), line: -2, timer: null };
+function lyricsSong() {
+  const d = elsewhere();
+  if (d) {
+    const st = d.state || {};
+    const s = st.queue && st.index >= 0 ? st.queue[st.index] : null;
+    return s && { video_id: s.video_id || null, id: s.track_id || null, title: s.title, artist: s.artist || "",
+      album: s.album || "", duration_s: st.duration_ms ? Math.round(st.duration_ms / 1000) : null };
+  }
+  const t = player.current;
+  return t && { video_id: t.video_id || null, id: t.id || null, title: t.title, artist: t.artist || "",
+    album: t.album || "", duration_s: Math.round(audio.duration) || null };
+}
+const lyricsPos = () => { const d = elsewhere(); return d ? nowPos(d.state || {}) : audio.currentTime * 1000; };
+async function loadLyrics(s) {
+  const key = s.video_id || `tr-${s.id}`;
+  if (lyr.cache.has(key)) return lyr.cache.get(key);
+  const q = new URLSearchParams();
+  if (s.id) q.set("track_id", s.id);
+  if (s.video_id) q.set("video_id", s.video_id);
+  if (!s.id) { q.set("title", s.title); if (s.artist) q.set("artist", s.artist); if (s.album) q.set("album", s.album); }
+  if (s.duration_s) q.set("duration_s", s.duration_s);
+  let data = null;
+  try { data = await api(`/api/lyrics?${q}`); } catch (e) { data = { error: /No lyrics/.test(e.message) ? null : e.message }; }
+  if (data && !data.error) lyr.cache.set(key, data);
+  return data;
+}
+async function paintLyrics() {
+  const box = lyr.box;
+  if (!box) return;
+  const s = lyricsSong();
+  const key = s ? s.video_id || `tr-${s.id}` : "";
+  if (key !== lyr.key) {
+    lyr.key = key; lyr.data = null; lyr.line = -2;
+    const head = h("div", { class: "lyr-head" }, h("div", {}, h("b", {}, s ? s.title : "Nothing playing"),
+      h("div", { class: "muted small" }, s ? s.artist : "")), ib("close", "Close lyrics", closeLyrics));
+    const body = h("div", { class: "lyr-body" }, s ? h("p", { class: "muted" }, "Looking for lyrics…") : null);
+    box.replaceChildren(head, body);
+    if (!s) return;
+    const data = await loadLyrics(s);
+    if (lyr.key !== key || !lyr.box) return;  // the song changed meanwhile
+    lyr.data = data;
+    if (!data || data.error) {
+      body.replaceChildren(h("p", { class: "muted" }, data && data.error ? `Couldn't get lyrics: ${data.error}` : "No lyrics for this song."));
+      return;
+    }
+    const seek = (ms) => { if (!control({ action: "seek", position_ms: ms })) audio.currentTime = ms / 1000; };
+    body.replaceChildren(...(data.synced
+      ? data.lines.map((l) => h("div", { class: "lyr-line", onclick: () => seek(l.ms) }, l.text || "♪"))
+      : data.text.split("\n").map((t) => h("div", { class: "lyr-line plain" }, t || " "))),
+      h("p", { class: "muted small lyr-src" }, data.source ? `Lyrics: ${data.source}` : ""));
+  }
+  const data = lyr.data;
+  if (!data || !data.synced) return;
+  const pos = lyricsPos() + 200;  // show a line a moment early, like karaoke
+  let i = -1;
+  while (i + 1 < data.lines.length && data.lines[i + 1].ms <= pos) i++;
+  if (i === lyr.line) return;
+  lyr.line = i;
+  const rows = box.querySelectorAll(".lyr-line");
+  rows.forEach((r, k) => { r.classList.toggle("now", k === i); r.classList.toggle("past", k < i); });
+  const cur = rows[Math.max(0, i)];
+  if (cur) cur.scrollIntoView({ block: "center", behavior: "smooth" });
+}
+function closeLyrics() {
+  if (lyr.box) { lyr.box.remove(); lyr.box = null; }
+  clearInterval(lyr.timer);
+  $("btn-lyrics").classList.remove("on");
+}
+$("btn-lyrics").replaceChildren(icon("mic"));
+$("btn-lyrics").addEventListener("click", () => {
+  if (lyr.box) return closeLyrics();
+  const top = document.querySelector("header.top").getBoundingClientRect().bottom;
+  const bottom = innerHeight - $("player").getBoundingClientRect().top;
+  lyr.box = h("div", { class: "lyrics", style: `top:${top}px;bottom:${bottom}px` });
+  document.body.append(lyr.box);
+  lyr.key = null;
+  $("btn-lyrics").classList.add("on");
+  paintLyrics();
+  lyr.timer = setInterval(paintLyrics, 250);
+});
+
+// --- sleep timer: pause after N minutes (fading out over the last 15 s) or at the end of the song --
+const sleep = { at: 0, songEnd: false, songKey: null, timer: null };
+const FADE_S = 15;
+function nowKey() {
+  const d = elsewhere();
+  if (d) { const st = d.state || {}; const s = st.queue && st.index >= 0 ? st.queue[st.index] : null; return s ? `${d.device}|${st.index}|${s.track_id || s.video_id}` : null; }
+  return player.current ? `here|${player.index}|${keyOf(player.current)}` : null;
+}
+function stopForSleep() {
+  if (!control({ action: "pause" })) audio.pause();
+  clearSleep();
+  toast("Sleep timer: paused. Good night 🌙");
+}
+function clearSleep() {
+  sleep.at = 0; sleep.songEnd = false; sleep.songKey = null;
+  clearInterval(sleep.timer); sleep.timer = null;
+  if (fade !== 1) { fade = 1; applyVolume(); }
+  paintSleep();
+}
+// The "ended" event: true = the timer stopped the music here instead of the next song.
+function sleepAtSongEnd() {
+  if (!sleep.songEnd || elsewhere()) return false;
+  clearSleep();
+  toast("Sleep timer: stopped at the end of the song. Good night 🌙");
+  return true;
+}
+function tickSleep() {
+  if (sleep.songEnd) {  // on another device: stop once it moves on to the next song
+    if (elsewhere() && nowKey() !== sleep.songKey) stopForSleep();
+    return;
+  }
+  const left = (sleep.at - Date.now()) / 1000;
+  if (left <= 0) return stopForSleep();
+  if (!elsewhere()) {
+    const f = left < FADE_S ? Math.max(0.05, left / FADE_S) : 1;
+    if (f !== fade) { fade = f; applyVolume(); }
+  }
+  paintSleep();
+}
+function setSleep(minutes) {
+  clearSleep();
+  if (minutes === "song") {
+    if (!nowKey()) return toast("Nothing playing");
+    sleep.songEnd = true; sleep.songKey = nowKey();
+    toast("Sleep timer: stops at the end of this song");
+  } else if (minutes) {
+    sleep.at = Date.now() + minutes * 60000;
+    toast(`Sleep timer: pauses in ${minutes} minutes`);
+  } else return toast("Sleep timer off");
+  sleep.timer = setInterval(tickSleep, 1000);
+  paintSleep();
+}
+function paintSleep() {
+  const b = $("btn-sleep");
+  const on = !!(sleep.at || sleep.songEnd);
+  b.classList.toggle("on", on);
+  b.title = !on ? "Sleep timer" : sleep.songEnd ? "Sleep timer: end of this song"
+    : `Sleep timer: ${Math.max(1, Math.ceil((sleep.at - Date.now()) / 60000))} min left`;
+}
+$("btn-sleep").replaceChildren(icon("bedtime"));
+$("btn-sleep").addEventListener("click", (e) => {
+  closeMenu();
+  const btn = e.currentTarget, r = btn.getBoundingClientRect();
+  const opt = (label, v) => h("button", { onclick: () => { closeMenu(); setSleep(v); } }, label);
+  const on = sleep.at || sleep.songEnd;
+  const m = h("div", { class: "menu", style: `right:${Math.max(8, innerWidth - r.right)}px;bottom:${innerHeight - r.top + 6}px` },
+    h("div", { class: "muted small", style: "padding:6px 10px" }, on ? btn.title : "Sleep timer"),
+    opt("15 minutes", 15), opt("30 minutes", 30), opt("45 minutes", 45), opt("1 hour", 60), opt("End of this song", "song"),
+    on ? opt("Turn off", 0) : null);
+  document.body.append(m);
+  menuOpen = m;
+  setTimeout(() => document.addEventListener("mousedown", menuOutside, true));
 });
 
 // --- start ----------------------------------------------------------------------------------------

@@ -35,6 +35,7 @@ data class RemoteSong(
     val album: String? = null,
     val durationS: Int? = null,
     val thumbnail: String? = null,
+    val gainDb: Double? = null,
 )
 
 @Serializable

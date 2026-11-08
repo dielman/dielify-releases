@@ -441,6 +441,31 @@ src/dielify/
   (shuffle) and maps "jump" back; phone also handles "jump" now (it ignored it before).
   Phone shuffle: the first queue edit lays the list out in the shuffled order and turns
   shuffle off (otherwise Media3 inserts at random places). No drag-to-move on the phone yet.
+- **Built 0.9.0 (not published; Josh: "all of them for a .9 update", 9 Nov):**
+  - Lyrics: `lyrics.py` (YouTube Music timed lyrics via get_watch_playlist "lyrics" id ->
+    get_lyrics(timestamps=True); else LRCLIB lrclib.net/api/get, only artist/title/album/length
+    sent), table `lyrics` (none remembered 14 days), kept at download time (TrackInfo.lyrics_id,
+    downloads._fetch_lyrics), GET /api/lyrics. PC: mic button = full-page lyrics, current line
+    centred, click a line to seek. Phone: LyricsSheet, LyricsStore (filesDir/lyrics, 3000 max),
+    fetched for the current + next 2 songs and for saved songs.
+  - Sleep timer: PC moon button (15/30/45/60 min, end of song, 15 s fade); phone SleepTimer in
+    DielifyApp, run by PlaybackService (pauseAtEndOfMediaItems; remote device: pause when it
+    moves on).
+  - Gapless + levelling: PC has two <audio> elements (next song preloaded 25 s before the end,
+    swapped on "ended"); phone already gapless (Media3). `leveller.py` measures EBU R128
+    loudness with FFmpeg into tracks.loudness (background, below-normal priority; -99 = none);
+    Track.gain_db = -14 - LUFS; players only turn loud songs down (volume can't go over 1).
+    Setting "Even out volume" (PC localStorage, phone prefs). gain_db travels in remote songs.
+  - Keep on phone: GET /api/keep?liked&top&playlists; phone KeepOnPhone/KeepWorker (12 h + on
+    change; Wi-Fi only by default); removes only songs it added ("auto" set).
+  - Phone Up next: drag handle to move (queueMove).
+  - Update downloads fall back to GitHub's API asset link on 5xx / network errors (PC + phone).
+  - DPAPI warning explained + fixed: the sign-in file is Josh.dpapi / profile "Josh", the
+    music folder is "josh"; _profiles added "josh" and Windows' case-insensitive path opened
+    Josh.dpapi with entropy "josh" -> error 13. Profiles now dedupe case-insensitively.
+  - Installer drops ffprobe.exe (228 MB; yt-dlp works without it, tested) and deletes the old
+    copy. A slimmer FFmpeg (essentials build) would cut more but needs Josh's OK to download.
+  - PC player bar: sleep / lyrics / queue / devices grouped; volume hidden under 1050 px.
 
 - **Icons (Josh, 8 Nov: "this looks shit"): built in 0.8.11.** PC song rows are one line
   (tap the title to play; icons for add to playlist / download / ✓ in library / remove),

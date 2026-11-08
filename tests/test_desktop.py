@@ -212,3 +212,16 @@ def test_late_address_is_picked_up(monkeypatch):
 def test_keep_awake_setting(client):
     st = client.put("/api/desktop/settings", headers=client.desk, json={"keep_awake": True}).json()
     assert st["keep_awake"] is True and settings.load().keep_awake is True
+
+
+def test_profile_names_differing_only_in_case_are_one(tmp_path, monkeypatch):
+    """Josh's sign-in is Josh.dpapi but his music folder is 'josh': checking 'josh' against
+    Josh.dpapi failed every few minutes (the file is locked to its exact name)."""
+    from dielify import credstore, desktop_api, settings
+    monkeypatch.setattr(credstore, "list_profiles", lambda store="credentials": ["Josh"])
+    root = tmp_path / "lib"
+    (root / "josh").mkdir(parents=True)
+    (root / "Kid").mkdir()
+    s = settings.load()
+    s.library_root, s.active_profile = str(root), "Josh"
+    assert desktop_api._profiles(s) == ["Josh", "Kid"]

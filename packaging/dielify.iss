@@ -38,12 +38,14 @@ Name: "autostart"; Description: "Start Dielify when I sign in to Windows (it wai
 [Files]
 Source: "..\dist\Dielify\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
 Source: "{#FFmpegDir}\ffmpeg.exe"; DestDir: "{app}\bin"; Flags: ignoreversion
-Source: "{#FFmpegDir}\ffprobe.exe"; DestDir: "{app}\bin"; Flags: ignoreversion
+; no ffprobe (0.9): yt-dlp manages without it, and it was a third of every update
 Source: "{#DenoDir}\deno.exe"; DestDir: "{app}\bin"; Flags: ignoreversion
 
 [InstallDelete]
 ; Files from an older version that the new one no longer has.
 Type: filesandordirs; Name: "{app}\_internal"
+Type: files; Name: "{app}\bin\ffprobe.exe"
+Type: files; Name: "{app}infprobe.exe"
 
 [Icons]
 Name: "{autoprograms}\Dielify"; Filename: "{app}\Dielify.exe"

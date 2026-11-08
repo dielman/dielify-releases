@@ -137,6 +137,8 @@ fun NowPlayingScreen(vm: AppViewModel) {
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
                 SongThumbs(vm)
+                SleepButton(vm)
+                LyricsButton(vm)
                 UpNextButton(vm)
             }
             p.error?.let {
@@ -218,6 +220,8 @@ fun SettingsScreen(vm: AppViewModel) {
             if (songs.isNotEmpty()) OutlinedButton(onClick = { vm.saved.removeAll() }) {
                 Text("Remove all songs from this phone")
             }
+            LevelSetting()
+            KeepSettings(vm)
             BannedList(vm)
             val cached = androidx.compose.ui.platform.LocalContext.current.dielify.songCache.cache.cacheSpace
             Setting("Kept from streaming", "${formatBytes(cached)} (up to 500 MB). The next 5 songs " +

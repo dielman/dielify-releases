@@ -301,6 +301,10 @@ class Server(private val context: Context, private val accounts: AccountStore) {
     suspend fun endless(body: EndlessIn): List<Item> =
         json.decodeFromString(ItemList.serializer(), send("POST", "api/discover/endless", json.encodeToString(EndlessIn.serializer(), body))).items
     suspend fun forYou(): ForYou = get("api/discover/for-you")
+    suspend fun lyrics(query: String): Lyrics = get("api/lyrics?$query")
+    /** Songs to keep on the phone automatically (Settings). */
+    suspend fun keepList(liked: Boolean, top: Int, playlists: Set<Long>): List<Track> =
+        get<TrackList>("api/keep?liked=$liked&top=$top&playlists=" + playlists.joinToString(",")).tracks
 
     companion object {
         const val MEDIA_SCHEME = "dielify"
