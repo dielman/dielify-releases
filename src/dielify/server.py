@@ -41,17 +41,21 @@ def create_app(queue: DownloadQueue | None = None) -> FastAPI:
     from .custom_api import youtube
     from .desktop_api import router as desktop_router
     from .playlist_api import router as playlist_router
+    from .mixes import MixMaker
     from .playlists import Playlists
     from .subsonic_api import router as subsonic_router
 
     queue = queue or DownloadQueue()
     playlists = Playlists(youtube.call, queue)
+    mix_maker = MixMaker(youtube.call)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         queue.start()
         playlists.start()
+        mix_maker.start()
         yield
+        mix_maker.stop()
         playlists.stop()
         queue.stop()
 
@@ -60,6 +64,7 @@ def create_app(queue: DownloadQueue | None = None) -> FastAPI:
                   docs_url="/api/docs", redoc_url=None, openapi_url="/api/openapi.json")
     app.state.queue = queue
     app.state.playlists = playlists
+    app.state.mixes = mix_maker
     app.include_router(subsonic_router)
     app.include_router(custom_router)
     app.include_router(playlist_router)

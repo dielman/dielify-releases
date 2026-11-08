@@ -147,6 +147,15 @@ CREATE TABLE IF NOT EXISTS playlist_ops (
     error        TEXT
 );
 
+-- Artist genres from MusicBrainz (tags.py); tags = JSON [[name, count], ...].
+CREATE TABLE IF NOT EXISTS artist_tags (
+    name_key   TEXT PRIMARY KEY,
+    name       TEXT NOT NULL,
+    mbid       TEXT,
+    tags       TEXT,
+    fetched_at REAL NOT NULL
+);
+
 -- Logins for our own API (auth.py): only a hash of each token is kept.
 CREATE TABLE IF NOT EXISTS device_tokens (
     id           INTEGER PRIMARY KEY,
@@ -182,6 +191,11 @@ def _migrate(conn: sqlite3.Connection) -> None:
     cols = {r[1] for r in conn.execute("PRAGMA table_info(downloads)")}
     if "priority" not in cols:  # 0.6: "download next" (1 = jump the queue)
         conn.execute("ALTER TABLE downloads ADD COLUMN priority INTEGER NOT NULL DEFAULT 0")
+    pcols = {r[1] for r in conn.execute("PRAGMA table_info(playlists)")}
+    if "kind" not in pcols:  # 0.8.2: Dielify-made mixes are playlists too
+        conn.execute("ALTER TABLE playlists ADD COLUMN kind TEXT NOT NULL DEFAULT 'user'")
+        conn.execute("ALTER TABLE playlists ADD COLUMN mix_key TEXT")
+        conn.execute("ALTER TABLE playlists ADD COLUMN description TEXT")
 
 
 @contextmanager

@@ -2012,6 +2012,60 @@
         }
       }
     },
+    "/api/mixes": {
+      "get": {
+        "tags": [
+          "playlists",
+          "discover"
+        ],
+        "summary": "List Mixes",
+        "description": "Dielify-made genre, decade and vibe mixes (rebuilt weekly).",
+        "operationId": "list_mixes_api_mixes_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MixStatus"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/mixes/refresh": {
+      "post": {
+        "tags": [
+          "playlists",
+          "discover"
+        ],
+        "summary": "Refresh Mixes",
+        "description": "Rebuild the mixes now (in the background; takes a minute).",
+        "operationId": "refresh_mixes_api_mixes_refresh_post",
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/playlists/{playlist_id}/sync": {
       "post": {
         "tags": [
@@ -3661,6 +3715,46 @@
         ],
         "title": "LoginResult"
       },
+      "MixStatus": {
+        "properties": {
+          "mixes": {
+            "items": {
+              "$ref": "#/components/schemas/PlaylistSummary"
+            },
+            "type": "array",
+            "title": "Mixes"
+          },
+          "artists": {
+            "type": "integer",
+            "title": "Artists",
+            "description": "Artists in your library"
+          },
+          "looked_up": {
+            "type": "integer",
+            "title": "Looked Up",
+            "description": "Artists whose genres have been looked up (MusicBrainz)"
+          },
+          "built_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Built At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "mixes",
+          "artists",
+          "looked_up",
+          "built_at"
+        ],
+        "title": "MixStatus"
+      },
       "NewDevice": {
         "properties": {
           "device_name": {
@@ -4033,7 +4127,24 @@
           "read_only": {
             "type": "boolean",
             "title": "Read Only",
-            "description": "Synced one way only (e.g. Liked Music)"
+            "description": "Can't be edited (Liked Music, Dielify mixes)"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind",
+            "description": "user = your playlist, mix = made by Dielify weekly",
+            "default": "user"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
           },
           "count": {
             "type": "integer",

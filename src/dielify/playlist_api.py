@@ -16,7 +16,9 @@ class PlaylistSummary(BaseModel):
     id: int
     name: str
     yt_id: str | None = Field(description="Set when synced with this YouTube Music playlist")
-    read_only: bool = Field(description="Synced one way only (e.g. Liked Music)")
+    read_only: bool = Field(description="Can't be edited (Liked Music, Dielify mixes)")
+    kind: str = Field("user", description="user = your playlist, mix = made by Dielify weekly")
+    description: str | None = None
     count: int
     pending: int = Field(description="Edits waiting to be sent to YouTube")
     synced_at: float | None
@@ -76,6 +78,7 @@ def _thumb(video_id: str | None) -> str | None:
 def _summary(p: dict) -> PlaylistSummary:
     first = p.get("first_video") or (p["items"][0]["video_id"] if p.get("items") else None)
     return PlaylistSummary(id=p["id"], name=p["name"], yt_id=p["yt_id"], read_only=bool(p["read_only"]),
+                           kind=p.get("kind") or "user", description=p.get("description"),
                            count=p["count"] if "count" in p else len(p.get("items", [])),
                            pending=p.get("pending", 0), synced_at=p["synced_at"], sync_error=p["sync_error"],
                            thumbnail=_thumb(first))
@@ -147,6 +150,29 @@ def remove_entry(playlist_id: int, entry_id: int, request: Request, s: Session =
                  on_youtube: bool = Query(False, description="Required for synced playlists: removes it there too")
                  ) -> PlaylistDetail:
     return _detail(s, _guard(lambda: _engine(request).remove(s.user.profile, playlist_id, entry_id, on_youtube)))
+
+
+class MixStatus(BaseModel):
+    mixes: list[PlaylistSummary]
+    artists: int = Field(description="Artists in your library")
+    looked_up: int = Field(description="Artists whose genres have been looked up (MusicBrainz)")
+    built_at: float | None
+
+
+@router.get("/mixes", response_model=MixStatus, tags=["discover"])
+def list_mixes(s: Session = Depends(session)) -> MixStatus:
+    """Dielify-made genre, decade and vibe mixes (rebuilt weekly)."""
+    from . import mixes, tags
+    st = tags.status()
+    return MixStatus(mixes=[_summary(p) for p in pl.all_playlists(s.user.profile) if p.get("kind") == "mix"],
+                     artists=st["artists"], looked_up=st["looked_up"], built_at=mixes.last_built(s.user.profile))
+
+
+@router.post("/mixes/refresh", status_code=202, tags=["discover"])
+def refresh_mixes(request: Request, s: Session = Depends(session)) -> Response:
+    """Rebuild the mixes now (in the background; takes a minute)."""
+    request.app.state.mixes.refresh_soon()
+    return Response(status_code=202)
 
 
 @router.post("/playlists/{playlist_id}/sync", response_model=PlaylistDetail)

@@ -64,6 +64,12 @@ def by_yt_id(profile: str, yt_id: str) -> dict | None:
     return get(profile, row["id"]) if row else None
 
 
+def _read_only_reason(pl: dict) -> str:
+    if pl.get("kind") == "mix":
+        return f"\"{pl['name']}\" is a Dielify mix: it's rebuilt every week, so it can't be edited"
+    return f"\"{pl['name']}\" can only be changed in YouTube Music"
+
+
 # --- local changes ------------------------------------------------------------------------
 
 def _insert_items(conn, playlist_id: int, items: list[YTItem], start: int, sets: list[str | None] | None = None):
@@ -135,7 +141,7 @@ class Playlists:
         if pl is None:
             raise KeyError("No such playlist")
         if pl["read_only"]:
-            raise ValueError(f"\"{pl['name']}\" can only be changed in YouTube Music")
+            raise ValueError(_read_only_reason(pl))
         items = [i for i in items if i.type in ("song", "video")]
         with self._lock(playlist_id), connect() as conn:
             start = (conn.execute("SELECT MAX(position) FROM playlist_items WHERE playlist_id = ?",
@@ -158,7 +164,7 @@ class Playlists:
         if pl is None:
             raise KeyError("No such playlist")
         if pl["read_only"]:
-            raise ValueError(f"\"{pl['name']}\" can only be changed in YouTube Music")
+            raise ValueError(_read_only_reason(pl))
         if pl["yt_id"] and not on_youtube:
             raise ValueError("This playlist is synced with YouTube Music: removing it here also "
                              "removes it there (confirm with on_youtube=true)")
