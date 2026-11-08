@@ -62,6 +62,23 @@ Filename: "{app}\Dielify.exe"; Description: "Open Dielify"; Flags: nowait postin
 Filename: "{app}\Dielify.exe"; Flags: nowait; Check: RestartAfterUpdate
 
 [Code]
+// An automatic update starts this installer and then closes Dielify a moment later.
+// Without waiting, the AppMutex check finds Dielify still open, the silent installer
+// "answers" Cancel to the please-close-it message, and nothing is installed (seen 8 Nov
+// with 0.7.0 -> 0.8.0). So when silent, wait up to a minute for Dielify to close first.
+function InitializeSetup: Boolean;
+var
+  i: Integer;
+begin
+  i := 0;
+  while WizardSilent and CheckForMutexes('Local\dielify-desktop') and (i < 120) do
+  begin
+    Sleep(500);
+    i := i + 1;
+  end;
+  Result := True;
+end;
+
 function RestartAfterUpdate: Boolean;
 begin
   Result := WizardSilent and (ExpandConstant('{param:RESTARTAPP|0}') = '1');

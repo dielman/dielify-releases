@@ -287,6 +287,13 @@ src/dielify/
   (top-bar Insights icon), For-you shelves on Discover. PC: Stats tab, heard-time
   reporting, For-you shelves. History starts at 0.8.0 (old plays are counts only).
   Not yet confirmed by Josh on device.
+- 0.7.0 -> 0.8.0 automatic PC update did NOT install (Josh installed dist\ by hand).
+  Cause (reproduced with a test installer): the app starts the silent installer, then
+  quits 1.5 s later; Inno's AppMutex check found Dielify still open and, with
+  /SUPPRESSMSGBOXES, defaulted to Cancel -> exit 1 in 0.5 s. Fix (in the installer, so
+  it applies when updating FROM any version): [Code] InitializeSetup waits up to 60 s
+  for the mutex when silent; updater passes /LOG=updates\install.log. First proof will
+  be the next PC update (0.8.0 -> next).
 - Idea for later: pre-resolve the next song in a list so skipping feels instant.
 
 ## Open questions for Josh

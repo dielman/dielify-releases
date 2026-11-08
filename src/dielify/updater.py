@@ -192,8 +192,10 @@ def _launch_installer(installer: Path) -> None:
     if not getattr(sys, "frozen", False):
         raise UpdateError("Updates install into the installed app, not a development copy.")
     # Silent, per-user; the installer waits for Dielify to close, then starts it again.
-    subprocess.Popen([str(installer), "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/RESTARTAPP=1"],
-                     close_fds=True, creationflags=subprocess.DETACHED_PROCESS)
+    # /LOG: the installer is invisible, so keep its log next to the download.
+    log = installer.with_name("install.log")
+    subprocess.Popen([str(installer), "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/RESTARTAPP=1",
+                      f"/LOG={log}"], close_fds=True, creationflags=subprocess.DETACHED_PROCESS)
 
 
 updater = Updater()
