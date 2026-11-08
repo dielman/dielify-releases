@@ -270,10 +270,13 @@ async function viewDiscover() {
     const trackShelf = (title, tracks) => tracks.length ? [h("h2", {}, title), h("div", { class: "shelf" },
       tracks.map((t, i) => h("div", { class: "card", onclick: () => playList(tracks, i) },
         art(media(t.cover_url, 320)), h("div", { class: "t" }, t.title), h("div", { class: "s" }, t.artist))))] : null;
-    const mine = forYou ? [trackShelf("On repeat", forYou.on_repeat),
-      forYou.more_like.length ? [h("h2", {}, "More like your top songs"), h("div", { class: "shelf" }, forYou.more_like.map(ytCard))] : null,
+    // (no "On repeat": YouTube's home feed already has its own)
+    const mine = forYou ? [forYou.more_like.length ? [h("h2", {}, "More like your top songs"), h("div", { class: "shelf" }, forYou.more_like.map(ytCard))] : null,
       trackShelf("Forgotten favourites", forYou.forgotten)] : null;
-    if (view === "discover") show(h("h1", {}, "Discover"), madeForYou, mine, shelves, chartShelf);
+    const endless = h("div", { class: "row", style: "margin:4px 0 8px" },
+      h("button", { class: "primary", onclick: () => startEndless() }, icon("shuffle"), " Never-ending discovery"),
+      h("span", { class: "muted small" }, " New songs like what you play, downloaded to check out. Thumbs down deletes one again."));
+    if (view === "discover") show(h("h1", {}, "Discover"), endless, madeForYou, mine, shelves, chartShelf);
   } catch (e) { failed(e); }
 }
 
@@ -736,7 +739,7 @@ function showPassword(login) {
 const audio = $("audio");
 [["btn-prev", "prev"], ["btn-play", "play"], ["btn-next", "next"], ["btn-addpl", "playlistAdd"], ["btn-devices", "devices"]]
   .forEach(([id, name]) => $(id).replaceChildren(icon(name)));
-const player = { list: [], index: -1, current: null, counted: false };
+const player = { list: [], index: -1, current: null, counted: false, endless: false, fetching: false };
 audio.volume = 0.8;
 
 const remote = { ws: null, you: null, active: null, devices: [], at: 0, retry: 1000, timer: null, picker: null };
@@ -755,7 +758,34 @@ function playList(list, index) {
     remoteSend({ type: "command", to: d.device, command: { action: "load", queue: list.map(songOut), index, position_ms: 0, playing: true } });
     return;
   }
-  player.list = list; playAt(index);
+  player.list = list; player.endless = false; playAt(index);
+}
+
+// --- never-ending discovery play (explore.py) ----------------------------------------------------
+async function endlessBatch(count) {
+  const ids = player.list.map((t) => t.video_id).filter(Boolean);
+  const heard = player.list.slice(0, player.index + 1).map((t) => t.video_id).filter(Boolean);
+  const seeds = heard.length ? heard.slice(-20) : (player.current && player.current.video_id ? [player.current.video_id] : []);
+  const r = await api("/api/discover/endless", { method: "POST", body: { seeds, exclude: ids.slice(-2000), count } });
+  return r.items.map(ytAsTrack);
+}
+async function startEndless() {
+  try {
+    toast("Finding new songs…");
+    const keep = player.current && !elsewhere() ? [player.current] : [];
+    player.list = keep; player.index = keep.length - 1;
+    const more = await endlessBatch(10);
+    if (!more.length) return toast("Couldn't find new songs right now");
+    if (elsewhere()) return playList(more, 0);  // the other device plays this batch (it doesn't top up)
+    player.list = [...keep, ...more]; player.endless = true;
+    playAt(keep.length);
+  } catch (e) { toast(e.message); }
+}
+async function topUpEndless() {
+  if (!player.endless || player.fetching || player.list.length - player.index > 3) return;
+  player.fetching = true;
+  try { player.list.push(...await endlessBatch(10)); } catch { /* try again at the next song */ }
+  player.fetching = false;
 }
 // Play history: how long the current song was actually heard (seeking doesn't count).
 let heard = 0, lastTick = null, startedAt = null;
@@ -784,6 +814,7 @@ function playAt(i) {
   audio.src = media(t.stream_url);
   audio.play().catch((e) => toast(`Can't play: ${e.message}`));
   paintBar();
+  topUpEndless();
 }
 
 // --- the player bar: what's playing on the active device ---------------------------------------
@@ -1020,8 +1051,12 @@ function ratingOf(song) {
 const banned = (song) => ratingOf(song) === BAN;
 async function rate(kind, body, value, msg) {
   try {
-    loadRatings((await api("/api/ratings", { method: "PUT", body: { kind, value, ...body } })).ratings);
-    if (msg) toast(msg);
+    const res = await api("/api/ratings", { method: "PUT", body: { kind, value, ...body } });
+    loadRatings(res.ratings);
+    if (res.removed) {
+      toast(`Thumbs down: deleted “${res.removed}” from your PC`);
+      if (player.endless && !elsewhere() && player.current && player.current.video_id === body.video_id) skipNow();
+    } else if (msg) toast(msg);
   } catch (e) { toast(e.message); }
   paintThumbs();
 }

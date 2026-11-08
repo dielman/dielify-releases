@@ -229,6 +229,7 @@ class PlaybackService : MediaLibraryService() {
         startRemote(player)
         player.addListener(object : Player.Listener {
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                dielify.endless.onTransition(player, mediaItem, scope)
                 val m = mediaItem ?: return
                 if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT) return
                 if (dielify.ratings.banned(MediaItems.videoId(m), MediaItems.trackId(m), m.mediaMetadata.artist?.toString())) {

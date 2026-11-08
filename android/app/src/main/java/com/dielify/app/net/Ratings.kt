@@ -10,7 +10,10 @@ import java.text.Normalizer
 @Serializable
 data class Rating(val kind: String, val key: String, val name: String, val value: Int)
 
-@Serializable data class RatingList(val ratings: List<Rating>)
+@Serializable data class RatingList(val ratings: List<Rating>, val removed: String? = null)
+
+@Serializable
+data class EndlessIn(val seeds: List<String>, val exclude: List<String>, val count: Int = 10)
 
 @Serializable
 data class RatingIn(
@@ -34,9 +37,12 @@ class Ratings(private val server: Server) {
         runCatching { server.ratings() }.onSuccess { _all.value = it }
     }
 
-    /** Thumbs up (UP), down (DOWN), ban (BAN) or clear (0). Throws ApiError if the PC said no. */
-    suspend fun rate(kind: String, name: String, value: Int, videoId: String? = null, trackId: Long? = null) {
-        _all.value = server.rate(RatingIn(kind, name, videoId, trackId, value))
+    /** Thumbs up (UP), down (DOWN), ban (BAN) or clear (0). Throws ApiError if the PC said no.
+     *  Returns the song's title if the PC deleted it (thumbs down on a discovery-play song). */
+    suspend fun rate(kind: String, name: String, value: Int, videoId: String? = null, trackId: Long? = null): String? {
+        val r = server.rate(RatingIn(kind, name, videoId, trackId, value))
+        _all.value = r.ratings
+        return r.removed
     }
 
     fun songValue(videoId: String?, trackId: Long?): Int {

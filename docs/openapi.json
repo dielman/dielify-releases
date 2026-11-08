@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Dielify",
-    "version": "0.8.4"
+    "version": "0.8.12"
   },
   "paths": {
     "/api/auth/login": {
@@ -842,6 +842,33 @@
         }
       }
     },
+    "/api/downloads/clear-finished": {
+      "post": {
+        "tags": [
+          "downloads"
+        ],
+        "summary": "Clear Finished Downloads",
+        "description": "Remove downloaded and cancelled songs from the list. The songs stay in the library;\nfailed downloads stay listed.",
+        "operationId": "clear_finished_downloads_api_downloads_clear_finished_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Cleared"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/library/artists": {
       "get": {
         "tags": [
@@ -1358,6 +1385,124 @@
             }
           }
         }
+      }
+    },
+    "/api/ratings": {
+      "get": {
+        "tags": [
+          "ratings"
+        ],
+        "summary": "Get Ratings",
+        "operationId": "get_ratings_api_ratings_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RatingList"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "ratings"
+        ],
+        "summary": "Put Rating",
+        "description": "Thumbs up (1), down (-1), ban (-2) or clear (0) a song or an artist. Returns all.",
+        "operationId": "put_rating_api_ratings_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RatingIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RatingList"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/discover/endless": {
+      "post": {
+        "tags": [
+          "discover"
+        ],
+        "summary": "Discover Endless",
+        "description": "Never-ending discovery play: the next songs that aren't in your library yet, like\nthe seeds. They're queued for download so you can check them out; thumbs down on one\n(PUT /ratings) deletes it from the PC again.",
+        "operationId": "discover_endless_api_discover_endless_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EndlessIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemList"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/discover/outside": {
@@ -2903,6 +3048,19 @@
         ],
         "title": "Charts"
       },
+      "Cleared": {
+        "properties": {
+          "removed": {
+            "type": "integer",
+            "title": "Removed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "removed"
+        ],
+        "title": "Cleared"
+      },
       "Collection": {
         "properties": {
           "info": {
@@ -3468,6 +3626,39 @@
           "id"
         ],
         "title": "DownloadRequest"
+      },
+      "EndlessIn": {
+        "properties": {
+          "seeds": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "title": "Seeds",
+            "description": "Video ids heard so far in this list, oldest first (thumbs-up ones count most)",
+            "default": []
+          },
+          "exclude": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 2000,
+            "title": "Exclude",
+            "description": "Video ids already in the list",
+            "default": []
+          },
+          "count": {
+            "type": "integer",
+            "maximum": 25.0,
+            "minimum": 1.0,
+            "title": "Count",
+            "default": 10
+          }
+        },
+        "type": "object",
+        "title": "EndlessIn"
       },
       "ForYou": {
         "properties": {
@@ -4358,6 +4549,126 @@
           "tracks"
         ],
         "title": "ProfileInfo"
+      },
+      "Rating": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "song",
+              "artist"
+            ],
+            "title": "Kind"
+          },
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "value": {
+            "type": "integer",
+            "title": "Value",
+            "description": "1 up, -1 down, -2 banned"
+          },
+          "updated_at": {
+            "type": "number",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "key",
+          "name",
+          "value",
+          "updated_at"
+        ],
+        "title": "Rating"
+      },
+      "RatingIn": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "song",
+              "artist"
+            ],
+            "title": "Kind"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 300,
+            "title": "Name",
+            "description": "song: \"Title - Artist\"; artist: its name"
+          },
+          "video_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Video Id"
+          },
+          "track_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Track Id"
+          },
+          "value": {
+            "type": "integer",
+            "maximum": 1.0,
+            "minimum": -2.0,
+            "title": "Value",
+            "description": "1 up, -1 down, -2 ban, 0 clear"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "name",
+          "value"
+        ],
+        "title": "RatingIn"
+      },
+      "RatingList": {
+        "properties": {
+          "ratings": {
+            "items": {
+              "$ref": "#/components/schemas/Rating"
+            },
+            "type": "array",
+            "title": "Ratings"
+          },
+          "removed": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Removed",
+            "description": "Thumbs down on a song discovery play brought in: its title (its download was deleted from the PC)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ratings"
+        ],
+        "title": "RatingList"
       },
       "RenamePlaylist": {
         "properties": {

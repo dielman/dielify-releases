@@ -25,6 +25,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.DownloadForOffline
 import androidx.compose.material.icons.filled.ErrorOutline
@@ -252,9 +253,15 @@ fun DiscoverScreen(vm: AppViewModel) {
                 DiscoverData(home, charts, forYou, mixes)
             }) { (home, charts, forYou, mixes) ->
                 LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) {
+                    item(key = "endless") {
+                        androidx.compose.material3.FilledTonalButton(onClick = { vm.startEndless() },
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                            Icon(Icons.Filled.Explore, null)
+                            Text("  Never-ending discovery")
+                        }
+                    }
                     item(key = "mixes") { MixShelf(vm, mixes) }
                     if (forYou != null) {
-                        item(key = "fy-repeat") { TrackShelf(vm, "On repeat", forYou.onRepeat) }
                         item(key = "fy-more") { ShelfRow(vm, "More like your top songs", forYou.moreLike) }
                         item(key = "fy-forgotten") { TrackShelf(vm, "Forgotten favourites", forYou.forgotten) }
                     }

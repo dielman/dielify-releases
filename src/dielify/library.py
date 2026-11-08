@@ -185,6 +185,15 @@ CREATE TABLE IF NOT EXISTS ratings (
     PRIMARY KEY (profile, kind, key)
 );
 
+-- Songs never-ending discovery play brought in (explore.py): thumbs down deletes these.
+CREATE TABLE IF NOT EXISTS explore_songs (
+    profile  TEXT NOT NULL,
+    video_id TEXT NOT NULL,
+    title    TEXT NOT NULL,
+    added_at REAL NOT NULL,
+    PRIMARY KEY (profile, video_id)
+);
+
 -- Logins for our own API (auth.py): only a hash of each token is kept.
 CREATE TABLE IF NOT EXISTS device_tokens (
     id           INTEGER PRIMARY KEY,
@@ -496,6 +505,30 @@ class Library:
         with connect() as conn:
             conn.execute(f"UPDATE {table} SET starred_at = ? WHERE id = ? AND profile = ?",
                          (time.time() if starred else None, item_id, self.profile))
+
+    def remove_track(self, track_id: int) -> bool:
+        """Delete a song's file and take it out of the index (empty album/artist folders
+        go too). Returns whether there was such a song."""
+        t = self.track(track_id)
+        if t is None:
+            return False
+        path = self.path_of(t)
+        try:
+            path.unlink(missing_ok=True)
+        except OSError as e:
+            raise OSError(f"Couldn't delete {path.name}: {e}") from e
+        with connect() as conn:
+            conn.execute("DELETE FROM tracks WHERE id = ? AND profile = ?", (track_id, self.profile))
+            self._prune(conn)
+        folder = path.parent
+        root = self.root.resolve()
+        while folder.resolve() != root and root in folder.resolve().parents:
+            try:
+                folder.rmdir()  # only if empty (a cover.jpg or other files keep it)
+            except OSError:
+                break
+            folder = folder.parent
+        return True
 
     def record_play(self, track_id: int, when: float | None = None) -> None:
         with connect() as conn:

@@ -29,6 +29,8 @@ class DielifyApp : Application(), SingletonImageLoader.Factory {
     val remote by lazy { com.dielify.app.net.RemoteClient(this, server) }
     /** Thumbs up / down / ban (the player skips banned songs). */
     val ratings by lazy { com.dielify.app.net.Ratings(server) }
+    /** Never-ending discovery play (Discover). */
+    val endless by lazy { com.dielify.app.playback.EndlessPlay(server) }
 
     override fun onCreate() {
         super.onCreate()

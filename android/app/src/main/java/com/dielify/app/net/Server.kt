@@ -295,8 +295,11 @@ class Server(private val context: Context, private val accounts: AccountStore) {
     }
     suspend fun stats(period: String): Stats = get("api/stats?limit=25&period=$period")
     suspend fun ratings(): List<Rating> = get<RatingList>("api/ratings").ratings
-    suspend fun rate(r: RatingIn): List<Rating> =
-        json.decodeFromString(RatingList.serializer(), send("PUT", "api/ratings", json.encodeToString(RatingIn.serializer(), r))).ratings
+    suspend fun rate(r: RatingIn): RatingList =
+        json.decodeFromString(RatingList.serializer(), send("PUT", "api/ratings", json.encodeToString(RatingIn.serializer(), r)))
+    /** Never-ending discovery play: the next new songs (the PC queues their downloads). */
+    suspend fun endless(body: EndlessIn): List<Item> =
+        json.decodeFromString(ItemList.serializer(), send("POST", "api/discover/endless", json.encodeToString(EndlessIn.serializer(), body))).items
     suspend fun forYou(): ForYou = get("api/discover/for-you")
 
     companion object {

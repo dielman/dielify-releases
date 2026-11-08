@@ -407,7 +407,7 @@ src/dielify/
 
 ## Backlog (Josh, 8 Nov; after Phase 8 item 6)
 
-- **Built in 0.8.11 (not yet confirmed by Josh): ratings + ban.** `ratings.py` (table
+- **Published v0.8.11 (9 Nov; not yet confirmed by Josh on device): ratings + ban.** `ratings.py` (table
   `ratings`: profile, kind song|artist, key = video id / tr-<id> / artist_key(name),
   value 1 up / -1 down / -2 ban). GET/PUT /api/ratings. Discovery (home, similar, For
   you) drops banned and moves thumbs-down to the back (`Ratings.arrange`); mixes leave
@@ -416,10 +416,21 @@ src/dielify/
   thumbs (hold thumbs down 0.7 s -> "ban this song / the artist"), artist-page thumbs,
   Settings > Ratings with Unban. Phone: same on Now playing (long press), artist page,
   Settings. Key rule is shared by ratings.py / app.js / Ratings.kt (NFKC, lower, & -> and).
-- **Never-ending discovery play:** keeps playing new songs (not in the library) and
-  downloads them for Josh to check out; thumbs down on one removes its download from the
-  PC. To ask when building: delete only songs this mode downloaded (not ones already
-  kept)? Thumbs up = keep, no rating = keep or expire?
+- **Built in 0.8.12 (not published): never-ending discovery play.** `explore.py` +
+  POST /api/discover/endless {seeds, exclude, count}: new songs (not in the library, no
+  ban / thumbs down) from YouTube radio of the songs heard (thumbs-up first; else top
+  plays, else random library songs), queued for download (request_type "discovery"),
+  remembered in table `explore_songs`. Josh (9 Nov): thumbs down = deleted, thumbs up and
+  unrated stay (no expiry). PUT /api/ratings with down/ban on an explore song cancels its
+  download / deletes the file (`Library.remove_track`, empty folders go) and returns
+  `removed`. Built: only songs this mode brought in are deleted, never ones Josh already
+  had (ask Josh if he wants thumbs down to delete any song). Apps top up when <= 3 songs
+  are left (PC player.endless; phone EndlessPlay in the playback service); thumbs down
+  there also skips. Discover button "Never-ending discovery" on both. Playing on another
+  device: that device gets one batch, no top-up.
+  Also in 0.8.12 (Josh, 9 Nov): "On repeat" removed from Discover in both apps (YouTube's
+  home has its own); PC player bar: icons centred, plain prev/next like the thumbs, only
+  Play is a filled circle.
 
 - **Icons (Josh, 8 Nov: "this looks shit"): built in 0.8.11.** PC song rows are one line
   (tap the title to play; icons for add to playlist / download / ✓ in library / remove),

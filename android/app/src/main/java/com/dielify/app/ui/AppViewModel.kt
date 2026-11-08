@@ -177,6 +177,27 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Never-ending discovery play: new songs like the one playing (or your top songs). */
+    fun startEndless() = viewModelScope.launch {
+        val c = controller ?: return@launch
+        messages.tryEmit("Finding new songs…")
+        val seed = c.currentMediaItem?.takeIf { MediaItems.videoId(it) != null && playingOn.value == null }
+        val items = try {
+            getApplication<Application>().dielify.endless.batch(listOfNotNull(seed?.let(MediaItems::videoId)), emptyList())
+        } catch (e: ApiError) { messages.tryEmit(e.message ?: "Couldn't reach your PC"); return@launch }
+        if (items.isEmpty()) { messages.tryEmit("Couldn't find new songs right now"); return@launch }
+        val media = items.map(MediaItems::fromItem)
+        c.shuffleModeEnabled = false
+        if (seed != null) {  // keep the song playing now, then the new ones
+            val pos = c.currentPosition
+            c.setMediaItems(listOf(seed) + media, 0, pos)
+        } else c.setMediaItems(media, 0, 0L)
+        getApplication<Application>().dielify.endless.started(media, seed)
+        c.prepare()
+        c.play()
+        messages.tryEmit("Never-ending discovery: thumbs down deletes a song again")
+    }
+
     fun playItems(queue: List<Item>, first: Item) {
         val c = controller ?: return
         val songs = queue.filter { it.isSong }.ifEmpty { listOf(first) }

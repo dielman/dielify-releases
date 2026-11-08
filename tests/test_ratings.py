@@ -72,3 +72,40 @@ def test_mixes_skip_banned_and_favour_liked():
     picked = mixes._pick(tracks, "seed", size=15)
     liked = sum(t["artist"] == "Liked" for t in picked)
     assert liked > 15 - liked                                       # thumbs-up songs win most places
+
+
+def test_endless_discovery_downloads_new_songs_and_thumbs_down_deletes_them():
+    from test_api import SONGS, wait_done
+    with make_client(FakeDownloader()) as c:
+        h = login(c)
+        first = list(SONGS)[0]
+        r = c.post("/api/discover/endless", headers=h, json={"seeds": [first], "count": 2})
+        assert r.status_code == 200
+        got = [i["id"] for i in r.json()["items"]]
+        assert len(got) == 2 and first not in got
+        jobs = [j for j in c.get("/api/downloads", headers=h).json()["downloads"] if j["video_id"] in got]
+        assert len(jobs) == 2
+        done = [wait_done(c, h, j["id"]) for j in jobs]
+        assert all(d["status"] == "done" for d in done)
+        # the next batch leaves out what's already in the list (and now in the library)
+        more = [i["id"] for i in c.post("/api/discover/endless", headers=h,
+                                        json={"seeds": [first] + got, "exclude": got, "count": 25}).json()["items"]]
+        assert not set(more) & set(got) and first not in more
+        # thumbs up keeps one; thumbs down deletes the other's file
+        keep, drop = done
+        lib_ids = {d["video_id"]: d["track_id"] for d in done}
+        r = c.put("/api/ratings", headers=h, json={"kind": "song", "name": "x", "video_id": keep["video_id"], "value": 1})
+        assert r.json()["removed"] is None
+        path = c.get(f"/api/library/tracks/{lib_ids[drop['video_id']]}", headers=h)
+        assert path.status_code == 200
+        r = c.put("/api/ratings", headers=h, json={"kind": "song", "name": "x", "video_id": drop["video_id"], "value": -1})
+        assert r.json()["removed"]
+        assert c.get(f"/api/library/tracks/{lib_ids[drop['video_id']]}", headers=h).status_code == 404
+        assert c.get(f"/api/library/tracks/{lib_ids[keep['video_id']]}", headers=h).status_code == 200
+        # a song you already had (not from discovery play) is never deleted by thumbs down
+        r = c.put("/api/ratings", headers=h, json={"kind": "song", "name": "x", "track_id": lib_ids[keep["video_id"]], "value": 0})
+        with connect() as conn:
+            conn.execute("DELETE FROM explore_songs")
+        r = c.put("/api/ratings", headers=h, json={"kind": "song", "name": "x", "video_id": keep["video_id"], "value": -1})
+        assert r.json()["removed"] is None
+        assert c.get(f"/api/library/tracks/{lib_ids[keep['video_id']]}", headers=h).status_code == 200

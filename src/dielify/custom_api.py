@@ -753,6 +753,8 @@ class Rating(BaseModel):
 
 class RatingList(BaseModel):
     ratings: list[Rating]
+    removed: str | None = Field(None, description="Thumbs down on a song discovery play brought in: "
+                                                  "its title (its download was deleted from the PC)")
 
 
 class RatingIn(BaseModel):
@@ -770,7 +772,7 @@ def get_ratings(s: Session = Depends(session)) -> RatingList:
 
 
 @router.put("/ratings", response_model=RatingList, tags=["ratings"])
-def put_rating(body: RatingIn, s: Session = Depends(session)) -> RatingList:
+def put_rating(body: RatingIn, request: Request, s: Session = Depends(session)) -> RatingList:
     """Thumbs up (1), down (-1), ban (-2) or clear (0) a song or an artist. Returns all."""
     from . import ratings
     if body.kind == "artist":
@@ -780,7 +782,37 @@ def put_rating(body: RatingIn, s: Session = Depends(session)) -> RatingList:
     if not key:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Which song? (video_id or track_id)")
     ratings.set_rating(s.user.profile, body.kind, key, body.name.strip(), body.value)
-    return get_ratings(s)
+    out = get_ratings(s)
+    if body.kind == "song" and body.value in (ratings.DOWN, ratings.BAN):
+        from . import explore
+        out.removed = explore.disliked(s.user.profile, s.lib, _queue(request), body.video_id, body.track_id)
+    return out
+
+
+class EndlessIn(BaseModel):
+    seeds: list[str] = Field([], max_length=50,
+                             description="Video ids heard so far in this list, oldest first (thumbs-up ones count most)")
+    exclude: list[str] = Field([], max_length=2000, description="Video ids already in the list")
+    count: int = Field(10, ge=1, le=25)
+
+
+@router.post("/discover/endless", response_model=ItemList, tags=["discover"])
+def discover_endless(body: EndlessIn, request: Request, s: Session = Depends(session)) -> ItemList:
+    """Never-ending discovery play: the next songs that aren't in your library yet, like
+    the seeds. They're queued for download so you can check them out; thumbs down on one
+    (PUT /ratings) deletes it from the PC again."""
+    from . import explore, history
+    r = _ratings(s)
+    liked = [v for v in body.seeds if r.songs.get(v) == 1]
+    seeds = [v for v in body.seeds if v not in liked] + liked  # newest last; liked ones go first
+    # nothing heard yet: your most-played songs lately, else a few random library songs
+    fallback = history.seeds(s.lib) or [t["video_id"] for t in s.lib.random_tracks(20) if t["video_id"]][:4]
+    items = explore.next_songs(s.lib, r, lambda vid, n: youtube.call(s.user.profile, "similar", vid, n),
+                               seeds, set(body.exclude) | set(body.seeds), fallback, body.count)
+    if items:
+        explore.remember(s.user.profile, items)
+        _queue(request).enqueue(s.user.profile, items, "discovery", "Discovery play", s.user.name)
+    return ItemList(items=_items(items, s.lib))
 
 
 class OutsideShelf(BaseModel):

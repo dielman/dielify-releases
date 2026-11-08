@@ -62,7 +62,8 @@ private fun ThumbDownButton(on: Boolean, description: String, onTap: () -> Unit,
 @Composable
 fun SongThumbs(vm: AppViewModel) {
     val p by vm.player.collectAsStateWithLifecycle()
-    val ratings = androidx.compose.ui.platform.LocalContext.current.dielify.ratings
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val ratings = ctx.dielify.ratings
     val all by ratings.all.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     var choosing by remember { mutableStateOf(false) }
@@ -71,7 +72,11 @@ fun SongThumbs(vm: AppViewModel) {
     val name = listOf(p.title, p.artist).filter { it.isNotEmpty() }.joinToString(" - ")
     fun rate(kind: String, label: String, value: Int, then: () -> Unit = {}) = scope.launch {
         try {
-            if (kind == "song") ratings.rate("song", label, value, p.videoId, p.trackId) else ratings.rate("artist", label, value)
+            val removed = if (kind == "song") ratings.rate("song", label, value, p.videoId, p.trackId) else ratings.rate("artist", label, value)
+            if (removed != null) {
+                vm.messages.tryEmit("Thumbs down: deleted “$removed” from your PC")
+                if (value == Ratings.DOWN && ctx.dielify.endless.active) vm.next()  // a ban skips anyway
+            }
             then()
         } catch (e: ApiError) { vm.messages.tryEmit(e.message ?: "Couldn't save that") }
     }
