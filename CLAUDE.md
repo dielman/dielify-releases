@@ -352,7 +352,7 @@ src/dielify/
   Phone: `RemoteClient` (OkHttp WebSocket, connected while PlaybackService runs = app
   open, playing, or recently paused), Devices screen from the top bar. Tested: 4 server
   tests; PC panel live in the browser against a fake phone (pause, next, play here, move
-  there). Not yet: phone on a device. Step 2 (phone lock screen controls the PC) not built.
+  there). Published **v0.8.6** (8 Nov). Not yet: phone on a device. Step 2 (phone lock screen controls the PC) not built.
 
 ## Backlog (Josh, 8 Nov; after Phase 8 item 6). Build together: they share one ratings table.
 
