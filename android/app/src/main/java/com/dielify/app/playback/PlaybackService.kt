@@ -312,16 +312,29 @@ class PlaybackService : MediaLibraryService() {
     private fun startRemote(player: ExoPlayer) {
         val remote = dielify.remote
         remote.start(object : RemotePlayer {
+            // The list as the other devices see it: in play order (shuffle included), so their
+            // Up next is right; `order` maps their positions back to the player's.
+            var order: List<Int> = emptyList()
+
             override fun state(): RemoteState {
                 val count = player.mediaItemCount
-                val items = (0 until minOf(count, 1000)).map { MediaItems.toSong(player.getMediaItemAt(it)) }
+                val tl = player.currentTimeline
+                val o = mutableListOf<Int>()
+                if (!tl.isEmpty) {
+                    var i = tl.getFirstWindowIndex(player.shuffleModeEnabled)
+                    while (i != C.INDEX_UNSET && o.size < minOf(count, 1000)) {
+                        o += i; i = tl.getNextWindowIndex(i, Player.REPEAT_MODE_OFF, player.shuffleModeEnabled)
+                    }
+                }
+                order = o
+                val at = o.indexOf(player.currentMediaItemIndex)
                 return RemoteState(
                     playing = player.isPlaying || (player.playWhenReady && player.playbackState == Player.STATE_BUFFERING),
                     positionMs = player.currentPosition,
                     durationMs = player.duration.takeIf { it > 0 },
                     volume = player.volume,
-                    index = if (count > 0 && player.currentMediaItemIndex < items.size) player.currentMediaItemIndex else -1,
-                    queue = items,
+                    index = if (count > 0) at else -1,
+                    queue = o.map { MediaItems.toSong(player.getMediaItemAt(it)) },
                 )
             }
 
@@ -333,6 +346,24 @@ class PlaybackService : MediaLibraryService() {
                     "previous" -> player.seekToPrevious()
                     "seek" -> command.positionMs?.let { player.seekTo(it) }
                     "volume" -> command.value?.let { player.volume = it.coerceIn(0f, 1f) }
+                    "jump" -> {
+                        val i = command.index?.let { order.getOrNull(it) } ?: return
+                        player.seekTo(i, command.positionMs ?: 0)
+                        if (player.playbackState == Player.STATE_IDLE) player.prepare()
+                        player.play()
+                    }
+                    "queue" -> {  // a new list around the song playing now, which plays on
+                        val songs = command.queue.orEmpty().mapNotNull(MediaItems::fromSong)
+                        val k = command.index ?: return
+                        if (k !in songs.indices || player.mediaItemCount == 0) return
+                        player.shuffleModeEnabled = false
+                        val cur = player.currentMediaItemIndex
+                        if (cur + 1 < player.mediaItemCount) player.removeMediaItems(cur + 1, player.mediaItemCount)
+                        if (cur > 0) player.removeMediaItems(0, cur)
+                        player.addMediaItems(0, songs.subList(0, k))
+                        player.addMediaItems(songs.subList(k + 1, songs.size))
+                        dielify.endless.allow(songs)
+                    }
                     "load" -> {
                         val items = command.queue.orEmpty().mapNotNull(MediaItems::fromSong)
                         if (items.isEmpty()) return

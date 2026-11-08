@@ -77,7 +77,7 @@ h2 { font-size: 16px; margin: 24px 0 10px; }
 .tracks tr.playing td { color: var(--accent-2); }
 .tracks .n { width: 36px; color: var(--muted); text-align: right; }
 .tracks .d { width: 60px; color: var(--muted); text-align: right; }
-.tracks .a { width: 96px; text-align: right; white-space: nowrap; }
+.tracks .a { width: 132px; text-align: right; white-space: nowrap; }
 .tracks td.title { cursor: pointer; }
 .tracks td.title:hover { color: var(--accent-2); }
 .ico { width: 20px; height: 20px; fill: currentColor; display: block; }
@@ -118,7 +118,7 @@ button.ib.on, .controls button.thumb.on { color: #1db954; }
 
 /* player */
 .player {
-  display: grid; grid-template-columns: 56px minmax(140px, 260px) auto 1fr auto 110px; gap: 14px; align-items: center;
+  display: grid; grid-template-columns: 56px minmax(140px, 260px) auto 1fr auto auto 110px; gap: 10px; align-items: center;
   padding: 10px 20px; background: var(--panel); border-top: 1px solid var(--line);
 }
 #np-cover { width: 56px; height: 56px; border-radius: 6px; object-fit: cover; }
@@ -168,3 +168,27 @@ img.mini, .mini.ph { width: 44px; height: 44px; border-radius: 4px; object-fit: 
 .picker-row.on { color: #1db954; }
 .picker-icon { font-size: 18px; }
 .picker-tick { font-weight: 700; }
+
+/* Up next (player bar's queue button) and the small Play next / Add to queue menu */
+.upnext { position: fixed; right: 20px; bottom: 84px; width: 380px; max-height: calc(100vh - 160px); overflow-y: auto;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5); z-index: 60; }
+.uq-head { display: flex; align-items: center; gap: 4px; padding: 0 4px 6px; }
+.uq-label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin: 10px 6px 4px; }
+.uq-row { display: grid; grid-template-columns: 22px 1fr auto auto; gap: 6px; align-items: center; padding: 4px 6px; border-radius: 6px; }
+.uq-row:hover { background: rgba(127, 127, 127, 0.12); }
+.uq-row.now { color: #1db954; }
+.uq-row.banned { opacity: .45; }
+.uq-row.dragging { opacity: .4; }
+.uq-row.over { box-shadow: inset 0 2px 0 #1db954; }
+.uq-row .uq-t { cursor: pointer; min-width: 0; }
+.uq-row.now .uq-t { cursor: default; }
+.uq-row .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.uq-row .muted { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.uq-grip { color: var(--muted); cursor: grab; display: flex; }
+.uq-grip .ico { width: 18px; height: 18px; }
+.uq-row.now .uq-grip { color: #1db954; cursor: default; }
+.menu { position: fixed; z-index: 70; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 4px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5); display: grid; min-width: 170px; }
+.menu button { background: none; border: none; text-align: left; padding: 8px 10px; border-radius: 6px; color: var(--text); }
+.menu button:hover { background: rgba(127, 127, 127, 0.15); }

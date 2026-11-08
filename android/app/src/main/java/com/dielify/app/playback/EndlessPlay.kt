@@ -31,6 +31,11 @@ class EndlessPlay(private val server: Server) {
 
     fun stop() { active = false }
 
+    /** Songs added to the list by hand (Play next / Add to queue) don't end it. */
+    fun allow(items: List<MediaItem>) {
+        if (active) synchronized(ids) { items.forEach { ids += it.mediaId } }
+    }
+
     /** Called by the playback service on every song change. */
     fun onTransition(player: Player, item: MediaItem?, scope: CoroutineScope) {
         if (!active || item == null) return

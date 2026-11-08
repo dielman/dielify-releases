@@ -148,6 +148,7 @@ fun ItemRow(vm: AppViewModel, item: Item, queue: List<Item> = listOf(item),
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                 if (item.isSong) DropdownMenuItem(
                     text = { Text("Play") }, onClick = { menu = false; vm.openItem(item, queue) })
+                if (item.isSong) QueueMenuItems({ menu = false }) { next -> vm.queueItems(listOf(item), next) }
                 if (item.type != "artist" && item.libraryTrackId == null) {
                     DropdownMenuItem(
                         text = { Text(if (item.isSong) "Download next" else "Download all next") },

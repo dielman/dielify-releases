@@ -48,7 +48,9 @@ from . import custom_api
 log = logging.getLogger(__name__)
 router = APIRouter()
 
-ACTIONS = {"play", "pause", "next", "previous", "seek", "volume", "load", "jump"}
+# queue: new list around the song playing now (index = where that song is in it); the
+# song keeps playing, only what comes after/before changes ("Up next" edits).
+ACTIONS = {"play", "pause", "next", "previous", "seek", "volume", "load", "jump", "queue"}
 MAX_QUEUE = 1000
 PAUSE_GRACE_S = 3.0
 MAX_MESSAGE = 512 * 1024
@@ -108,6 +110,11 @@ def clean_command(c) -> dict | None:
             return None
         return {"action": a, "queue": st["queue"], "index": max(0, st["index"]),
                 "position_ms": st["position_ms"], "playing": c.get("playing", True) is not False}
+    if a == "queue":
+        st = clean_state(c)
+        if not st["queue"] or not 0 <= st["index"] < len(st["queue"]):
+            return None
+        return {"action": a, "queue": st["queue"], "index": st["index"]}
     return {"action": a}
 
 

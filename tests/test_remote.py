@@ -193,3 +193,12 @@ def stale_race(phone, pc):
             d for d in m["devices"] if d["device"] == "p1")["state"]["position_ms"] >= 1500)
         assert not [m for m in seen if m["type"] == "command"]       # the phone was never paused
         assert last["active"] == "p1"
+
+
+def test_queue_command_keeps_the_current_song():
+    from dielify.remote import clean_command
+    songs = [{"video_id": "a", "title": "A"}, {"track_id": 5, "title": "B"}, {"video_id": "c"}]
+    assert clean_command({"action": "queue", "queue": songs, "index": 1}) == \
+        {"action": "queue", "queue": [{"video_id": "a", "title": "A"}, {"track_id": 5, "title": "B"}, {"video_id": "c"}], "index": 1}
+    assert clean_command({"action": "queue", "queue": songs, "index": 7}) is None   # must point at a song
+    assert clean_command({"action": "queue", "queue": [], "index": 0}) is None

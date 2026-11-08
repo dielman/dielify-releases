@@ -62,6 +62,10 @@ const ICONS = {
   sync: "M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z",
   edit: "M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z",
   back: "M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z",
+  queueMusic: "M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zM17 6v8.18c-.31-.11-.65-.18-1-.18-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3V8h3V6h-5z",
+  queueAdd: "M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9h-4v4h-2v-4H9V9h4V5h2v4h4v2z",
+  playNext: "M3 10h11v2H3zm0-4h11v2H3zm0 8h7v2H3zm13-1v8l6-4z",
+  drag: "M11 18c0 1.1-.9 2-2 2s-2-.9-2-2 .9-2 2-2 2 .9 2 2zm-2-8c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0-6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm6 4c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z",
   thumbUp: "M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z",
   thumbDown: "M15 3H6c-.83 0-1.54.5-1.84 1.22l-3.02 7.05c-.09.23-.14.47-.14.73v2c0 1.1.9 2 2 2h6.31l-.95 4.57-.03.32c0 .41.17.79.44 1.06L9.83 23l6.59-6.59c.36-.36.58-.86.58-1.41V5c0-1.1-.9-2-2-2zm4 0v12h4V3h-4z",
 };
@@ -214,7 +218,8 @@ async function viewAlbum(id) {
           h("div", { class: "muted" }, album.artist, album.year ? ` · ${album.year}` : "", ` · ${tracks.length} songs`),
           h("div", { class: "row", style: "margin-top:12px" },
             ibtn("play", "Play", { class: "primary", onclick: () => playList(tracks, 0) }),
-            ibtn("shuffle", "Shuffle", { onclick: () => playList(shuffle(tracks), 0) })))),
+            ibtn("shuffle", "Shuffle", { onclick: () => playList(shuffle(tracks), 0) }),
+            ibtn("queueAdd", "Add to queue", { onclick: () => addToQueue(tracks, false) })))),
       trackTable(tracks));
   } catch (e) { failed(e); }
 }
@@ -236,7 +241,7 @@ function trackTable(tracks, showAlbum = false) {
       h("td", { class: "title", onclick: () => playList(tracks, i) }, t.title,
         h("div", { class: "muted small" }, t.artist, showAlbum ? ` · ${t.album}` : "")),
       h("td", { class: "d" }, dur(t.duration_s)),
-      h("td", { class: "a" }, t.video_id ? ib("playlistAdd", "Add to playlist", () => addToPlaylist(
+      h("td", { class: "a" }, queueBtn(() => [t]), t.video_id ? ib("playlistAdd", "Add to playlist", () => addToPlaylist(
         [{ type: "song", id: t.video_id, title: t.title, artists: t.artist ? [t.artist] : [], album: t.album || null }])) : null)))));
 }
 const shuffle = (xs) => xs.map((x) => [Math.random(), x]).sort((a, b) => a[0] - b[0]).map((x) => x[1]);
@@ -351,7 +356,7 @@ function ytTrackTable(items) {
       h("td", { class: "title", onclick: () => songActions(t, items) }, t.title,
         h("div", { class: "muted small" }, t.artists.join(", "), t.album ? ` · ${t.album}` : "")),
       h("td", { class: "d" }, dur(t.duration_s)),
-      h("td", { class: "a" }, ib("playlistAdd", "Add to playlist", () => addToPlaylist([t])),
+      h("td", { class: "a" }, queueBtn(() => [ytAsTrack(t)]), ib("playlistAdd", "Add to playlist", () => addToPlaylist([t])),
         t.library_track_id
           ? h("span", { class: "ib in-lib", title: "In your library" }, icon("check"))
           : ib("download", "Download", () => requestDownload(
@@ -499,6 +504,7 @@ async function viewPlaylist(id) {
           h("div", { class: "row", style: "margin-top:12px" },
             ibtn("play", "Play", { class: "primary", disabled: !songs.length, onclick: () => songActions(songs[0], songs) }),
             ibtn("shuffle", "Shuffle", { disabled: !songs.length, onclick: () => { const s = shuffle(songs); songActions(s[0], s); } }),
+            ibtn("queueAdd", "Add to queue", { disabled: !songs.length, onclick: () => addToQueue(songs.map(ytAsTrack), false) }),
             p.yt_id ? ibtn("sync", "Sync now", { onclick: async () => { if (await playlistAction(() => api(`/api/playlists/${id}/sync`, { method: "POST" }), "Synced")) viewPlaylist(id); } }) : null,
             p.read_only ? null : ibtn("edit", "Rename", { onclick: rename }),
             p.kind === "mix" ? null : ibtn("remove", "Delete", { onclick: del })))),
@@ -507,7 +513,7 @@ async function viewPlaylist(id) {
         h("td", { class: "title", onclick: () => songActions(e.item, songs) }, e.item.title,
           h("div", { class: "muted small" }, e.item.artists.join(", "), e.item.album ? ` · ${e.item.album}` : "")),
         h("td", { class: "d" }, dur(e.item.duration_s)),
-        h("td", { class: "a" }, e.item.library_track_id ? h("span", { class: "ib in-lib", title: "In your library" }, icon("check")) : null,
+        h("td", { class: "a" }, queueBtn(() => [ytAsTrack(e.item)]), e.item.library_track_id ? h("span", { class: "ib in-lib", title: "In your library" }, icon("check")) : null,
           p.read_only ? null : ib("remove", "Remove from this playlist", () => remove(e))))))));
   } catch (e) { failed(e); }
 }
@@ -849,7 +855,7 @@ function paintBar() {
     showTime(nowPos(st) / 1000, (st.duration_ms || 0) / 1000, !!st.playing);
     if (document.activeElement !== $("volume")) $("volume").value = Math.round((st.volume ?? 1) * 100);
     document.querySelectorAll("tr[data-track]").forEach((r) => r.classList.toggle("playing", !!s && Number(r.dataset.track) === s.track_id));
-    paintThumbs();
+    paintThumbs(); renderUpnext();
     return;
   }
   const t = player.current;
@@ -857,7 +863,7 @@ function paintBar() {
   showTime(audio.currentTime, audio.duration || 0, !!t && !audio.paused);
   if (document.activeElement !== $("volume")) $("volume").value = Math.round(audio.volume * 100);
   document.querySelectorAll("tr[data-track]").forEach((r) => r.classList.toggle("playing", !!t && Number(r.dataset.track) === t.id));
-  paintThumbs();
+  paintThumbs(); renderUpnext();
 }
 setInterval(() => { if (elsewhere()) paintBar(); }, 500);
 
@@ -972,6 +978,14 @@ function runCommand(c, from) {
     case "previous": if (audio.currentTime > 3) audio.currentTime = 0; else playAt(player.index - 1); break;
     case "seek": audio.currentTime = c.position_ms / 1000; break;
     case "volume": audio.volume = c.value; break;
+    case "queue": {  // Up next edited on another device: new list around the song playing here
+      if (!player.current || !c.queue[c.index]) break;
+      const list = c.queue.map(remoteTrack);
+      list[c.index] = player.current;
+      player.list = list; player.index = c.index;
+      sendState(true); upnext.sig = ""; renderUpnext();
+      break;
+    }
     case "jump": case "load": {
       if (c.action === "load") player.list = c.queue.map(remoteTrack);
       playAt(c.index);
@@ -1019,6 +1033,7 @@ function pickerOutside(e) {
 }
 $("btn-devices").addEventListener("click", () => {
   if (remote.picker) return closePicker();
+  closeUpnext();
   remote.picker = h("div", { class: "picker" });
   document.body.append(remote.picker);
   renderPicker();
@@ -1156,6 +1171,120 @@ function ratingsPanel() {
       h("button", { onclick: async () => { await rate(r.kind, r.kind === "artist" ? { name: r.name } : { name: r.name, video_id: r.key.startsWith("tr-") ? null : r.key, track_id: r.key.startsWith("tr-") ? Number(r.key.slice(3)) : null }, 0, `Unbanned ${r.name}`); viewSettings(); } }, "Unban")))
       : h("p", { class: "muted small" }, "Nothing banned. Hold thumbs down (player bar, or an artist's page) to ban."));
 }
+
+// --- Up next: the songs coming up (here, or on the active device) ------------------------------
+// The list being played and where we are in it: { list (player tracks), index, d (other device or null) }.
+function queueNow() {
+  const d = elsewhere();
+  if (d) {
+    const st = d.state || {};
+    return { list: (st.queue || []).map(remoteTrack), index: st.index ?? -1, d };
+  }
+  return { list: player.list, index: player.current ? player.index : -1, d: null };
+}
+// Change the list around the song playing now (it keeps playing). index = its place in `list`.
+function setQueue(list, index) {
+  const d = elsewhere();
+  if (d) remoteSend({ type: "command", to: d.device, command: { action: "queue", queue: list.map(songOut), index } });
+  else { player.list = list; player.index = index; sendState(true); }
+  upnext.sig = ""; renderUpnext();
+}
+function jumpTo(i) {
+  if (!control({ action: "jump", index: i, position_ms: 0 })) playAt(i);
+}
+// Play next / Add to queue. Nothing playing: just plays them.
+function addToQueue(tracks, next) {
+  if (!tracks.length) return;
+  const q = queueNow();
+  if (q.index < 0 || !q.list.length) { playList(tracks, 0); return; }
+  const at = next ? q.index + 1 : q.list.length;
+  setQueue([...q.list.slice(0, at), ...tracks, ...q.list.slice(at)], q.index);
+  const what = tracks.length === 1 ? `“${tracks[0].title}”` : `${tracks.length} songs`;
+  toast(next ? `${what} will play next` : `Added ${what} to the queue`);
+}
+// The small "Play next / Add to queue" menu for a song row's queue button.
+function queueMenu(btn, tracks) {
+  closeMenu();
+  const r = btn.getBoundingClientRect();
+  const m = h("div", { class: "menu", style: `right:${Math.max(8, innerWidth - r.right)}px;top:${r.bottom + 4}px` },
+    h("button", { onclick: () => { closeMenu(); addToQueue(tracks, true); } }, icon("playNext", "ico lead"), "Play next"),
+    h("button", { onclick: () => { closeMenu(); addToQueue(tracks, false); } }, icon("queueAdd", "ico lead"), "Add to queue"));
+  document.body.append(m);
+  if (r.bottom + 4 + m.offsetHeight > innerHeight - 90) m.style.top = `${r.top - m.offsetHeight - 4}px`;
+  menuOpen = m;
+  setTimeout(() => document.addEventListener("mousedown", menuOutside, true));
+}
+let menuOpen = null;
+function closeMenu() {
+  if (menuOpen) { menuOpen.remove(); menuOpen = null; }
+  document.removeEventListener("mousedown", menuOutside, true);
+}
+function menuOutside(e) { if (menuOpen && !menuOpen.contains(e.target)) closeMenu(); }
+const queueBtn = (tracks) => ib("queueAdd", "Play next / add to queue", (e) => queueMenu(e.currentTarget, tracks()));
+
+const upnext = { box: null, sig: "", drag: -1 };
+function renderUpnext() {
+  const box = upnext.box;
+  if (!box) return;
+  const q = queueNow();
+  const sig = `${q.d ? q.d.device : ""}|${q.index}|${q.list.map((t) => t.video_id || t.id).join(",")}`;
+  if (sig === upnext.sig) return;
+  upnext.sig = sig;
+  const cur = q.index >= 0 ? q.list[q.index] : null;
+  const coming = q.list.map((t, i) => [t, i]).slice(q.index + 1);
+  const row = (t, i, isNow) => {
+    const el = h("div", { class: `uq-row${isNow ? " now" : ""}${banned(t) ? " banned" : ""}`, draggable: !isNow,
+      title: isNow ? "" : "Click to play. Drag to move." },
+      isNow ? h("span", { class: "uq-grip" }, icon("play")) : h("span", { class: "uq-grip" }, icon("drag")),
+      h("div", { class: "uq-t", onclick: isNow ? null : () => jumpTo(i) },
+        h("div", { class: "t" }, t.title), h("div", { class: "muted small" }, t.artist || "")),
+      isNow ? null : ib("playNext", "Play next", () => {
+        const l = q.list.slice(); const [s] = l.splice(i, 1); l.splice(q.index + 1, 0, s); setQueue(l, q.index);
+      }),
+      isNow ? null : ib("close", "Remove from the queue", () => {
+        const l = q.list.slice(); l.splice(i, 1); setQueue(l, q.index);
+      }));
+    if (!isNow) {
+      el.addEventListener("dragstart", (e) => { upnext.drag = i; e.dataTransfer.effectAllowed = "move"; el.classList.add("dragging"); });
+      el.addEventListener("dragend", () => { upnext.drag = -1; el.classList.remove("dragging"); });
+      el.addEventListener("dragover", (e) => { if (upnext.drag >= 0) { e.preventDefault(); el.classList.add("over"); } });
+      el.addEventListener("dragleave", () => el.classList.remove("over"));
+      el.addEventListener("drop", (e) => {
+        e.preventDefault(); el.classList.remove("over");
+        const from = upnext.drag;
+        if (from < 0 || from === i) return;
+        const l = q.list.slice(); const [s] = l.splice(from, 1); l.splice(i, 0, s);  // lands where it was dropped
+        setQueue(l, q.index);
+      });
+    }
+    return el;
+  };
+  box.replaceChildren(...[
+    h("div", { class: "uq-head" }, h("b", {}, "Up next"),
+      q.d ? h("span", { class: "muted small" }, ` on ${q.d.name}`) : null,
+      h("span", { style: "flex:1" }),
+      coming.length ? h("button", { class: "link", onclick: () => setQueue(q.list.slice(0, q.index + 1), q.index) }, "Clear") : null,
+      ib("close", "Close", closeUpnext)),
+    cur ? [h("div", { class: "uq-label" }, "Now playing"), row(cur, q.index, true)] : h("p", { class: "muted small" }, "Nothing playing."),
+    coming.length ? [h("div", { class: "uq-label" }, `Next · ${coming.length} song${coming.length === 1 ? "" : "s"}`),
+      h("div", { class: "uq-list" }, coming.map(([t, i]) => row(t, i, false)))]
+      : cur ? h("p", { class: "muted small" }, player.endless && !q.d ? "Finding more new songs…"
+        : "Nothing after this song. Use the queue button on any song to add it.") : null,
+  ].flat().filter(Boolean));
+}
+function closeUpnext() {
+  if (upnext.box) { upnext.box.remove(); upnext.box = null; }
+  $("btn-queue").classList.remove("on");
+}
+$("btn-queue").replaceChildren(icon("queueMusic"));
+$("btn-queue").addEventListener("click", () => {
+  if (upnext.box) return closeUpnext();
+  closePicker();
+  upnext.box = h("div", { class: "upnext" }); upnext.sig = "";
+  document.body.append(upnext.box);
+  $("btn-queue").classList.add("on");
+  renderUpnext();
+});
 
 // --- start ----------------------------------------------------------------------------------------
 if (!KEY) show(h("p", { class: "pad warn" }, "Open Dielify from its desktop app."));

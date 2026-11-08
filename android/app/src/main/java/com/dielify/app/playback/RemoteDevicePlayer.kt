@@ -127,6 +127,39 @@ class RemoteDevicePlayer(private val remote: RemoteClient) : SimpleBasePlayer(Lo
         return send(RemoteCommand("load", queue = songs, index = start, positionMs = positionMs, playing = true))
     }
 
+    // Up next edits: the other device gets the new list around the song it's playing
+    // ("queue" command), so that song plays on uninterrupted.
+    private fun sendQueue(list: List<MediaItem>, current: MediaItem?): ListenableFuture<*> {
+        val at = list.indexOfFirst { it === current }
+        if (at < 0) return Futures.immediateVoidFuture()
+        items = list; index = at
+        return send(RemoteCommand("queue", queue = list.map(MediaItems::toSong), index = at))
+    }
+
+    private val current: MediaItem? get() = items.getOrNull(index)
+
+    override fun handleAddMediaItems(index: Int, mediaItems: MutableList<MediaItem>): ListenableFuture<*> {
+        if (current == null) return handleSetMediaItems(mediaItems, 0, 0)
+        val l = items.toMutableList()
+        l.addAll(index.coerceIn(0, l.size), mediaItems)
+        return sendQueue(l, current)
+    }
+
+    override fun handleRemoveMediaItems(fromIndex: Int, toIndex: Int): ListenableFuture<*> {
+        if (index in fromIndex until toIndex) return Futures.immediateVoidFuture()  // not the song playing
+        val l = items.toMutableList()
+        l.subList(fromIndex.coerceIn(0, l.size), toIndex.coerceIn(0, l.size)).clear()
+        return sendQueue(l, current)
+    }
+
+    override fun handleMoveMediaItems(fromIndex: Int, toIndex: Int, newIndex: Int): ListenableFuture<*> {
+        val l = items.toMutableList()
+        val part = l.subList(fromIndex, toIndex).toList()
+        l.subList(fromIndex, toIndex).clear()
+        l.addAll(newIndex.coerceIn(0, l.size), part)
+        return sendQueue(l, current)
+    }
+
     override fun handlePrepare(): ListenableFuture<*> = Futures.immediateVoidFuture()
     override fun handleStop(): ListenableFuture<*> = handleSetPlayWhenReady(false)
 }

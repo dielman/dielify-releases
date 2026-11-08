@@ -430,7 +430,17 @@ src/dielify/
   device: that device gets one batch, no top-up.
   Also in 0.8.12 (Josh, 9 Nov): "On repeat" removed from Discover in both apps (YouTube's
   home has its own); PC player bar: icons centred, plain prev/next like the thumbs, only
-  Play is a filled circle.
+  Play is a filled circle. **Confirmed by Josh** ("thats all working", 9 Nov).
+- **Built in 0.8.13 (not published): Up next** (Josh: "should have been a core feature long
+  ago"). PC: player-bar queue button opens a panel (now playing + coming songs; click to
+  jump, drag to move, Play next, remove, Clear); song rows / album / playlist pages get
+  "Play next / Add to queue". Phone: Up next sheet from Now playing (tap to jump, Play
+  next, remove, Clear), Play next / Add to queue in song ⋮ menus (YouTube rows and library
+  TrackRow). Works on the active device too: new remote action "queue" {queue, index} =
+  new list around the playing song (it plays on); phone reports its queue in play order
+  (shuffle) and maps "jump" back; phone also handles "jump" now (it ignored it before).
+  Phone shuffle: the first queue edit lays the list out in the shuffled order and turns
+  shuffle off (otherwise Media3 inserts at random places). No drag-to-move on the phone yet.
 
 - **Icons (Josh, 8 Nov: "this looks shit"): built in 0.8.11.** PC song rows are one line
   (tap the title to play; icons for add to playlist / download / ✓ in library / remove),

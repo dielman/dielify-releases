@@ -135,7 +135,10 @@ fun NowPlayingScreen(vm: AppViewModel) {
                 p.album, style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center,
             )
-            SongThumbs(vm)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                SongThumbs(vm)
+                UpNextButton(vm)
+            }
             p.error?.let {
                 Spacer(Modifier.height(8.dp))
                 Text(it, color = MaterialTheme.colorScheme.error, textAlign = TextAlign.Center)

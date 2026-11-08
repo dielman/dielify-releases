@@ -63,6 +63,11 @@ data class PlayerUi(
     val error: String? = null,
 )
 
+/** A song in Up next: [index] is its place in the player's list. */
+data class QueueEntry(val index: Int, val title: String, val artist: String, val art: String?)
+
+data class UpNext(val now: QueueEntry? = null, val next: List<QueueEntry> = emptyList(), val shuffled: Boolean = false)
+
 class AppViewModel(app: Application) : AndroidViewModel(app) {
     val server = app.dielify.server
     private val accounts = app.dielify.accounts
@@ -102,6 +107,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     ) { _, _, _ -> app.dielify.remote.elsewhere()?.name }
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
     val showDevices = MutableStateFlow(false)
+    val showUpNext = MutableStateFlow(false)
+    private val _upNext = MutableStateFlow(UpNext())
+    /** The song playing now and the ones coming up, in play order (shuffle included). */
+    val upNext: StateFlow<UpNext> = _upNext
 
     val lastAddresses: List<String> get() = accounts.lastAddresses()
     val lastUsername: String get() = accounts.lastUsername()
@@ -120,9 +129,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             runCatching { future.get() }.getOrNull()?.let { c ->
                 controller = c
                 c.addListener(object : Player.Listener {
-                    override fun onEvents(player: Player, events: Player.Events) = refresh()
+                    override fun onEvents(player: Player, events: Player.Events) {
+                        refresh()
+                        if (events.containsAny(Player.EVENT_TIMELINE_CHANGED, Player.EVENT_MEDIA_ITEM_TRANSITION,
+                                Player.EVENT_SHUFFLE_MODE_ENABLED_CHANGED, Player.EVENT_REPEAT_MODE_CHANGED)) refreshUpNext()
+                    }
                 })
                 refresh()
+                refreshUpNext()
             }
         }, MoreExecutors.directExecutor())
     }
@@ -197,6 +211,89 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         c.play()
         messages.tryEmit("Never-ending discovery: thumbs down deletes a song again")
     }
+
+    // --- Up next (the queue) ---------------------------------------------------------------------
+
+    private fun entry(c: MediaController, i: Int): QueueEntry {
+        val m = c.getMediaItemAt(i)
+        return QueueEntry(i, m.mediaMetadata.title?.toString() ?: "", m.mediaMetadata.artist?.toString() ?: "",
+            m.mediaMetadata.artworkUri?.toString())
+    }
+
+    /** Indexes of the songs after the current one, in the order they'll play. */
+    private fun comingOrder(c: MediaController, limit: Int = 1000): List<Int> {
+        val tl = c.currentTimeline
+        if (tl.isEmpty) return emptyList()
+        val out = mutableListOf<Int>()
+        var i = tl.getNextWindowIndex(c.currentMediaItemIndex, Player.REPEAT_MODE_OFF, c.shuffleModeEnabled)
+        while (i != androidx.media3.common.C.INDEX_UNSET && out.size < limit) {
+            out += i
+            i = tl.getNextWindowIndex(i, Player.REPEAT_MODE_OFF, c.shuffleModeEnabled)
+        }
+        return out
+    }
+
+    private fun refreshUpNext() {
+        val c = controller ?: return
+        if (c.mediaItemCount == 0) { _upNext.value = UpNext(); return }
+        _upNext.value = UpNext(entry(c, c.currentMediaItemIndex), comingOrder(c).map { entry(c, it) }, c.shuffleModeEnabled)
+    }
+
+    /**
+     * Before changing the order while shuffled: lay the list out in the shuffled order and
+     * turn shuffle off, so "Play next" really plays next. Returns where each song moved to.
+     */
+    private fun flattenShuffle(c: MediaController): IntArray {
+        val n = c.mediaItemCount
+        val moved = IntArray(n) { it }
+        if (!c.shuffleModeEnabled || n < 2) return moved
+        val tl = c.currentTimeline
+        val order = mutableListOf<Int>()
+        var i = tl.getFirstWindowIndex(true)
+        while (i != androidx.media3.common.C.INDEX_UNSET && order.size < n) { order += i; i = tl.getNextWindowIndex(i, Player.REPEAT_MODE_OFF, true) }
+        c.shuffleModeEnabled = false
+        val now = (0 until n).toMutableList()  // now[k] = which original song is at k
+        order.forEachIndexed { k, want ->
+            val from = now.indexOf(want)
+            if (from != k) { c.moveMediaItem(from, k); now.add(k, now.removeAt(from)) }
+        }
+        now.forEachIndexed { k, orig -> moved[orig] = k }
+        messages.tryEmit("Shuffle is off now: the shuffled order is kept, so your changes stick")
+        return moved
+    }
+
+    fun queueJump(index: Int) = controller?.run { seekTo(index, 0); play() }
+    fun queueRemove(index: Int) = controller?.removeMediaItem(index)
+
+    fun queuePlayNext(index: Int) {
+        val c = controller ?: return
+        val i = flattenShuffle(c)[index]
+        val cur = c.currentMediaItemIndex
+        if (i == cur) return
+        c.moveMediaItem(i, if (i > cur) cur + 1 else cur)
+    }
+
+    fun queueClear() {
+        val c = controller ?: return
+        flattenShuffle(c)
+        val cur = c.currentMediaItemIndex
+        if (cur + 1 < c.mediaItemCount) c.removeMediaItems(cur + 1, c.mediaItemCount)
+    }
+
+    /** Play next / Add to queue. With nothing playing, plays them. */
+    private fun addToQueue(items: List<MediaItem>, next: Boolean) {
+        val c = controller ?: return
+        if (items.isEmpty()) return
+        if (c.mediaItemCount == 0) { c.setMediaItems(items, 0, 0L); c.prepare(); c.play(); return }
+        flattenShuffle(c)
+        c.addMediaItems(if (next) c.currentMediaItemIndex + 1 else c.mediaItemCount, items)
+        getApplication<Application>().dielify.endless.allow(items)
+        val what = if (items.size == 1) "\"${items[0].mediaMetadata.title}\"" else "${items.size} songs"
+        messages.tryEmit(if (next) "$what will play next" else "Added $what to the queue")
+    }
+
+    fun queueItems(items: List<Item>, next: Boolean) = addToQueue(items.filter { it.isSong }.map(MediaItems::fromItem), next)
+    fun queueTracks(tracks: List<Track>, next: Boolean) = addToQueue(tracks.map(MediaItems::fromTrack), next)
 
     fun playItems(queue: List<Item>, first: Item) {
         val c = controller ?: return
