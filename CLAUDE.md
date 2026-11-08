@@ -365,6 +365,18 @@ src/dielify/
   notification, lock screen and headset buttons control the PC (= step 2). Tested: 5
   server tests; PC bar + picker live against a fake phone. Published **v0.8.7** (8 Nov). Not yet on Josh's devices.
 
+- 0.8.7 bug (Josh: "music plays for approx 1 second and pauses, no matter how its
+  played"): race in the hub. The device told to pause often had a "playing" report
+  already in flight; the hub took it as a new start, made it active again and paused the
+  device that had just taken over (then the late pause stopped the other: silence).
+  Reproduced in test_stale_playing_report_after_a_pause_is_ignored. Fix (0.8.8): hub
+  remembers each pause it sends (`told_pause_at`) and ignores "playing" reports from that
+  device until it reports paused or PAUSE_GRACE_S (3 s) pass. dielify.remote now logs
+  at INFO (moves, commands, connects) to server.log.
+- Seen in Josh's real server.log since 7 Nov (not new, everything still works): "Can't
+  read the YouTube sign-in of josh: DPAPI decrypt failed (Windows error 13)" from
+  desktop_api, several times an hour. Not investigated yet.
+
 ## Backlog (Josh, 8 Nov; after Phase 8 item 6). Build together: they share one ratings table.
 
 - **Ratings:** thumbs up / down for songs and for artists. Thumbed-down ones can still

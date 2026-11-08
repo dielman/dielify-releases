@@ -50,6 +50,7 @@ router = APIRouter()
 
 ACTIONS = {"play", "pause", "next", "previous", "seek", "volume", "load", "jump"}
 MAX_QUEUE = 1000
+PAUSE_GRACE_S = 3.0
 MAX_MESSAGE = 512 * 1024
 SONG_KEYS = ("track_id", "video_id", "title", "artist", "album", "duration_s", "thumbnail")
 
@@ -129,6 +130,7 @@ class Device:
     state: dict = field(default_factory=dict)
     received: float = field(default_factory=time.monotonic)
     paused_at: float = field(default_factory=time.monotonic)
+    told_pause_at: float = 0.0  # when the hub last told it to pause (0 = it has since)
 
     def public(self) -> dict:
         st = dict(self.state)
@@ -161,25 +163,37 @@ class Hub:
         await asyncio.gather(*(self.send(d, {"type": "devices", "you": d.device, "active": active, "devices": listing})
                                for d in devs))
 
+    async def tell(self, dev: Device, sender: str, cmd: dict) -> None:
+        """Send a command to a device, remembering pauses: a report saying "playing" that
+        was already on its way when the pause went out must not count as a new start."""
+        if cmd["action"] == "pause":
+            dev.told_pause_at = time.monotonic()
+            if dev.state.get("playing"):
+                dev.state["playing"] = False
+                dev.paused_at = dev.told_pause_at
+        elif cmd["action"] in ("play", "load", "jump"):
+            dev.told_pause_at = 0.0
+        log.info("Remote: %s -> %s: %s", sender, dev.name, cmd["action"])
+        await self.send(dev, {"type": "command", "from": sender, "command": cmd})
+
     async def make_active(self, d: Device) -> None:
         """`d` is playing now: it becomes the active device and the one before it stops."""
         before = self.find(d.profile, self.active.get(d.profile))
         self.active[d.profile] = d.device
         if before is not None and before is not d and before.state.get("playing"):
-            await self.send(before, {"type": "command", "from": d.name, "command": {"action": "pause"}})
-            before.state["playing"] = False
+            await self.tell(before, d.name, {"action": "pause"})
 
     async def transfer(self, by: Device, src: Device, dst: Device) -> bool:
         st = src.state
         if not st.get("queue") or st.get("index", -1) < 0:
             return False
         self.active[by.profile] = dst.device
-        await self.send(dst, {"type": "command", "from": by.name, "command": {
+        log.info("Remote: music moves from %s to %s", src.name, dst.name)
+        await self.tell(dst, by.name, {
             "action": "load", "queue": st["queue"], "index": st["index"],
-            "position_ms": now_position(st, src.received), "playing": True}})
+            "position_ms": now_position(st, src.received), "playing": True})
         if st.get("playing"):
-            await self.send(src, {"type": "command", "from": by.name, "command": {"action": "pause"}})
-            src.state["playing"] = False
+            await self.tell(src, by.name, {"action": "pause"})
         return True
 
     async def join(self, d: Device) -> None:
@@ -215,7 +229,13 @@ class Hub:
         kind = msg.get("type")
         if kind == "state":
             was_playing = d.state.get("playing")
-            d.state, d.received = clean_state(msg.get("state")), time.monotonic()
+            st = clean_state(msg.get("state"))
+            if d.told_pause_at:
+                if not st["playing"] or time.monotonic() - d.told_pause_at > PAUSE_GRACE_S:
+                    d.told_pause_at = 0.0
+                else:
+                    st["playing"] = False  # an old report, sent before our pause arrived
+            d.state, d.received = st, time.monotonic()
             if was_playing and not d.state["playing"]:
                 d.paused_at = d.received
             if d.state["playing"] and (not was_playing or self.active.get(d.profile) != d.device):
@@ -228,7 +248,7 @@ class Hub:
             if target is None or cmd is None:
                 await self.send(d, {"type": "error", "message": "That device isn't connected" if cmd else "Unknown command"})
                 return
-            await self.send(target, {"type": "command", "from": d.name, "command": cmd})
+            await self.tell(target, d.name, cmd)
         elif kind == "transfer":
             src, dst = self.find(d.profile, msg.get("from")), self.find(d.profile, msg.get("to"))
             if src is None or dst is None or src is dst:

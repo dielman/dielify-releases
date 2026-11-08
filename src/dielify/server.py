@@ -162,7 +162,7 @@ def setup_file_logging() -> Path:
     root.addHandler(fh)
     if root.level > logging.WARNING or root.level == logging.NOTSET:
         root.setLevel(logging.WARNING)
-    for name in ("dielify.server", "dielify.subsonic_api", "dielify.downloads"):
+    for name in ("dielify.server", "dielify.subsonic_api", "dielify.downloads", "dielify.remote"):
         logging.getLogger(name).setLevel(logging.INFO)
     return logs / "server.log"
 

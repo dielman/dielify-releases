@@ -152,3 +152,44 @@ def test_position_moves_while_playing():
     assert remote.now_position(st, time.monotonic() - 1.5) >= 2400
     assert remote.now_position(st, time.monotonic() - 10) == 3000
     assert remote.now_position({**st, "playing": False}, time.monotonic() - 10) == 1000
+
+
+
+def until(ws, pred):
+    """Read messages until one matches; returns (that message, everything read)."""
+    seen = []
+    while True:
+        msg = ws.receive_json()
+        seen.append(msg)
+        if pred(msg):
+            return msg, seen
+
+
+def test_stale_playing_report_after_a_pause_is_ignored():
+    """A device told to pause may already have a 'playing' report on the way. That old
+    report must not make it active again (and pause the device that just took over)."""
+    with make_client() as c:
+        phone = connect(c, login(c), "p1", "Pixel")
+        pc = connect(c, login(c, device="pc"), "pc1", "Gamerig", "pc")
+        try:
+            stale_race(phone, pc)
+        finally:
+            pc.__exit__(None, None, None)
+            phone.__exit__(None, None, None)
+
+
+def stale_race(phone, pc):
+        playing = {"playing": True, "position_ms": 0, "duration_ms": 200000, "index": 0, "queue": SONGS}
+        pc.send_json({"type": "state", "state": playing})
+        until(phone, lambda m: m["type"] == "devices" and m["active"] == "pc1")
+        phone.send_json({"type": "state", "state": playing})          # phone starts: PC is told to pause
+        assert next_of(pc, "command")["command"] == {"action": "pause"}
+        pc.send_json({"type": "state", "state": {**playing, "position_ms": 900}})  # sent before the pause landed
+        pc.send_json({"type": "state", "state": {**playing, "playing": False}})    # then the pause took effect
+        until(pc, lambda m: m["type"] == "devices" and not next(
+            d for d in m["devices"] if d["device"] == "pc1")["state"]["playing"])
+        phone.send_json({"type": "state", "state": {**playing, "position_ms": 1500}})
+        last, seen = until(phone, lambda m: m["type"] == "devices" and next(
+            d for d in m["devices"] if d["device"] == "p1")["state"]["position_ms"] >= 1500)
+        assert not [m for m in seen if m["type"] == "command"]       # the phone was never paused
+        assert last["active"] == "p1"
