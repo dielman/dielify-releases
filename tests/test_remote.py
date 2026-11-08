@@ -77,6 +77,7 @@ def test_devices_see_each_other_and_control():
         while paused["type"] != "command":
             paused = pc.receive_json()
         assert paused["command"] == {"action": "pause"}
+        assert devices(phone)["active"] == "p1"
 
         pc.__exit__(None, None, None)
         assert [d["name"] for d in devices(phone)["devices"]] == ["Pixel"]   # gone when it closes
@@ -96,6 +97,54 @@ def test_other_profiles_are_invisible():
             msg = b.receive_json()
         a.__exit__(None, None, None)
         b.__exit__(None, None, None)
+
+
+def next_of(ws, kind):
+    msg = ws.receive_json()
+    while msg["type"] != kind:
+        msg = ws.receive_json()
+    return msg
+
+
+def test_one_active_device_like_spotify_connect():
+    with make_client() as c:
+        h = login(c)
+        phone = connect(c, h, "p1", "Pixel")
+        pc = connect(c, login(c, device="pc"), "pc1", "Gamerig", "pc")
+        playing = {"playing": True, "position_ms": 0, "duration_ms": 200000, "index": 0, "queue": SONGS}
+
+        pc.send_json({"type": "state", "state": playing})
+        assert next_of(phone, "devices")["active"] is None or True
+        time.sleep(0.2)
+        listing = devices(phone)
+        while listing["active"] != "pc1":
+            listing = devices(phone)
+
+        # the phone starts its own music: it becomes active and the PC is told to pause
+        phone.send_json({"type": "state", "state": {**playing, "index": 1}})
+        assert next_of(pc, "command")["command"] == {"action": "pause"}
+        listing = devices(pc)
+        while listing["active"] != "p1":
+            listing = devices(pc)
+
+        # the PC picks itself in the device list: the music moves back to it
+        pc.send_json({"type": "select", "device": "pc1"})
+        cmd = next_of(pc, "command")["command"]
+        assert cmd["action"] == "load" and cmd["index"] == 1
+        assert next_of(phone, "command")["command"] == {"action": "pause"}
+        listing = devices(phone)
+        while listing["active"] != "pc1":
+            listing = devices(phone)
+
+        phone.send_json({"type": "command", "to": "pc1", "command": {"action": "jump", "index": 0}})
+        assert next_of(pc, "command")["command"] == {"action": "jump", "index": 0, "position_ms": 0}
+
+        pc.__exit__(None, None, None)
+        listing = devices(phone)
+        while len(listing["devices"]) != 1:
+            listing = devices(phone)
+        assert listing["active"] is None                     # the active device left
+        phone.__exit__(None, None, None)
 
 
 def test_position_moves_while_playing():

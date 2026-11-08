@@ -50,7 +50,13 @@ data class RemoteState(
 }
 
 @Serializable
-data class RemoteDevice(val device: String, val name: String, val kind: String, val state: RemoteState? = null)
+data class RemoteDevice(
+    val device: String,
+    val name: String,
+    val kind: String,
+    val state: RemoteState? = null,
+    val idleS: Long = 0,
+)
 
 @Serializable
 data class RemoteCommand(
@@ -62,7 +68,7 @@ data class RemoteCommand(
     val playing: Boolean? = null,
 )
 
-@Serializable private data class DevicesMsg(val you: String, val devices: List<RemoteDevice>)
+@Serializable private data class DevicesMsg(val you: String, val active: String? = null, val devices: List<RemoteDevice>)
 @Serializable private data class CommandMsg(val from: String = "", val command: RemoteCommand)
 
 /** What the phone's player does for remote control (set by the playback service). */
@@ -88,6 +94,9 @@ class RemoteClient(context: Context, private val server: Server) {
     private val _devices = MutableStateFlow<List<RemoteDevice>>(emptyList())
     /** The other devices of this profile (not this phone). */
     val devices: StateFlow<List<RemoteDevice>> = _devices.asStateFlow()
+    private val _active = MutableStateFlow<String?>(null)
+    /** The device that's playing (or last played): Spotify Connect's "active device". */
+    val active: StateFlow<String?> = _active.asStateFlow()
     private val _connected = MutableStateFlow(false)
     val connected: StateFlow<Boolean> = _connected.asStateFlow()
     private val _errors = MutableStateFlow<String?>(null)
@@ -119,6 +128,7 @@ class RemoteClient(context: Context, private val server: Server) {
                 }
                 _connected.value = false
                 _devices.value = emptyList()
+                _active.value = null
                 socket = null
                 delay(wait)
                 wait = (wait * 2).coerceAtMost(60_000L)
@@ -157,6 +167,25 @@ class RemoteClient(context: Context, private val server: Server) {
         put("type", "transfer"); put("from", from); put("to", to)
     })
 
+    /** Make [device] the active one: the music moves there (same queue and position). */
+    fun select(device: String) = send(buildJsonObject { put("type", "select"); put("device", device) })
+
+    /** The active device if it's another one and in use (playing, or paused under 10 minutes ago). */
+    fun elsewhere(): RemoteDevice? {
+        val id = _active.value ?: return null
+        val d = _devices.value.firstOrNull { it.device == id } ?: return null
+        val idle = d.idleS + if (d.state?.playing == true) 0 else (android.os.SystemClock.elapsedRealtime() - listedAt) / 1000
+        return d.takeIf { idle < IDLE_S }
+    }
+
+    /** Where a song is now on [d], from the last list. */
+    fun positionOf(d: RemoteDevice): Long {
+        val st = d.state ?: return 0
+        val moved = if (st.playing) android.os.SystemClock.elapsedRealtime() - listedAt else 0
+        val pos = st.positionMs + moved
+        return st.durationMs?.let { pos.coerceAtMost(it) } ?: pos
+    }
+
     fun clearError() { _errors.value = null }
 
     private fun send(msg: JsonObject): Boolean = socket?.send(msg.toString()) ?: false
@@ -177,6 +206,7 @@ class RemoteClient(context: Context, private val server: Server) {
                 "devices" -> runCatching { Server.json.decodeFromJsonElement(DevicesMsg.serializer(), camel) }.getOrNull()?.let { d ->
                     listedAt = android.os.SystemClock.elapsedRealtime()
                     _devices.value = d.devices.filter { it.device != deviceId }
+                    _active.value = d.active
                 }
                 "command" -> runCatching { Server.json.decodeFromJsonElement(CommandMsg.serializer(), camel) }.getOrNull()?.let { c ->
                     scope.launch { player?.run(c.command, c.from) }
@@ -199,8 +229,9 @@ class RemoteClient(context: Context, private val server: Server) {
         }
     }
 
-    private companion object {
-        const val TAG = "RemoteClient"
+    companion object {
+        private const val TAG = "RemoteClient"
+        const val IDLE_S = 600
 
         // The server speaks snake_case; our classes are camelCase.
         fun snakeKey(k: String) = k.replace(Regex("([a-z])([A-Z])")) { "${it.groupValues[1]}_${it.groupValues[2].lowercase()}" }

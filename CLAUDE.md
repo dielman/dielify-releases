@@ -354,6 +354,17 @@ src/dielify/
   tests; PC panel live in the browser against a fake phone (pause, next, play here, move
   there). Published **v0.8.6** (8 Nov). Not yet: phone on a device. Step 2 (phone lock screen controls the PC) not built.
 
+- 0.8.6 was a separate control panel; Josh: "shithouse", he'd asked for Spotify Connect
+  from the start. Rebuilt in 0.8.7 as Spotify Connect: the server keeps one **active
+  device** per profile (whoever starts playing; the one before is paused; "select" moves
+  the music; gone when it disconnects; apps ignore it after 10 min paused, `idle_s`).
+  Every player bar shows and controls the active device, songs tapped anywhere play
+  there, green "Playing on X" strip, speaker button opens a short "Play on" list.
+  Phone: `RemoteDevicePlayer` (Media3 SimpleBasePlayer for the other device) is swapped
+  into the media session while another device is active, so the app screens,
+  notification, lock screen and headset buttons control the PC (= step 2). Tested: 5
+  server tests; PC bar + picker live against a fake phone. Not yet on Josh's devices.
+
 ## Backlog (Josh, 8 Nov; after Phase 8 item 6). Build together: they share one ratings table.
 
 - **Ratings:** thumbs up / down for songs and for artists. Thumbed-down ones can still

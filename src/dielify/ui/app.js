@@ -689,11 +689,29 @@ function showPassword(login) {
 }
 
 // --- player ------------------------------------------------------------------------------------
+// Like Spotify Connect: the player bar shows and controls the *active* device, which may be
+// this PC or a phone. Songs started here play on the active device; the device button in the
+// bar moves the music between devices.
 const audio = $("audio");
 const player = { list: [], index: -1, current: null, counted: false };
 audio.volume = 0.8;
 
+const remote = { ws: null, you: null, active: null, devices: [], at: 0, retry: 1000, timer: null, picker: null };
+// The active device, if it's another one and in use (playing, or paused under 10 minutes ago).
+const elsewhere = () => {
+  if (!remote.active || remote.active === remote.you) return null;
+  const d = remote.devices.find((x) => x.device === remote.active);
+  if (!d) return null;
+  const idle = (d.idle_s || 0) + (d.state && d.state.playing ? 0 : (Date.now() - remote.at) / 1000);
+  return idle < 600 ? d : null;
+};
+
 function playList(list, index) {
+  const d = elsewhere();
+  if (d) {
+    remoteSend({ type: "command", to: d.device, command: { action: "load", queue: list.map(songOut), index, position_ms: 0, playing: true } });
+    return;
+  }
   player.list = list; playAt(index);
 }
 // Play history: how long the current song was actually heard (seeking doesn't count).
@@ -718,54 +736,101 @@ function playAt(i) {
   heard = 0; lastTick = null; startedAt = Date.now() / 1000;
   audio.src = media(t.stream_url);
   audio.play().catch((e) => toast(`Can't play: ${e.message}`));
-  $("np-title").textContent = t.title;
-  $("np-artist").textContent = `${t.artist} · ${t.album}`;
-  const cover = $("np-cover");
-  cover.hidden = !t.cover_url && !t.thumb;
-  if (t.cover_url) cover.src = media(t.cover_url, 112);
-  else if (t.thumb) cover.src = t.thumb;
-  document.querySelectorAll("tr[data-track]").forEach((r) => r.classList.toggle("playing", Number(r.dataset.track) === t.id));
+  paintBar();
 }
+
+// --- the player bar: what's playing on the active device ---------------------------------------
+let seeking = false;
+function showSong(song) {  // song: {title, artist, album, cover (our cover url), thumb (YouTube picture)}
+  $("np-title").textContent = song ? song.title : "Nothing playing";
+  $("np-artist").textContent = song ? [song.artist, song.album].filter(Boolean).join(" · ") : "";
+  const cover = $("np-cover");
+  cover.hidden = !song || (!song.cover && !song.thumb);
+  if (song && song.cover) cover.src = media(song.cover, 112);
+  else if (song && song.thumb) cover.src = song.thumb;
+}
+function showTime(posS, durS, playing) {
+  $("btn-play").textContent = playing ? "⏸" : "▶";
+  $("t-cur").textContent = dur(posS) || "0:00";
+  $("t-dur").textContent = dur(durS) || "0:00";
+  if (!seeking) $("seek").value = durS ? Math.round((posS / durS) * 1000) : 0;
+}
+function paintBar() {
+  const d = elsewhere();
+  const strip = $("connect-strip");
+  strip.hidden = !d;
+  $("btn-devices").classList.toggle("on", !!d);
+  if (d) {
+    strip.textContent = `${d.kind === "pc" ? "💻" : "📱"} Playing on ${d.name}`;
+    const st = d.state || {};
+    const s = st.queue && st.index >= 0 ? st.queue[st.index] : null;
+    showSong(s && { title: s.title, artist: s.artist, album: s.album,
+      cover: s.track_id ? `/api/library/tracks/${s.track_id}/cover` : null, thumb: s.track_id ? null : s.thumbnail });
+    showTime(nowPos(st) / 1000, (st.duration_ms || 0) / 1000, !!st.playing);
+    if (document.activeElement !== $("volume")) $("volume").value = Math.round((st.volume ?? 1) * 100);
+    document.querySelectorAll("tr[data-track]").forEach((r) => r.classList.toggle("playing", !!s && Number(r.dataset.track) === s.track_id));
+    return;
+  }
+  const t = player.current;
+  showSong(t && { title: t.title, artist: t.artist, album: t.album, cover: t.cover_url, thumb: t.thumb });
+  showTime(audio.currentTime, audio.duration || 0, !!t && !audio.paused);
+  if (document.activeElement !== $("volume")) $("volume").value = Math.round(audio.volume * 100);
+  document.querySelectorAll("tr[data-track]").forEach((r) => r.classList.toggle("playing", !!t && Number(r.dataset.track) === t.id));
+}
+setInterval(() => { if (elsewhere()) paintBar(); }, 500);
+
+const control = (command) => {
+  const d = elsewhere();
+  if (d) { remoteSend({ type: "command", to: d.device, command }); return true; }
+  return false;
+};
 $("btn-play").addEventListener("click", () => {
+  const d = elsewhere();
+  if (d) return control({ action: d.state && d.state.playing ? "pause" : "play" });
   if (!player.current) return;
   audio.paused ? audio.play() : audio.pause();
 });
-$("btn-next").addEventListener("click", () => playAt(player.index + 1));
+$("btn-next").addEventListener("click", () => control({ action: "next" }) || playAt(player.index + 1));
+$("btn-prev").addEventListener("click", () => control({ action: "previous" })
+  || (audio.currentTime > 3 ? (audio.currentTime = 0) : playAt(player.index - 1)));
 $("btn-addpl").addEventListener("click", () => {
-  const t = player.current;
+  const d = elsewhere();
+  const st = d && d.state;
+  const s = st && st.queue && st.index >= 0 ? st.queue[st.index] : null;
+  const t = d ? (s && { video_id: s.video_id, title: s.title, artist: s.artist, album: s.album }) : player.current;
   if (!t || !t.video_id) return toast(t ? "This song has no YouTube id, so it can't go in a playlist." : "Nothing playing");
   addToPlaylist([{ type: "song", id: t.video_id, title: t.title, artists: t.artist ? [t.artist] : [], album: t.album || null }]);
 });
-$("btn-prev").addEventListener("click", () => (audio.currentTime > 3 ? (audio.currentTime = 0) : playAt(player.index - 1)));
-audio.addEventListener("play", () => ($("btn-play").textContent = "⏸"));
-audio.addEventListener("pause", () => ($("btn-play").textContent = "▶"));
+audio.addEventListener("play", () => { if (!elsewhere()) paintBar(); });
+audio.addEventListener("pause", () => { if (!elsewhere()) paintBar(); });
 audio.addEventListener("ended", () => { reportPlay(); playAt(player.index + 1); });
 audio.addEventListener("timeupdate", () => {
-  const d = audio.duration || 0;
   const now = audio.currentTime;
   if (lastTick !== null && !audio.paused && now > lastTick && now - lastTick < 2) heard += now - lastTick;
   lastTick = now;
-  $("t-cur").textContent = dur(audio.currentTime) || "0:00";
-  $("t-dur").textContent = dur(d) || "0:00";
-  if (!seeking && d) $("seek").value = Math.round((audio.currentTime / d) * 1000);
+  if (!elsewhere()) showTime(now, audio.duration || 0, !audio.paused);
 });
-let seeking = false;
 $("seek").addEventListener("input", () => (seeking = true));
 $("seek").addEventListener("change", (e) => {
-  if (audio.duration) audio.currentTime = (e.target.value / 1000) * audio.duration;
   seeking = false;
+  const d = elsewhere();
+  if (d) {
+    const st = d.state || {};
+    if (st.duration_ms) control({ action: "seek", position_ms: Math.round((e.target.value / 1000) * st.duration_ms) });
+  } else if (audio.duration) audio.currentTime = (e.target.value / 1000) * audio.duration;
 });
-$("volume").addEventListener("input", (e) => (audio.volume = e.target.value / 100));
+$("volume").addEventListener("input", (e) => {
+  const v = e.target.value / 100;
+  if (elsewhere()) { clearTimeout(remote.vol); remote.vol = setTimeout(() => control({ action: "volume", value: v }), 150); }
+  else audio.volume = v;
+});
 document.addEventListener("keydown", (e) => {
   if (e.code === "Space" && !["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement.tagName)) {
     e.preventDefault(); $("btn-play").click();
   }
 });
 
-// --- remote control: this PC and your phones see and control each other ----------------------
-// The server only passes messages between devices of the same profile; nothing is stored.
-const remote = { ws: null, you: null, devices: [], at: 0, retry: 1000, timer: null, panel: null };
-
+// --- the connection to the other devices (dielify/remote.py) -----------------------------------
 function songOut(t) {
   return { track_id: t.id || undefined, video_id: t.video_id || undefined, title: t.title,
     artist: t.artist || undefined, album: t.album || undefined, thumbnail: t.thumb || undefined };
@@ -785,12 +850,12 @@ function myState() {
 function remoteSend(msg) {
   if (remote.ws && remote.ws.readyState === WebSocket.OPEN) remote.ws.send(JSON.stringify(msg));
 }
-function sendState() {
+function sendState(now) {
   clearTimeout(remote.timer);
-  remote.timer = setTimeout(() => remoteSend({ type: "state", state: myState() }), 300);
+  remote.timer = setTimeout(() => remoteSend({ type: "state", state: myState() }), now === true ? 0 : 150);
 }
 ["play", "pause", "seeked", "volumechange", "loadedmetadata", "ended"].forEach((e) => audio.addEventListener(e, sendState));
-setInterval(sendState, 15000);
+setInterval(() => sendState(true), 10000);
 
 function remoteConnect() {
   const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/remote?token=${encodeURIComponent(KEY)}`);
@@ -803,17 +868,15 @@ function remoteConnect() {
     let m;
     try { m = JSON.parse(e.data); } catch { return; }
     if (m.type === "devices") {
-      remote.you = m.you; remote.devices = m.devices; remote.at = Date.now();
-      $("btn-devices").classList.toggle("on", others().length > 0);
-      renderDevices();
+      remote.you = m.you; remote.active = m.active; remote.devices = m.devices; remote.at = Date.now();
+      paintBar(); renderPicker();
     } else if (m.type === "command") runCommand(m.command, m.from);
     else if (m.type === "error") toast(m.message);
   };
   ws.onclose = () => {
     if (remote.ws !== ws) return;
-    remote.ws = null; remote.devices = [];
-    $("btn-devices").classList.remove("on");
-    renderDevices();
+    remote.ws = null; remote.devices = []; remote.active = null;
+    paintBar(); renderPicker();
     setTimeout(remoteConnect, remote.retry);
     remote.retry = Math.min(remote.retry * 2, 30000);
   };
@@ -824,74 +887,60 @@ function runCommand(c, from) {
     case "play": if (player.current) audio.play().catch(() => {}); break;
     case "pause": audio.pause(); break;
     case "next": playAt(player.index + 1); break;
-    case "previous": $("btn-prev").click(); break;
+    case "previous": if (audio.currentTime > 3) audio.currentTime = 0; else playAt(player.index - 1); break;
     case "seek": audio.currentTime = c.position_ms / 1000; break;
-    case "volume": audio.volume = c.value; $("volume").value = Math.round(c.value * 100); break;
-    case "load": {
-      player.list = c.queue.map(remoteTrack);
+    case "volume": audio.volume = c.value; break;
+    case "jump": case "load": {
+      if (c.action === "load") player.list = c.queue.map(remoteTrack);
       playAt(c.index);
       const pos = c.position_ms / 1000;
       audio.addEventListener("loadedmetadata", () => {
         if (pos > 1) audio.currentTime = pos;
-        if (!c.playing) audio.pause();
+        if (c.playing === false) audio.pause();
       }, { once: true });
-      toast(`${from} moved the music here`);
       break;
     }
   }
 }
 
-const others = () => remote.devices.filter((d) => d.device !== remote.you);
-const nowPos = (st) => st.position_ms + (st.playing ? Date.now() - remote.at : 0);
+const nowPos = (st) => Math.min(st.position_ms + (st.playing ? Date.now() - remote.at : 0), st.duration_ms || Infinity);
 
-function renderDevices() {
-  const box = remote.panel;
+// The device list: a small pop-up above the device button. Picking one moves the music there.
+function renderPicker() {
+  const box = remote.picker;
   if (!box) return;
-  if (box.contains(document.activeElement) && document.activeElement.type === "range") return;  // mid-drag
-  const panel = box.querySelector(".panel");
-  const list = others();
-  const here = !!player.current;
-  panel.replaceChildren(h("h2", {}, "Devices"),
-    !remote.ws ? h("p", { class: "muted" }, "Connecting…")
-      : !list.length ? h("p", { class: "muted" }, "No other devices right now. Your phone shows up here while Dielify is open or playing on it.")
-      : h("div", {}, list.map((d) => {
-        const st = d.state || {};
-        const song = st.index >= 0 && st.queue ? st.queue[st.index] : null;
-        const cmd = (command) => remoteSend({ type: "command", to: d.device, command });
-        const seek = h("input", { type: "range", min: 0, max: 1000, value: 0, "data-device": d.device, "aria-label": "Position",
-          onchange: (e) => cmd({ action: "seek", position_ms: Math.round((e.target.value / 1000) * (st.duration_ms || 0)) }) });
-        if (st.duration_ms) seek.value = Math.round((nowPos(st) / st.duration_ms) * 1000);
-        return h("div", { class: "device" },
-          h("div", {}, h("strong", {}, `${d.kind === "pc" ? "💻" : "📱"} ${d.name}`),
-            h("div", { class: "muted small" }, song ? `${st.playing ? "Playing" : "Paused"}: ${song.title}${song.artist ? ` · ${song.artist}` : ""}` : "Not playing")),
-          song ? h("div", { class: "row" },
-            h("button", { title: "Previous", onclick: () => cmd({ action: "previous" }) }, "⏮"),
-            h("button", { title: st.playing ? "Pause" : "Play", onclick: () => cmd({ action: st.playing ? "pause" : "play" }) }, st.playing ? "⏸" : "▶"),
-            h("button", { title: "Next", onclick: () => cmd({ action: "next" }) }, "⏭"),
-            st.duration_ms ? seek : null) : null,
-          song ? h("div", { class: "row" }, h("span", { class: "small muted" }, "Volume"),
-            h("input", { type: "range", min: 0, max: 100, value: Math.round((st.volume ?? 1) * 100), "aria-label": "Volume",
-              onchange: (e) => cmd({ action: "volume", value: e.target.value / 100 }) })) : null,
-          h("div", { class: "row" },
-            song ? h("button", { onclick: () => remoteSend({ type: "transfer", from: d.device, to: remote.you }) }, "Play it here") : null,
-            here ? h("button", { onclick: () => { remoteSend({ type: "transfer", from: remote.you, to: d.device }); toast(`Moving the music to ${d.name}…`); } },
-              `Move my music to ${d.name}`) : null));
-      })),
-    h("div", { class: "row", style: "margin-top:10px" }, h("button", { onclick: () => { box.remove(); remote.panel = null; } }, "Close")));
+  const mine = remote.devices.find((d) => d.device === remote.you);
+  const rows = [...(mine ? [mine] : []), ...remote.devices.filter((d) => d.device !== remote.you)];
+  box.replaceChildren(...[h("div", { class: "picker-title" }, "Play on"),
+    !remote.ws ? h("p", { class: "muted small" }, "Connecting…") : rows.map((d) => {
+      const st = d.state || {};
+      const s = st.queue && st.index >= 0 ? st.queue[st.index] : null;
+      const on = d.device === remote.active || (!remote.active && d.device === remote.you);
+      return h("button", { class: `picker-row${on ? " on" : ""}`, onclick: () => {
+        closePicker();
+        if (!on) remoteSend({ type: "select", device: d.device });
+      } },
+      h("span", { class: "picker-icon" }, d.kind === "pc" ? "💻" : "📱"),
+      h("span", {}, h("div", {}, d.device === remote.you ? `This computer (${d.name})` : d.name),
+        h("div", { class: "muted small" }, on ? (st.playing ? "Playing" : "Selected") : s ? `Paused: ${s.title}` : "")),
+      on ? h("span", { class: "picker-tick" }, "✓") : null);
+    }),
+    remote.ws && rows.length < 2 ? h("p", { class: "muted small" }, "Your phone shows up here while Dielify is open or playing on it.") : null]
+    .flat().filter(Boolean));
 }
-setInterval(() => {  // keep the other devices' position bars moving
-  if (!remote.panel) return;
-  remote.panel.querySelectorAll("input[data-device]").forEach((el) => {
-    const d = remote.devices.find((x) => x.device === el.dataset.device);
-    if (d && d.state && d.state.duration_ms && el !== document.activeElement) el.value = Math.round((nowPos(d.state) / d.state.duration_ms) * 1000);
-  });
-}, 1000);
+function closePicker() {
+  if (remote.picker) { remote.picker.remove(); remote.picker = null; }
+  document.removeEventListener("mousedown", pickerOutside, true);
+}
+function pickerOutside(e) {
+  if (remote.picker && !remote.picker.contains(e.target) && e.target !== $("btn-devices")) closePicker();
+}
 $("btn-devices").addEventListener("click", () => {
-  if (remote.panel) return;
-  const box = h("div", { class: "modal", onclick: (e) => { if (e.target === box) { box.remove(); remote.panel = null; } } }, h("div", { class: "panel" }));
-  remote.panel = box;
-  document.body.append(box);
-  renderDevices();
+  if (remote.picker) return closePicker();
+  remote.picker = h("div", { class: "picker" });
+  document.body.append(remote.picker);
+  renderPicker();
+  document.addEventListener("mousedown", pickerOutside, true);
 });
 
 // --- start ----------------------------------------------------------------------------------------

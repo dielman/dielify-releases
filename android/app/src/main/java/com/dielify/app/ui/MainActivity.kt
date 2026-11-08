@@ -74,6 +74,7 @@ fun App(vm: AppViewModel) {
         }
     }
     AddToPlaylistDialog(vm)
+    DevicePicker(vm)
     CompositionLocalProvider(LocalSnackbar provides snackbar) { Box(Modifier.fillMaxSize()) {
         when (val screen = stack.last()) {
             Screen.Library -> RootScreen(vm)
@@ -86,7 +87,6 @@ fun App(vm: AppViewModel) {
             is Screen.SimilarPage -> SimilarScreen(vm, screen)
             is Screen.SavedAlbumPage -> SavedAlbumScreen(vm, screen)
             Screen.StatsPage -> StatsScreen(vm)
-            Screen.DevicesPage -> DevicesScreen(vm)
             is Screen.PlaylistPage -> PlaylistScreen(vm, screen)
         }
     } }

@@ -62,6 +62,7 @@ private fun coverPath(trackId: Long?) = trackId?.let { "/api/library/tracks/$it/
 fun MiniPlayer(vm: AppViewModel) {
     val p by vm.player.collectAsStateWithLifecycle()
     if (!p.hasItem) return
+    PlayingOnStrip(vm)
     Row(
         Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh)
             .clickable { vm.open(Screen.NowPlaying) }
@@ -78,6 +79,7 @@ fun MiniPlayer(vm: AppViewModel) {
                 color = if (p.error != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+        DevicesButton(vm)
         PlayPauseIcon(vm, p)
         IconButton(onClick = { vm.next() }, enabled = p.hasNext) { Icon(Icons.Filled.SkipNext, "Next") }
     }
@@ -110,7 +112,7 @@ fun NowPlayingScreen(vm: AppViewModel) {
             delay(500)
         }
     }
-    Page(vm, "Now playing") { pad ->
+    Page(vm, "Now playing", actions = { DevicesButton(vm) }) { pad ->
         Column(
             Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -118,6 +120,12 @@ fun NowPlayingScreen(vm: AppViewModel) {
             if (!p.hasItem) {
                 Text("Nothing playing")
                 return@Column
+            }
+            val on by vm.playingOn.collectAsStateWithLifecycle()
+            on?.let {
+                Text("Playing on $it", color = ConnectGreen, style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.clickable { vm.showDevices.value = true })
+                Spacer(Modifier.height(12.dp))
             }
             Cover(vm, coverPath(p.trackId), null, pixels = 900)
             Spacer(Modifier.height(24.dp))

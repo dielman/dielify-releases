@@ -139,8 +139,14 @@ img.mini, .mini.ph { width: 44px; height: 44px; border-radius: 4px; object-fit: 
 .modal .panel { width: min(440px, 90vw); max-height: 80vh; overflow: auto; margin: 0; }
 .modal .pick { display: grid; gap: 6px; margin-top: 10px; }
 .modal .pick-row { text-align: left; display: block; width: 100%; }
-.devices-btn { opacity: 0.55; }
-.devices-btn.on { opacity: 1; }
-.device { border-top: 1px solid rgba(127, 127, 127, 0.25); padding: 12px 0; display: grid; gap: 8px; }
-.device .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.device input[type=range] { flex: 1; min-width: 120px; }
+.devices-btn.on { color: #1db954; }
+.connect-strip { background: #1db954; color: #04130a; font-weight: 600; font-size: 13px; padding: 4px 20px; text-align: right; }
+.picker { position: fixed; right: 20px; bottom: 84px; width: 300px; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 10px; padding: 10px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5); z-index: 60; display: grid; gap: 4px; }
+.picker-title { font-weight: 700; padding: 4px 6px 8px; }
+.picker-row { display: grid; grid-template-columns: 28px 1fr auto; gap: 8px; align-items: center; text-align: left;
+  width: 100%; background: transparent; border: 0; padding: 8px 6px; border-radius: 6px; }
+.picker-row:hover { background: rgba(127, 127, 127, 0.15); }
+.picker-row.on { color: #1db954; }
+.picker-icon { font-size: 18px; }
+.picker-tick { font-weight: 700; }

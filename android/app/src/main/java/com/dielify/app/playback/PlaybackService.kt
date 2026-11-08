@@ -245,6 +245,35 @@ class PlaybackService : MediaLibraryService() {
         setMediaNotificationProvider(
             DefaultMediaNotificationProvider.Builder(this).build().apply { setSmallIcon(R.drawable.ic_notification) }
         )
+        followActiveDevice(player)
+    }
+
+    /**
+     * Spotify Connect: while another device is the active one, the session (and so the app,
+     * notification, lock screen and headphone buttons) controls that device instead.
+     */
+    private fun followActiveDevice(local: ExoPlayer) {
+        val remote = dielify.remote
+        val other = RemoteDevicePlayer(remote)
+        fun pick() {
+            val s = session ?: return
+            val d = remote.elsewhere()
+            if (d != null) {
+                other.update(d)
+                if (s.player !== other) {
+                    if (local.isPlaying) local.pause()
+                    s.player = other
+                }
+            } else {
+                if (s.player !== local) s.player = local
+                other.update(null)
+            }
+        }
+        scope.launch { remote.devices.collect { pick() } }
+        scope.launch { remote.active.collect { pick() } }
+        scope.launch {  // an idle device stops counting as active after a while
+            while (true) { kotlinx.coroutines.delay(30_000); pick() }
+        }
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? = session

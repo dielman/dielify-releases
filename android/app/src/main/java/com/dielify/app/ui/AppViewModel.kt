@@ -44,7 +44,6 @@ sealed interface Screen {
     data class SimilarPage(val videoId: String, val name: String) : Screen
     data class SavedAlbumPage(val album: String, val artist: String) : Screen
     data object StatsPage : Screen
-    data object DevicesPage : Screen
     data class PlaylistPage(val id: Long, val name: String) : Screen
 }
 
@@ -94,6 +93,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     var controller: MediaController? = null
         private set
+
+    /** Spotify Connect: the other device the player controls right now (its name), if any. */
+    val playingOn: StateFlow<String?> = kotlinx.coroutines.flow.combine(
+        app.dielify.remote.active, app.dielify.remote.devices,
+        kotlinx.coroutines.flow.flow { while (true) { emit(Unit); kotlinx.coroutines.delay(30_000) } },
+    ) { _, _, _ -> app.dielify.remote.elsewhere()?.name }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+    val showDevices = MutableStateFlow(false)
 
     val lastAddresses: List<String> get() = accounts.lastAddresses()
     val lastUsername: String get() = accounts.lastUsername()

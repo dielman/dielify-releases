@@ -1,9 +1,10 @@
 """Remote control between devices (Spotify-Connect style).
 
 Every player (the PC app, phones) keeps a WebSocket open to /api/remote while it can
-and reports what it is playing. Devices of the same profile see each other and can send
-each other commands: play, pause, next, previous, seek, volume, load a queue, or move
-playback ("transfer") from one device to another with the same queue and position.
+and reports what it is playing. Like Spotify Connect, each profile has one *active*
+device: the one playing (or that last played). Every app's player shows and controls the
+active device, wherever it is; starting music on one device pauses the one that was
+playing. Picking a device in the list moves the music there (same queue and position).
 
 Nothing is stored: the list lives in memory and a device disappears when its connection
 closes. The PC is always reachable; phones are while Dielify runs on them.
@@ -13,12 +14,17 @@ Messages, device -> PC:
   {"type": "state", "state": {...}}          see State below; sent on every change
   {"type": "command", "to": "<device>", "command": {...}}
   {"type": "transfer", "from": "<device>", "to": "<device>"}
+  {"type": "select", "device": "<device>"}  make it the active device (moves the music)
 PC -> device:
-  {"type": "devices", "you": "<device>", "devices": [{device, name, kind, state, age_ms}]}
+  {"type": "devices", "you": "<device>", "active": "<device>"|null, "devices": [{device, name, kind, state}]}
   {"type": "command", "from": "<name>", "command": {...}}
   {"type": "error", "message": "..."}
 
+Apps treat an active device that has been paused for IDLE_S (idle_s in the list) as gone
+and play on themselves again, like Spotify, so the phone in the car doesn't start the PC.
+
 Commands: {"action": "play"|"pause"|"next"|"previous"}, {"action": "seek", "position_ms"},
+{"action": "jump", "index", "position_ms"} (another song in the queue),
 {"action": "volume", "value": 0..1}, {"action": "load", "queue": [Song], "index",
 "position_ms", "playing"}.  A Song is {track_id?, video_id?, title, artist, album,
 duration_s?, thumbnail?}: library songs by track id, anything else by YouTube video id.
@@ -42,7 +48,7 @@ from . import custom_api
 log = logging.getLogger(__name__)
 router = APIRouter()
 
-ACTIONS = {"play", "pause", "next", "previous", "seek", "volume", "load"}
+ACTIONS = {"play", "pause", "next", "previous", "seek", "volume", "load", "jump"}
 MAX_QUEUE = 1000
 MAX_MESSAGE = 512 * 1024
 SONG_KEYS = ("track_id", "video_id", "title", "artist", "album", "duration_s", "thumbnail")
@@ -87,6 +93,12 @@ def clean_command(c) -> dict | None:
     a = c["action"]
     if a == "seek":
         return {"action": a, "position_ms": max(0, int(c.get("position_ms") or 0))}
+    if a == "jump":
+        try:
+            index = max(0, int(c.get("index") or 0))
+        except (TypeError, ValueError):
+            return None
+        return {"action": a, "index": index, "position_ms": max(0, int(c.get("position_ms") or 0))}
     if a == "volume":
         return {"action": a, "value": min(1.0, max(0.0, float(c.get("value") or 0)))}
     if a == "load":
@@ -116,17 +128,21 @@ class Device:
     kind: str
     state: dict = field(default_factory=dict)
     received: float = field(default_factory=time.monotonic)
+    paused_at: float = field(default_factory=time.monotonic)
 
     def public(self) -> dict:
         st = dict(self.state)
         if st:
             st["position_ms"] = now_position(self.state, self.received)
-        return {"device": self.device, "name": self.name, "kind": self.kind, "state": st or None}
+        idle = 0 if self.state.get("playing") else int(time.monotonic() - self.paused_at)
+        return {"device": self.device, "name": self.name, "kind": self.kind, "state": st or None, "idle_s": idle}
 
 
 class Hub:
     def __init__(self):
         self.devices: dict[tuple[str, str], Device] = {}
+        self.active: dict[str, str] = {}  # profile -> device id
+        self._tasks: set[asyncio.Task] = set()
         self.lock = asyncio.Lock()
 
     def of(self, profile: str) -> list[Device]:
@@ -141,7 +157,30 @@ class Hub:
     async def broadcast(self, profile: str) -> None:
         devs = self.of(profile)
         listing = [d.public() for d in devs]
-        await asyncio.gather(*(self.send(d, {"type": "devices", "you": d.device, "devices": listing}) for d in devs))
+        active = self.active.get(profile)
+        await asyncio.gather(*(self.send(d, {"type": "devices", "you": d.device, "active": active, "devices": listing})
+                               for d in devs))
+
+    async def make_active(self, d: Device) -> None:
+        """`d` is playing now: it becomes the active device and the one before it stops."""
+        before = self.find(d.profile, self.active.get(d.profile))
+        self.active[d.profile] = d.device
+        if before is not None and before is not d and before.state.get("playing"):
+            await self.send(before, {"type": "command", "from": d.name, "command": {"action": "pause"}})
+            before.state["playing"] = False
+
+    async def transfer(self, by: Device, src: Device, dst: Device) -> bool:
+        st = src.state
+        if not st.get("queue") or st.get("index", -1) < 0:
+            return False
+        self.active[by.profile] = dst.device
+        await self.send(dst, {"type": "command", "from": by.name, "command": {
+            "action": "load", "queue": st["queue"], "index": st["index"],
+            "position_ms": now_position(st, src.received), "playing": True}})
+        if st.get("playing"):
+            await self.send(src, {"type": "command", "from": by.name, "command": {"action": "pause"}})
+            src.state["playing"] = False
+        return True
 
     async def join(self, d: Device) -> None:
         old = self.devices.get((d.profile, d.device))
@@ -152,13 +191,22 @@ class Hub:
             except Exception:
                 pass
         log.info("Remote: %s (%s) connected", d.name, d.kind)
+        if d.state.get("playing"):
+            await self.make_active(d)
+        elif d.profile not in self.active and d.state.get("queue"):
+            self.active[d.profile] = d.device
         await self.broadcast(d.profile)
 
     async def leave(self, d: Device) -> None:
         if self.devices.get((d.profile, d.device)) is d:
             del self.devices[(d.profile, d.device)]
+            if self.active.get(d.profile) == d.device:
+                del self.active[d.profile]
             log.info("Remote: %s left", d.name)
-            await self.broadcast(d.profile)
+            # its own task: a connection can end by cancellation, which would cancel this too
+            task = asyncio.get_running_loop().create_task(self.broadcast(d.profile))
+            self._tasks.add(task)
+            task.add_done_callback(self._tasks.discard)
 
     def find(self, profile: str, device) -> Device | None:
         return self.devices.get((profile, str(device)))
@@ -166,7 +214,14 @@ class Hub:
     async def handle(self, d: Device, msg: dict) -> None:
         kind = msg.get("type")
         if kind == "state":
+            was_playing = d.state.get("playing")
             d.state, d.received = clean_state(msg.get("state")), time.monotonic()
+            if was_playing and not d.state["playing"]:
+                d.paused_at = d.received
+            if d.state["playing"] and (not was_playing or self.active.get(d.profile) != d.device):
+                await self.make_active(d)
+            elif d.profile not in self.active and d.state["queue"]:
+                self.active[d.profile] = d.device
             await self.broadcast(d.profile)
         elif kind == "command":
             target, cmd = self.find(d.profile, msg.get("to")), clean_command(msg.get("command"))
@@ -179,14 +234,21 @@ class Hub:
             if src is None or dst is None or src is dst:
                 await self.send(d, {"type": "error", "message": "That device isn't connected"})
                 return
-            st = src.state
-            if not st.get("queue") or st.get("index", -1) < 0:
+            if not await self.transfer(d, src, dst):
                 await self.send(d, {"type": "error", "message": f"Nothing is playing on {src.name}"})
                 return
-            await self.send(dst, {"type": "command", "from": d.name, "command": {
-                "action": "load", "queue": st["queue"], "index": st["index"],
-                "position_ms": now_position(st, src.received), "playing": True}})
-            await self.send(src, {"type": "command", "from": d.name, "command": {"action": "pause"}})
+            await self.broadcast(d.profile)
+        elif kind == "select":
+            dst = self.find(d.profile, msg.get("device"))
+            if dst is None:
+                await self.send(d, {"type": "error", "message": "That device isn't connected"})
+                return
+            src = self.find(d.profile, self.active.get(d.profile))
+            if src is not None and src is not dst and await self.transfer(d, src, dst):
+                pass
+            else:
+                self.active[d.profile] = dst.device
+            await self.broadcast(d.profile)
 
 
 hub = Hub()

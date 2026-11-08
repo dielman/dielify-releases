@@ -29,7 +29,6 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.DownloadForOffline
 import androidx.compose.material.icons.filled.OfflinePin
 import androidx.compose.material.icons.filled.Explore
-import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.PlayArrow
@@ -70,7 +69,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.dielify.app.dielify
 import com.dielify.app.net.Album
 import com.dielify.app.net.Artist
 import com.dielify.app.net.Link
@@ -144,13 +142,6 @@ private fun TabBar(vm: AppViewModel) {
 @Composable
 fun TopActions(vm: AppViewModel) {
     LinkLabel(vm)
-    val others by androidx.compose.ui.platform.LocalContext.current.dielify.remote.devices.collectAsStateWithLifecycle()
-    IconButton(onClick = { vm.open(Screen.DevicesPage) }) {
-        Icon(
-            Icons.Filled.Devices, "Devices",
-            tint = if (others.isNotEmpty()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
     IconButton(onClick = { vm.open(Screen.StatsPage) }) { Icon(Icons.Filled.Insights, "Your stats") }
     IconButton(onClick = { vm.open(Screen.Settings) }) { Icon(Icons.Filled.Settings, "Settings") }
 }
