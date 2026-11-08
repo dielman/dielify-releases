@@ -18,6 +18,7 @@ dependencies = [
     "requests>=2.32,<3",
     "fastapi>=0.162,<1",
     "uvicorn>=0.54,<1",
+    "websockets>=15",          # /api/remote (remote control between devices)
     "pywebview>=6.2,<7",   # desktop window (Windows' built-in WebView2)
     "pystray>=0.19,<1",    # tray icon
     "pycryptodomex>=3.20,<4",  # Ed25519 check of signed updates (also used by yt-dlp)

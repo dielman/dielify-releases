@@ -44,6 +44,7 @@ sealed interface Screen {
     data class SimilarPage(val videoId: String, val name: String) : Screen
     data class SavedAlbumPage(val album: String, val artist: String) : Screen
     data object StatsPage : Screen
+    data object DevicesPage : Screen
     data class PlaylistPage(val id: Long, val name: String) : Screen
 }
 

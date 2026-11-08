@@ -28,6 +28,10 @@ import com.dielify.app.R
 import com.dielify.app.dielify
 import com.dielify.app.net.Album
 import com.dielify.app.net.Item
+import com.dielify.app.net.RemoteCommand
+import com.dielify.app.net.RemotePlayer
+import com.dielify.app.net.RemoteSong
+import com.dielify.app.net.RemoteState
 import com.dielify.app.net.Server
 import com.dielify.app.net.Track
 import com.dielify.app.saved.SavedSongs
@@ -116,7 +120,41 @@ object MediaItems {
         return if (m.groupValues[2] == "stream") saved.audioFile(id) else saved.coverFile(id)
     }
 
-    fun trackId(item: MediaItem?): Long? = item?.mediaId?.removePrefix(PREFIX)?.toLongOrNull()
+    fun trackId(item: MediaItem?): Long? = item?.mediaId?.takeIf { it.startsWith(PREFIX) }?.removePrefix(PREFIX)?.toLongOrNull()
+
+    /** A song sent by another device (remote control). */
+    fun fromSong(s: RemoteSong): MediaItem? {
+        val id = s.trackId
+        val video = s.videoId
+        if (id == null && video == null) return null
+        return MediaItem.Builder()
+            .setMediaId(if (id != null) PREFIX + id else YT_PREFIX + video)
+            .setUri(if (id != null) streamUri(id) else ytStreamUri(video!!))
+            .setMediaMetadata(
+                MediaMetadata.Builder()
+                    .setTitle(s.title)
+                    .setArtist(s.artist)
+                    .setAlbumTitle(s.album)
+                    .setDurationMs(s.durationS?.let { it * 1000L })
+                    .setArtworkUri(if (id != null) ArtProvider.trackArt(id) else s.thumbnail?.let(Uri::parse))
+                    .setExtras(android.os.Bundle().apply { video?.let { putString(VIDEO_ID, it) } })
+                    .setIsPlayable(true)
+                    .setIsBrowsable(false)
+                    .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
+                    .build()
+            )
+            .build()
+    }
+
+    fun toSong(i: MediaItem): RemoteSong {
+        val m = i.mediaMetadata
+        return RemoteSong(
+            trackId = trackId(i), videoId = videoId(i), title = m.title?.toString() ?: "",
+            artist = m.artist?.toString(), album = m.albumTitle?.toString(),
+            durationS = m.durationMs?.let { (it / 1000).toInt() },
+            thumbnail = m.artworkUri?.takeIf { it.scheme == "https" }?.toString(),
+        )
+    }
 
     /** Items sent from the app's screens (or the car) arrive without their URI; put it back. */
     fun restore(item: MediaItem, known: MediaItem? = null): MediaItem {
@@ -188,6 +226,7 @@ class PlaybackService : MediaLibraryService() {
         player.addListener(watcher!!)
         prefetcher = Prefetcher(player, songs, songs.forPrefetch(network), saved, scope)
         player.addListener(prefetcher!!)
+        startRemote(player)
 
         val bitmaps = CacheBitmapLoader(
             DataSourceBitmapLoader.Builder(this)
@@ -219,6 +258,7 @@ class PlaybackService : MediaLibraryService() {
     override fun onDestroy() {
         watcher?.finish()
         prefetcher?.stop()
+        dielify.remote.stop()
         scope.cancel()
         session?.run {
             player.release()
@@ -226,6 +266,59 @@ class PlaybackService : MediaLibraryService() {
         }
         session = null
         super.onDestroy()
+    }
+
+    // --- remote control: other devices see and control this phone ------------------------------
+
+    private fun startRemote(player: ExoPlayer) {
+        val remote = dielify.remote
+        remote.start(object : RemotePlayer {
+            override fun state(): RemoteState {
+                val count = player.mediaItemCount
+                val items = (0 until minOf(count, 1000)).map { MediaItems.toSong(player.getMediaItemAt(it)) }
+                return RemoteState(
+                    playing = player.isPlaying || (player.playWhenReady && player.playbackState == Player.STATE_BUFFERING),
+                    positionMs = player.currentPosition,
+                    durationMs = player.duration.takeIf { it > 0 },
+                    volume = player.volume,
+                    index = if (count > 0 && player.currentMediaItemIndex < items.size) player.currentMediaItemIndex else -1,
+                    queue = items,
+                )
+            }
+
+            override fun run(command: RemoteCommand, from: String) {
+                when (command.action) {
+                    "play" -> { if (player.playbackState == Player.STATE_IDLE) player.prepare(); player.play() }
+                    "pause" -> player.pause()
+                    "next" -> player.seekToNextMediaItem()
+                    "previous" -> player.seekToPrevious()
+                    "seek" -> command.positionMs?.let { player.seekTo(it) }
+                    "volume" -> command.value?.let { player.volume = it.coerceIn(0f, 1f) }
+                    "load" -> {
+                        val items = command.queue.orEmpty().mapNotNull(MediaItems::fromSong)
+                        if (items.isEmpty()) return
+                        player.setMediaItems(items, (command.index ?: 0).coerceIn(0, items.size - 1), command.positionMs ?: 0)
+                        player.prepare()
+                        player.playWhenReady = command.playing != false
+                    }
+                }
+            }
+        })
+        player.addListener(object : Player.Listener {
+            override fun onEvents(p: Player, events: Player.Events) {
+                if (events.containsAny(
+                        Player.EVENT_IS_PLAYING_CHANGED, Player.EVENT_MEDIA_ITEM_TRANSITION, Player.EVENT_TIMELINE_CHANGED,
+                        Player.EVENT_POSITION_DISCONTINUITY, Player.EVENT_VOLUME_CHANGED, Player.EVENT_PLAYBACK_STATE_CHANGED,
+                    )
+                ) remote.stateChanged()
+            }
+        })
+        scope.launch {  // keeps positions right on the other devices, and the connection busy
+            while (true) {
+                kotlinx.coroutines.delay(15_000)
+                remote.stateChanged()
+            }
+        }
     }
 
     // --- the browse tree (Android Auto) ---------------------------------------------------------

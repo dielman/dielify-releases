@@ -762,10 +762,142 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
+// --- remote control: this PC and your phones see and control each other ----------------------
+// The server only passes messages between devices of the same profile; nothing is stored.
+const remote = { ws: null, you: null, devices: [], at: 0, retry: 1000, timer: null, panel: null };
+
+function songOut(t) {
+  return { track_id: t.id || undefined, video_id: t.video_id || undefined, title: t.title,
+    artist: t.artist || undefined, album: t.album || undefined, thumbnail: t.thumb || undefined };
+}
+function remoteTrack(s) {
+  const lib = s.track_id;
+  return { id: lib || null, video_id: s.video_id || null, title: s.title || "", artist: s.artist || "", album: s.album || "",
+    stream_url: lib ? `/api/library/tracks/${lib}/stream` : `/api/yt/stream/${encodeURIComponent(s.video_id)}`,
+    cover_url: lib ? `/api/library/tracks/${lib}/cover` : null, thumb: lib ? null : (s.thumbnail || null) };
+}
+function myState() {
+  const on = !!player.current;
+  return { playing: on && !audio.paused, position_ms: Math.round(audio.currentTime * 1000),
+    duration_ms: Math.round((audio.duration || 0) * 1000) || null, volume: audio.volume,
+    index: on ? player.index : -1, queue: on ? player.list.map(songOut) : [] };
+}
+function remoteSend(msg) {
+  if (remote.ws && remote.ws.readyState === WebSocket.OPEN) remote.ws.send(JSON.stringify(msg));
+}
+function sendState() {
+  clearTimeout(remote.timer);
+  remote.timer = setTimeout(() => remoteSend({ type: "state", state: myState() }), 300);
+}
+["play", "pause", "seeked", "volumechange", "loadedmetadata", "ended"].forEach((e) => audio.addEventListener(e, sendState));
+setInterval(sendState, 15000);
+
+function remoteConnect() {
+  const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/remote?token=${encodeURIComponent(KEY)}`);
+  remote.ws = ws;
+  ws.onopen = () => {
+    remote.retry = 1000;
+    ws.send(JSON.stringify({ type: "hello", device: "pc-desktop", kind: "pc", state: myState() }));
+  };
+  ws.onmessage = (e) => {
+    let m;
+    try { m = JSON.parse(e.data); } catch { return; }
+    if (m.type === "devices") {
+      remote.you = m.you; remote.devices = m.devices; remote.at = Date.now();
+      $("btn-devices").classList.toggle("on", others().length > 0);
+      renderDevices();
+    } else if (m.type === "command") runCommand(m.command, m.from);
+    else if (m.type === "error") toast(m.message);
+  };
+  ws.onclose = () => {
+    if (remote.ws !== ws) return;
+    remote.ws = null; remote.devices = [];
+    $("btn-devices").classList.remove("on");
+    renderDevices();
+    setTimeout(remoteConnect, remote.retry);
+    remote.retry = Math.min(remote.retry * 2, 30000);
+  };
+}
+
+function runCommand(c, from) {
+  switch (c.action) {
+    case "play": if (player.current) audio.play().catch(() => {}); break;
+    case "pause": audio.pause(); break;
+    case "next": playAt(player.index + 1); break;
+    case "previous": $("btn-prev").click(); break;
+    case "seek": audio.currentTime = c.position_ms / 1000; break;
+    case "volume": audio.volume = c.value; $("volume").value = Math.round(c.value * 100); break;
+    case "load": {
+      player.list = c.queue.map(remoteTrack);
+      playAt(c.index);
+      const pos = c.position_ms / 1000;
+      audio.addEventListener("loadedmetadata", () => {
+        if (pos > 1) audio.currentTime = pos;
+        if (!c.playing) audio.pause();
+      }, { once: true });
+      toast(`${from} moved the music here`);
+      break;
+    }
+  }
+}
+
+const others = () => remote.devices.filter((d) => d.device !== remote.you);
+const nowPos = (st) => st.position_ms + (st.playing ? Date.now() - remote.at : 0);
+
+function renderDevices() {
+  const box = remote.panel;
+  if (!box) return;
+  if (box.contains(document.activeElement) && document.activeElement.type === "range") return;  // mid-drag
+  const panel = box.querySelector(".panel");
+  const list = others();
+  const here = !!player.current;
+  panel.replaceChildren(h("h2", {}, "Devices"),
+    !remote.ws ? h("p", { class: "muted" }, "Connecting…")
+      : !list.length ? h("p", { class: "muted" }, "No other devices right now. Your phone shows up here while Dielify is open or playing on it.")
+      : h("div", {}, list.map((d) => {
+        const st = d.state || {};
+        const song = st.index >= 0 && st.queue ? st.queue[st.index] : null;
+        const cmd = (command) => remoteSend({ type: "command", to: d.device, command });
+        const seek = h("input", { type: "range", min: 0, max: 1000, value: 0, "data-device": d.device, "aria-label": "Position",
+          onchange: (e) => cmd({ action: "seek", position_ms: Math.round((e.target.value / 1000) * (st.duration_ms || 0)) }) });
+        if (st.duration_ms) seek.value = Math.round((nowPos(st) / st.duration_ms) * 1000);
+        return h("div", { class: "device" },
+          h("div", {}, h("strong", {}, `${d.kind === "pc" ? "💻" : "📱"} ${d.name}`),
+            h("div", { class: "muted small" }, song ? `${st.playing ? "Playing" : "Paused"}: ${song.title}${song.artist ? ` · ${song.artist}` : ""}` : "Not playing")),
+          song ? h("div", { class: "row" },
+            h("button", { title: "Previous", onclick: () => cmd({ action: "previous" }) }, "⏮"),
+            h("button", { title: st.playing ? "Pause" : "Play", onclick: () => cmd({ action: st.playing ? "pause" : "play" }) }, st.playing ? "⏸" : "▶"),
+            h("button", { title: "Next", onclick: () => cmd({ action: "next" }) }, "⏭"),
+            st.duration_ms ? seek : null) : null,
+          song ? h("div", { class: "row" }, h("span", { class: "small muted" }, "Volume"),
+            h("input", { type: "range", min: 0, max: 100, value: Math.round((st.volume ?? 1) * 100), "aria-label": "Volume",
+              onchange: (e) => cmd({ action: "volume", value: e.target.value / 100 }) })) : null,
+          h("div", { class: "row" },
+            song ? h("button", { onclick: () => remoteSend({ type: "transfer", from: d.device, to: remote.you }) }, "Play it here") : null,
+            here ? h("button", { onclick: () => { remoteSend({ type: "transfer", from: remote.you, to: d.device }); toast(`Moving the music to ${d.name}…`); } },
+              `Move my music to ${d.name}`) : null));
+      })),
+    h("div", { class: "row", style: "margin-top:10px" }, h("button", { onclick: () => { box.remove(); remote.panel = null; } }, "Close")));
+}
+setInterval(() => {  // keep the other devices' position bars moving
+  if (!remote.panel) return;
+  remote.panel.querySelectorAll("input[data-device]").forEach((el) => {
+    const d = remote.devices.find((x) => x.device === el.dataset.device);
+    if (d && d.state && d.state.duration_ms && el !== document.activeElement) el.value = Math.round((nowPos(d.state) / d.state.duration_ms) * 1000);
+  });
+}, 1000);
+$("btn-devices").addEventListener("click", () => {
+  if (remote.panel) return;
+  const box = h("div", { class: "modal", onclick: (e) => { if (e.target === box) { box.remove(); remote.panel = null; } } }, h("div", { class: "panel" }));
+  remote.panel = box;
+  document.body.append(box);
+  renderDevices();
+});
+
 // --- start ----------------------------------------------------------------------------------------
 if (!KEY) show(h("p", { class: "pad warn" }, "Open Dielify from its desktop app."));
 else {
-  go("library"); pollDownloads();
+  go("library"); pollDownloads(); remoteConnect();
   $("update-pill").addEventListener("click", () => go("settings"));
   // the app checks in the background shortly after starting; pick up the result
   setTimeout(() => api("/api/desktop/update").then(showUpdatePill).catch(() => {}), 45000);

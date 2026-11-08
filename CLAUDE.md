@@ -78,6 +78,7 @@ src/dielify/
                   on a background thread; in-window YouTube sign-in (Bridge.sign_in)
   desktop_api.py  /api/desktop/*: PC-only settings, profiles, phone logins
                   (desktop key only; phones get 403)
+  remote.py       /api/remote WebSocket: devices of one profile see + control each other
   winint.py       single instance (named mutex + show event), HKCU Run key, MessageBox
   ui/             desktop screens: index.html, app.js, app.css (no build step)
   # planned (Phase 5): Tailscale binding, token management CLI, rate limits
@@ -343,6 +344,26 @@ src/dielify/
   Shown in phone Settings ("Kept from streaming"). Published **v0.8.5** (8 Nov). **Confirmed by Josh** ("all working"): PC log showed the playing song + next 5 fetched within 75 s, then quiet; played in flight mode.
 - Idea for later: pre-resolve the next song in a list so skipping feels instant (the
   0.8.5 prefetch now covers this for the phone).
+
+- Item 6 built (0.8.6): remote control. `remote.py` hub (in memory, per profile; hello /
+  state / command / transfer; songs = track_id or video_id; queue capped at 1,000; server
+  extrapolates positions). PC: player-bar 📱 Devices panel (control, volume, seek, "Play
+  it here", "Move my music to X"); PC is named after the computer (platform.node()).
+  Phone: `RemoteClient` (OkHttp WebSocket, connected while PlaybackService runs = app
+  open, playing, or recently paused), Devices screen from the top bar. Tested: 4 server
+  tests; PC panel live in the browser against a fake phone (pause, next, play here, move
+  there). Not yet: phone on a device. Step 2 (phone lock screen controls the PC) not built.
+
+## Backlog (Josh, 8 Nov; after Phase 8 item 6). Build together: they share one ratings table.
+
+- **Ratings:** thumbs up / down for songs and for artists. Thumbed-down ones can still
+  appear in discovery but are weighted low (mixes, For you, outside lists, radio).
+- **Ban ("mega dislike"):** hold the thumb down for a while: that song or artist never plays
+  again (skipped in any list, left out of discovery).
+- **Never-ending discovery play:** keeps playing new songs (not in the library) and
+  downloads them for Josh to check out; thumbs down on one removes its download from the
+  PC. To ask when building: delete only songs this mode downloaded (not ones already
+  kept)? Thumbs up = keep, no rating = keep or expire?
 
 ## Open questions for Josh
 

@@ -1,0 +1,105 @@
+"""Remote control between devices: /api/remote WebSocket hub."""
+
+import time
+
+import pytest
+from starlette.websockets import WebSocketDisconnect
+
+from dielify import auth, remote
+from test_api import login, make_client, setup  # noqa: F401  (setup: shared autouse fixture)
+
+SONGS = [{"track_id": 1, "title": "One", "artist": "A", "album": "X"},
+         {"video_id": "abc", "title": "Two", "artist": "B", "album": "Y", "evil": "<script>"}]
+
+
+def connect(c, h, device, name, kind="phone"):
+    ws = c.websocket_connect("/api/remote", headers=h)
+    ws.__enter__()
+    ws.send_json({"type": "hello", "device": device, "name": name, "kind": kind})
+    return ws
+
+
+def devices(ws):
+    while True:
+        msg = ws.receive_json()
+        if msg["type"] == "devices":
+            return msg
+
+
+def test_needs_sign_in():
+    with make_client() as c:
+        with pytest.raises(WebSocketDisconnect) as e:
+            with c.websocket_connect("/api/remote") as ws:
+                ws.receive_text()
+        assert e.value.code == 4401
+        with pytest.raises(WebSocketDisconnect):
+            with c.websocket_connect("/api/remote?token=dielify_nope") as ws:
+                ws.receive_text()
+
+
+def test_devices_see_each_other_and_control():
+    with make_client() as c:
+        h = login(c)
+        phone = connect(c, h, "p1", "Pixel")
+        assert [d["name"] for d in devices(phone)["devices"]] == ["Pixel"]
+        pc = connect(c, login(c, device="pc"), "pc1", "Gamerig", "pc")
+        listing = devices(pc)
+        assert listing["you"] == "pc1" and {d["name"] for d in listing["devices"]} == {"Pixel", "Gamerig"}
+        assert len(devices(phone)["devices"]) == 2
+
+        pc.send_json({"type": "state", "state": {"playing": True, "position_ms": 1000, "duration_ms": 200000,
+                                                 "volume": 0.5, "index": 1, "queue": SONGS}})
+        time.sleep(0.2)
+        st = next(d for d in devices(phone)["devices"] if d["device"] == "pc1")["state"]
+        assert st["playing"] and st["index"] == 1 and st["position_ms"] >= 1000
+        assert "evil" not in st["queue"][1]                         # unknown keys dropped
+
+        phone.send_json({"type": "command", "to": "pc1", "command": {"action": "seek", "position_ms": 5000}})
+        msg = pc.receive_json()
+        while msg["type"] != "command":
+            msg = pc.receive_json()
+        assert msg == {"type": "command", "from": "Pixel", "command": {"action": "seek", "position_ms": 5000}}
+
+        phone.send_json({"type": "command", "to": "pc1", "command": {"action": "format_disk"}})
+        msg = phone.receive_json()
+        while msg["type"] != "error":
+            msg = phone.receive_json()
+
+        # move playback from the PC to the phone: phone gets the queue + position, PC pauses
+        phone.send_json({"type": "transfer", "from": "pc1", "to": "p1"})
+        got = phone.receive_json()
+        while got["type"] != "command":
+            got = phone.receive_json()
+        cmd = got["command"]
+        assert cmd["action"] == "load" and cmd["index"] == 1 and cmd["position_ms"] >= 1000
+        assert [s["title"] for s in cmd["queue"]] == ["One", "Two"]
+        paused = pc.receive_json()
+        while paused["type"] != "command":
+            paused = pc.receive_json()
+        assert paused["command"] == {"action": "pause"}
+
+        pc.__exit__(None, None, None)
+        assert [d["name"] for d in devices(phone)["devices"]] == ["Pixel"]   # gone when it closes
+        phone.__exit__(None, None, None)
+
+
+def test_other_profiles_are_invisible():
+    auth.add_user("kid", "kid", password="pw")
+    with make_client() as c:
+        a = connect(c, login(c), "p1", "Josh phone")
+        devices(a)
+        b = connect(c, login(c, "kid", "pw"), "k1", "Kid phone")
+        assert [d["name"] for d in devices(b)["devices"]] == ["Kid phone"]
+        b.send_json({"type": "command", "to": "p1", "command": {"action": "pause"}})
+        msg = b.receive_json()
+        while msg["type"] != "error":
+            msg = b.receive_json()
+        a.__exit__(None, None, None)
+        b.__exit__(None, None, None)
+
+
+def test_position_moves_while_playing():
+    st = remote.clean_state({"playing": True, "position_ms": 1000, "duration_ms": 3000, "queue": SONGS, "index": 0})
+    assert remote.now_position(st, time.monotonic() - 1.5) >= 2400
+    assert remote.now_position(st, time.monotonic() - 10) == 3000
+    assert remote.now_position({**st, "playing": False}, time.monotonic() - 10) == 1000

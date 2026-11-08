@@ -25,6 +25,8 @@ class DielifyApp : Application(), SingletonImageLoader.Factory {
         private set
     /** Streamed songs kept for a while + the next few fetched ahead (one per process). */
     val songCache by lazy { com.dielify.app.playback.SongCache(this) }
+    /** Remote control between devices (connected while the playback service runs). */
+    val remote by lazy { com.dielify.app.net.RemoteClient(this, server) }
 
     override fun onCreate() {
         super.onCreate()

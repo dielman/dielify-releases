@@ -41,6 +41,7 @@ def create_app(queue: DownloadQueue | None = None) -> FastAPI:
     from .custom_api import youtube
     from .desktop_api import router as desktop_router
     from .playlist_api import router as playlist_router
+    from .remote import router as remote_router
     from .discovery import Discovery
     from .mixes import MixMaker
     from .playlists import Playlists
@@ -73,6 +74,7 @@ def create_app(queue: DownloadQueue | None = None) -> FastAPI:
     app.include_router(subsonic_router)
     app.include_router(custom_router)
     app.include_router(playlist_router)
+    app.include_router(remote_router)
     app.include_router(desktop_router)
     # The desktop app's screens. They hold no data; everything comes from /api with a key.
     app.mount("/ui", StaticFiles(directory=UI_DIR, html=True), name="ui")

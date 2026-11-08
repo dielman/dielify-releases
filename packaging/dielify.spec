@@ -5,7 +5,7 @@
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 ROOT = SPECPATH + "\\.."
-hidden = (collect_submodules("uvicorn") + collect_submodules("dielify")
+hidden = (collect_submodules("uvicorn") + collect_submodules("websockets") + collect_submodules("dielify")
           + ["pystray._win32", "webview.platforms.winforms", "webview.platforms.edgechromium"])
 datas = [(ROOT + "\\src\\dielify\\ui", "dielify\\ui")] + collect_data_files("ytmusicapi")
 
