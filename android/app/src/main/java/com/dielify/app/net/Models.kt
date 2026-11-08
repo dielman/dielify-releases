@@ -251,3 +251,10 @@ data class SongIn(
 )
 
 @Serializable data class AddSongs(val songs: List<SongIn>)
+
+// --- outside discovery (radio charts, ListenBrainz) ------------------------------------------
+
+@Serializable
+data class OutsideShelf(val key: String, val title: String, val subtitle: String? = null, val items: List<Item>)
+
+@Serializable data class OutsideDiscovery(val shelves: List<OutsideShelf>)

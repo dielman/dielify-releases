@@ -247,6 +247,7 @@ class Server(private val context: Context, private val accounts: AccountStore) {
     // Playlists in Dielify (synced with YouTube Music when ytId is set)
     suspend fun playlists(): List<PlaylistSummary> = get<PlaylistList>("api/playlists").playlists
     suspend fun mixes(): MixStatus = get("api/mixes")
+    suspend fun outside(): List<OutsideShelf> = get<OutsideDiscovery>("api/discover/outside").shelves
     suspend fun playlist(id: Long): PlaylistDetail = get("api/playlists/$id")
     suspend fun createPlaylist(name: String, onYoutube: Boolean): PlaylistDetail =
         json.decodeFromString(send("POST", "api/playlists",

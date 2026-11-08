@@ -322,6 +322,16 @@ src/dielify/
   waits 30 min, and his library has 1,084 album artists (so ~2 h to the 80% needed).
   0.8.3 (published): looks up the whole library in one pass (~20-25 min at 1/s), then
   builds mixes. **Confirmed by Josh** ("Mixes look good").
+- Item 5 built (0.8.4): outside discovery. `discovery.py`: ABC public plays API
+  (music.abcradio.net.au/api/v1/plays/search.json, station triplej / doublej / unearthed,
+  from/to + offset paging, ~2,300-3,000 plays a week each; there is no charts endpoint)
+  counted into "most played this week"; ListenBrainz sitewide recordings (week, max 2
+  per artist: BTS filled the top); ListenBrainz labs similar-artists (algorithm string in
+  LB_ALGORITHM) for the top 3 played artists with MusicBrainz ids -> artists not in the
+  library -> 2 YouTube songs each. Matches cached 30 days in ext_matches (artist must
+  match); lists in discovery_lists, rebuilt daily (first run 3 min after start). Live
+  trial: triple j top 8 all matched correctly. GET /api/discover/outside (+ /refresh).
+  Apps: "From around the web" section in Discover.
 - Idea for later: pre-resolve the next song in a list so skipping feels instant.
 
 ## Open questions for Josh

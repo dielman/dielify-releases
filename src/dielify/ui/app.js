@@ -223,6 +223,11 @@ async function viewDiscover() {
     const [home, charts, forYou, mixStatus] = await Promise.all([api("/api/discover/home?shelves=8"),
       api("/api/discover/charts").catch(() => null), api("/api/discover/for-you").catch(() => null),
       api("/api/mixes").catch(() => null)]);
+    const outside = await api("/api/discover/outside").catch(() => ({ shelves: [] }));
+    const web = outside.shelves.length ? [h("h1", { style: "margin-top:28px" }, "From around the web"),
+      h("p", { class: "muted small" }, "Radio charts and ListenBrainz, found on YouTube Music. Updated daily."),
+      outside.shelves.map((s) => [h("h2", {}, s.title), h("div", { class: "shelf" }, s.items.map(ytCard))]),
+      h("h1", { style: "margin-top:28px" }, "From YouTube Music")] : null;
     const madeForYou = mixStatus && mixStatus.mixes.length
       ? [h("h2", {}, "Made for you"), h("div", { class: "shelf" }, mixStatus.mixes.map(playlistCard))] : null;
     const shelves = home.shelves.filter((s) => s.items.length).map((s) =>
@@ -235,7 +240,7 @@ async function viewDiscover() {
     const mine = forYou ? [trackShelf("On repeat", forYou.on_repeat),
       forYou.more_like.length ? [h("h2", {}, "More like your top songs"), h("div", { class: "shelf" }, forYou.more_like.map(ytCard))] : null,
       trackShelf("Forgotten favourites", forYou.forgotten)] : null;
-    if (view === "discover") show(h("h1", {}, "Discover"), madeForYou, mine, shelves, chartShelf);
+    if (view === "discover") show(h("h1", {}, "Discover"), madeForYou, mine, web, shelves, chartShelf);
   } catch (e) { failed(e); }
 }
 
