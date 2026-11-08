@@ -1617,6 +1617,448 @@
         ]
       }
     },
+    "/api/playlists": {
+      "get": {
+        "tags": [
+          "playlists"
+        ],
+        "summary": "List Playlists",
+        "operationId": "list_playlists_api_playlists_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaylistList"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "playlists"
+        ],
+        "summary": "Create Playlist",
+        "operationId": "create_playlist_api_playlists_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewPlaylist"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaylistDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/playlists/import": {
+      "post": {
+        "tags": [
+          "playlists"
+        ],
+        "summary": "Import Playlist",
+        "description": "Start syncing one of your YouTube Music playlists (its songs are downloaded).",
+        "operationId": "import_playlist_api_playlists_import_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportPlaylist"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaylistDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/playlists/{playlist_id}": {
+      "get": {
+        "tags": [
+          "playlists"
+        ],
+        "summary": "Get Playlist",
+        "operationId": "get_playlist_api_playlists__playlist_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "playlist_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Playlist Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaylistDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "playlists"
+        ],
+        "summary": "Rename Playlist",
+        "operationId": "rename_playlist_api_playlists__playlist_id__patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "playlist_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Playlist Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenamePlaylist"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaylistDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "playlists"
+        ],
+        "summary": "Delete Playlist",
+        "operationId": "delete_playlist_api_playlists__playlist_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "playlist_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Playlist Id"
+            }
+          },
+          {
+            "name": "on_youtube",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Also delete it on YouTube Music",
+              "default": false,
+              "title": "On Youtube"
+            },
+            "description": "Also delete it on YouTube Music"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/playlists/{playlist_id}/songs": {
+      "post": {
+        "tags": [
+          "playlists"
+        ],
+        "summary": "Add Songs",
+        "description": "Add songs (also on YouTube Music if synced). Songs not in your library download.",
+        "operationId": "add_songs_api_playlists__playlist_id__songs_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "playlist_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Playlist Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddSongs"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaylistDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/playlists/{playlist_id}/entries/{entry_id}": {
+      "delete": {
+        "tags": [
+          "playlists"
+        ],
+        "summary": "Remove Entry",
+        "operationId": "remove_entry_api_playlists__playlist_id__entries__entry_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "playlist_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Playlist Id"
+            }
+          },
+          {
+            "name": "entry_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Entry Id"
+            }
+          },
+          {
+            "name": "on_youtube",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Required for synced playlists: removes it there too",
+              "default": false,
+              "title": "On Youtube"
+            },
+            "description": "Required for synced playlists: removes it there too"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaylistDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/playlists/{playlist_id}/sync": {
+      "post": {
+        "tags": [
+          "playlists"
+        ],
+        "summary": "Sync Playlist",
+        "operationId": "sync_playlist_api_playlists__playlist_id__sync_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "playlist_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Playlist Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaylistDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/desktop/status": {
       "get": {
         "tags": [
@@ -2112,6 +2554,24 @@
   },
   "components": {
     "schemas": {
+      "AddSongs": {
+        "properties": {
+          "songs": {
+            "items": {
+              "$ref": "#/components/schemas/SongIn"
+            },
+            "type": "array",
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Songs"
+          }
+        },
+        "type": "object",
+        "required": [
+          "songs"
+        ],
+        "title": "AddSongs"
+      },
       "Album": {
         "properties": {
           "id": {
@@ -2968,6 +3428,21 @@
         ],
         "title": "HomeFeed"
       },
+      "ImportPlaylist": {
+        "properties": {
+          "yt_id": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 2,
+            "title": "Yt Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "yt_id"
+        ],
+        "title": "ImportPlaylist"
+      },
       "Item": {
         "properties": {
           "type": {
@@ -3226,6 +3701,27 @@
         ],
         "title": "NewPhoneUser"
       },
+      "NewPlaylist": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 150,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "on_youtube": {
+            "type": "boolean",
+            "title": "On Youtube",
+            "description": "Also create it (private) on YouTube Music and keep it synced",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "NewPlaylist"
+      },
       "NewProfile": {
         "properties": {
           "name": {
@@ -3458,6 +3954,144 @@
         "type": "object",
         "title": "PlayReport"
       },
+      "PlaylistDetail": {
+        "properties": {
+          "playlist": {
+            "$ref": "#/components/schemas/PlaylistSummary"
+          },
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/PlaylistEntry"
+            },
+            "type": "array",
+            "title": "Entries"
+          }
+        },
+        "type": "object",
+        "required": [
+          "playlist",
+          "entries"
+        ],
+        "title": "PlaylistDetail"
+      },
+      "PlaylistEntry": {
+        "properties": {
+          "entry_id": {
+            "type": "integer",
+            "title": "Entry Id",
+            "description": "Use to remove this entry"
+          },
+          "item": {
+            "$ref": "#/components/schemas/Item"
+          }
+        },
+        "type": "object",
+        "required": [
+          "entry_id",
+          "item"
+        ],
+        "title": "PlaylistEntry"
+      },
+      "PlaylistList": {
+        "properties": {
+          "playlists": {
+            "items": {
+              "$ref": "#/components/schemas/PlaylistSummary"
+            },
+            "type": "array",
+            "title": "Playlists"
+          }
+        },
+        "type": "object",
+        "required": [
+          "playlists"
+        ],
+        "title": "PlaylistList"
+      },
+      "PlaylistSummary": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "yt_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Yt Id",
+            "description": "Set when synced with this YouTube Music playlist"
+          },
+          "read_only": {
+            "type": "boolean",
+            "title": "Read Only",
+            "description": "Synced one way only (e.g. Liked Music)"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          },
+          "pending": {
+            "type": "integer",
+            "title": "Pending",
+            "description": "Edits waiting to be sent to YouTube"
+          },
+          "synced_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Synced At"
+          },
+          "sync_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sync Error"
+          },
+          "thumbnail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thumbnail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "yt_id",
+          "read_only",
+          "count",
+          "pending",
+          "synced_at",
+          "sync_error",
+          "thumbnail"
+        ],
+        "title": "PlaylistSummary"
+      },
       "PlaysRecorded": {
         "properties": {
           "recorded": {
@@ -3503,6 +4137,21 @@
           "tracks"
         ],
         "title": "ProfileInfo"
+      },
+      "RenamePlaylist": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 150,
+            "minLength": 1,
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "RenamePlaylist"
       },
       "ScanResult": {
         "properties": {
@@ -3643,6 +4292,74 @@
           "items"
         ],
         "title": "Shelf"
+      },
+      "SongIn": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 20,
+            "minLength": 1,
+            "title": "Id",
+            "description": "YouTube video id"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type",
+            "default": "song"
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 300,
+            "title": "Title"
+          },
+          "artists": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Artists",
+            "default": []
+          },
+          "album": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Album"
+          },
+          "duration_s": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration S"
+          },
+          "thumbnail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thumbnail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "SongIn"
       },
       "StarChange": {
         "properties": {

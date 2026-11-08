@@ -38,23 +38,31 @@ UI_CSP = ("default-src 'self'; script-src 'self'; connect-src 'self'; media-src 
 
 def create_app(queue: DownloadQueue | None = None) -> FastAPI:
     from .custom_api import router as custom_router
+    from .custom_api import youtube
     from .desktop_api import router as desktop_router
+    from .playlist_api import router as playlist_router
+    from .playlists import Playlists
     from .subsonic_api import router as subsonic_router
 
     queue = queue or DownloadQueue()
+    playlists = Playlists(youtube.call, queue)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         queue.start()
+        playlists.start()
         yield
+        playlists.stop()
         queue.stop()
 
     # /api/openapi.json is the Android app's contract (also saved in docs/openapi.json).
     app = FastAPI(title="Dielify", version=__version__, lifespan=lifespan,
                   docs_url="/api/docs", redoc_url=None, openapi_url="/api/openapi.json")
     app.state.queue = queue
+    app.state.playlists = playlists
     app.include_router(subsonic_router)
     app.include_router(custom_router)
+    app.include_router(playlist_router)
     app.include_router(desktop_router)
     # The desktop app's screens. They hold no data; everything comes from /api with a key.
     app.mount("/ui", StaticFiles(directory=UI_DIR, html=True), name="ui")

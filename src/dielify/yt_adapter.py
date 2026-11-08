@@ -506,6 +506,59 @@ class YTMusicAdapter:
         tracks = _items(t for t in raw.get("tracks") or [] if t.get("isAvailable", True))
         return info, tracks[:limit]
 
+    # --- your playlists: reading with the details needed to edit, and editing ----------
+
+    def playlist_entries(self, playlist_id: str, limit: int = 5000) -> tuple[YTItem, list[tuple[YTItem, str | None]]]:
+        """A playlist with each song's setVideoId (YouTube's id for that entry, needed to
+        remove it again)."""
+        raw = self._call("Loading the playlist", self._yt.get_playlist, playlist_id, limit=limit)
+        info = to_item({**raw, "playlistId": playlist_id}) or YTItem("playlist", playlist_id, raw.get("title") or "")
+        entries = []
+        for t in raw.get("tracks") or []:
+            if not t.get("videoId") or not t.get("isAvailable", True):
+                continue
+            item = to_item(t)
+            if item is not None:
+                entries.append((item, t.get("setVideoId")))
+        return info, entries[:limit]
+
+    @staticmethod
+    def _check_edit(what: str, result) -> None:
+        """ytmusicapi returns "STATUS_SUCCEEDED" (or a dict with that status) when an edit
+        worked, and the raw response otherwise."""
+        status = result.get("status") if isinstance(result, dict) else result
+        if isinstance(status, str) and "SUCCEEDED" not in status:
+            raise YouTubeError(f"{what}: YouTube said {status}")
+        if isinstance(result, dict) and "error" in result:
+            raise YouTubeError(f"{what}: YouTube refused it")
+
+    def create_playlist(self, title: str, description: str = "") -> str:
+        """A new PRIVATE playlist on the account. Returns its id."""
+        result = self._call("Creating the playlist", self._yt.create_playlist, title, description, "PRIVATE")
+        if isinstance(result, str) and result:
+            return result
+        raise YouTubeError(f"Creating the playlist: YouTube said {result}")
+
+    def add_to_playlist(self, playlist_id: str, video_ids: list[str]) -> None:
+        if video_ids:
+            self._check_edit("Adding to the playlist", self._call(
+                "Adding to the playlist", self._yt.add_playlist_items, playlist_id, video_ids, duplicates=True))
+
+    def remove_from_playlist(self, playlist_id: str, entries: list[tuple[str, str]]) -> None:
+        """entries: (videoId, setVideoId) pairs."""
+        if entries:
+            self._check_edit("Removing from the playlist", self._call(
+                "Removing from the playlist", self._yt.remove_playlist_items, playlist_id,
+                [{"videoId": v, "setVideoId": s} for v, s in entries]))
+
+    def rename_playlist(self, playlist_id: str, title: str) -> None:
+        self._check_edit("Renaming the playlist", self._call(
+            "Renaming the playlist", self._yt.edit_playlist, playlist_id, title=title))
+
+    def delete_playlist(self, playlist_id: str) -> None:
+        self._check_edit("Deleting the playlist", self._call(
+            "Deleting the playlist", self._yt.delete_playlist, playlist_id))
+
     def my_playlists(self) -> list[YTItem]:
         """The signed-in account's own playlists in YouTube Music (and Liked Music)."""
         raw = self._call("Loading your playlists", self._yt.get_library_playlists, limit=None)

@@ -108,6 +108,45 @@ CREATE TABLE IF NOT EXISTS plays (
 );
 CREATE INDEX IF NOT EXISTS plays_when ON plays(profile, started_at);
 
+-- Playlists (playlists.py). yt_id set = synced with that YouTube Music playlist.
+CREATE TABLE IF NOT EXISTS playlists (
+    id          INTEGER PRIMARY KEY,
+    profile     TEXT NOT NULL,
+    name        TEXT NOT NULL,
+    yt_id       TEXT,
+    read_only   INTEGER NOT NULL DEFAULT 0,   -- e.g. Liked Music: synced one way only
+    created_at  REAL NOT NULL,
+    updated_at  REAL NOT NULL,
+    synced_at   REAL,
+    sync_error  TEXT,
+    UNIQUE (profile, yt_id)
+);
+CREATE TABLE IF NOT EXISTS playlist_items (
+    id            INTEGER PRIMARY KEY,
+    playlist_id   INTEGER NOT NULL REFERENCES playlists(id) ON DELETE CASCADE,
+    position      INTEGER NOT NULL,
+    video_id      TEXT NOT NULL,
+    set_video_id  TEXT,               -- YouTube's id for this entry (needed to remove it)
+    title         TEXT NOT NULL,
+    artist        TEXT,
+    album         TEXT,
+    duration_s    INTEGER,
+    thumbnail     TEXT,
+    added_at      REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS playlist_items_list ON playlist_items(playlist_id, position);
+-- Edits not yet sent to YouTube (it couldn't be reached); retried on the next sync.
+CREATE TABLE IF NOT EXISTS playlist_ops (
+    id           INTEGER PRIMARY KEY,
+    playlist_id  INTEGER NOT NULL REFERENCES playlists(id) ON DELETE CASCADE,
+    op           TEXT NOT NULL,        -- add | remove | rename
+    video_id     TEXT,
+    set_video_id TEXT,
+    title        TEXT,
+    created_at   REAL NOT NULL,
+    error        TEXT
+);
+
 -- Logins for our own API (auth.py): only a hash of each token is kept.
 CREATE TABLE IF NOT EXISTS device_tokens (
     id           INTEGER PRIMARY KEY,

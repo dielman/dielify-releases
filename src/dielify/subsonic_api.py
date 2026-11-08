@@ -24,7 +24,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
 from starlette.concurrency import run_in_threadpool
 
-from . import __version__, auth
+from . import __version__, auth, playlists
 from . import settings as settings_mod
 from .library import CONTENT_TYPES, Library
 from .tagging import read_cover
@@ -205,7 +205,6 @@ def _empty(name: str, payload: dict):
 
 # Features later phases may fill in; until then clients get valid empty answers.
 for _name, _payload in {
-    "getPlaylists": {"playlists": {"playlist": []}},
     "getGenres": {"genres": {"genre": []}},
     "getNowPlaying": {"nowPlaying": {"entry": []}},
     "getArtistInfo": {"artistInfo": {}},
@@ -286,6 +285,40 @@ def get_album(ctx: Ctx) -> dict:
     if a is None:
         raise ApiError(NOT_FOUND, "Album not found")
     return {"album": {**album(a), "song": [song(t) for t in ctx.lib.tracks_on_album(aid)]}}
+
+
+def _playlist_songs(ctx: Ctx, p: dict) -> list:
+    """Only songs in the library can be played by Subsonic apps."""
+    have = ctx.lib.video_ids()
+    out = []
+    for i in p["items"]:
+        tid = have.get(i["video_id"])
+        t = ctx.lib.track(tid) if tid else None
+        if t is not None:
+            out.append(song(t))
+    return out
+
+
+def _playlist(ctx: Ctx, p: dict, songs: list | None = None) -> dict:
+    n = len(songs) if songs is not None else len(_playlist_songs(ctx, playlists.get(ctx.lib.profile, p["id"])))
+    return {"id": f"pl-{p['id']}", "name": p["name"], "owner": ctx.user.name if ctx.user else "",
+            "public": False, "songCount": n, "duration": 0,
+            "created": _iso(p["created_at"]), "changed": _iso(p["updated_at"])}
+
+
+@api("getPlaylists")
+def get_playlists(ctx: Ctx) -> dict:
+    return {"playlists": {"playlist": [_playlist(ctx, p) for p in playlists.all_playlists(ctx.lib.profile)]}}
+
+
+@api("getPlaylist")
+def get_playlist(ctx: Ctx) -> dict:
+    _, pid = parse_id(ctx.p.need("id"), "pl")
+    p = playlists.get(ctx.lib.profile, pid)
+    if p is None:
+        raise ApiError(NOT_FOUND, "Playlist not found")
+    songs = _playlist_songs(ctx, p)
+    return {"playlist": {**_playlist(ctx, p, songs), "entry": songs}}
 
 
 @api("getSong")
