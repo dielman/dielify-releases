@@ -431,7 +431,7 @@ src/dielify/
   Also in 0.8.12 (Josh, 9 Nov): "On repeat" removed from Discover in both apps (YouTube's
   home has its own); PC player bar: icons centred, plain prev/next like the thumbs, only
   Play is a filled circle. **Confirmed by Josh** ("thats all working", 9 Nov).
-- **Built in 0.8.13 (not published): Up next** (Josh: "should have been a core feature long
+- **Published v0.8.13 (9 Nov; not yet confirmed by Josh): Up next** (Josh: "should have been a core feature long
   ago"). PC: player-bar queue button opens a panel (now playing + coming songs; click to
   jump, drag to move, Play next, remove, Clear); song rows / album / playlist pages get
   "Play next / Add to queue". Phone: Up next sheet from Now playing (tap to jump, Play
