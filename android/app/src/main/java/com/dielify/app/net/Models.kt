@@ -215,6 +215,8 @@ data class PlaylistSummary(
     val name: String,
     @SerialName("yt_id") val ytId: String? = null,
     @SerialName("read_only") val readOnly: Boolean = false,
+    val kind: String = "user",
+    val description: String? = null,
     val count: Int = 0,
     val pending: Int = 0,
     @SerialName("synced_at") val syncedAt: Double? = null,
@@ -223,6 +225,14 @@ data class PlaylistSummary(
 )
 
 @Serializable data class PlaylistList(val playlists: List<PlaylistSummary>)
+
+@Serializable
+data class MixStatus(
+    val mixes: List<PlaylistSummary>,
+    val artists: Int = 0,
+    @SerialName("looked_up") val lookedUp: Int = 0,
+    @SerialName("built_at") val builtAt: Double? = null,
+)
 @Serializable data class PlaylistEntry(@SerialName("entry_id") val entryId: Long, val item: Item)
 @Serializable data class PlaylistDetail(val playlist: PlaylistSummary, val entries: List<PlaylistEntry>)
 @Serializable data class NewPlaylist(val name: String, @SerialName("on_youtube") val onYoutube: Boolean)

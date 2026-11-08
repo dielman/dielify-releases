@@ -54,7 +54,7 @@ import com.dielify.app.net.PlaylistEntry
 import com.dielify.app.net.PlaylistSummary
 import com.dielify.app.net.SongIn
 
-private fun describe(p: PlaylistSummary): String = listOfNotNull(
+private fun describe(p: PlaylistSummary): String = if (p.kind == "mix") "${p.count} songs · ${p.description ?: "Dielify mix"} · new every week" else listOfNotNull(
     "${p.count} songs",
     when {
         p.readOnly -> "from YouTube Music (one way)"
@@ -70,13 +70,29 @@ fun PlaylistsTab(vm: AppViewModel) {
     val version by vm.playlistsVersion.collectAsStateWithLifecycle()
     var creating by remember { mutableStateOf(false) }
     Loaded(vm, "playlists-$version", {
-        val mine = vm.server.playlists()
+        val all = vm.server.playlists()
         val yt = runCatching { vm.server.myPlaylists() }.getOrDefault(emptyList())
-        mine to yt
-    }) { (mine, yt) ->
+        val status = runCatching { vm.server.mixes() }.getOrNull()
+        Triple(all, yt, status)
+    }) { (all, yt, status) ->
+        val mine = all.filter { it.kind != "mix" }
+        val mixes = all.filter { it.kind == "mix" }
         val synced = mine.mapNotNull { it.ytId }.toSet()
         val notSynced = yt.filter { it.id !in synced }
         LazyColumn(Modifier.fillMaxSize()) {
+            item {
+                Text("Dielify mixes", style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 4.dp))
+                if (mixes.isEmpty()) Text(
+                    if (status != null && status.artists > 0 && status.lookedUp < status.artists)
+                        "Dielify is learning your genres (${status.lookedUp} of ${status.artists} artists looked up). " +
+                            "Your genre, decade and vibe mixes appear when it's done."
+                    else "Your genre, decade and vibe mixes appear here once your library has enough songs.",
+                    Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            items(mixes, key = { "m${it.id}" }) { p -> PlaylistRow(vm, p) }
             item {
                 Row(Modifier.fillMaxWidth().padding(16.dp, 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("Your playlists", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
@@ -87,23 +103,7 @@ fun PlaylistsTab(vm: AppViewModel) {
                 Text("None yet. Make one, or sync one of your YouTube Music playlists below.",
                     Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            items(mine, key = { "p${it.id}" }) { p ->
-                Row(
-                    Modifier.fillMaxWidth().clickable { vm.open(Screen.PlaylistPage(p.id, p.name)) }
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Thumb(p.thumbnail, 52.dp)
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(p.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(describe(p), maxLines = 1, overflow = TextOverflow.Ellipsis,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (p.syncError != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    if (p.ytId != null) Icon(Icons.Filled.Sync, "Synced", tint = MaterialTheme.colorScheme.primary)
-                }
-            }
+            items(mine, key = { "p${it.id}" }) { p -> PlaylistRow(vm, p) }
             if (notSynced.isNotEmpty()) {
                 item {
                     Text("On YouTube Music, not synced", style = MaterialTheme.typography.titleMedium,
@@ -139,6 +139,48 @@ fun PlaylistsTab(vm: AppViewModel) {
 }
 
 @Composable
+private fun PlaylistRow(vm: AppViewModel, p: PlaylistSummary) {
+    Row(
+        Modifier.fillMaxWidth().clickable { vm.open(Screen.PlaylistPage(p.id, p.name)) }
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Thumb(p.thumbnail, 52.dp)
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(p.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(describe(p), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (p.syncError != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        if (p.ytId != null) Icon(Icons.Filled.Sync, "Synced", tint = MaterialTheme.colorScheme.primary)
+    }
+}
+
+/** "Made for you" on Discover: the Dielify mixes as cards. */
+@Composable
+fun MixShelf(vm: AppViewModel, mixes: List<PlaylistSummary>) {
+    if (mixes.isEmpty()) return
+    Text("Made for you", style = MaterialTheme.typography.titleMedium,
+        modifier = Modifier.padding(start = 16.dp, top = 20.dp, bottom = 8.dp))
+    androidx.compose.foundation.lazy.LazyRow(
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        items(mixes, key = { it.id }) { p ->
+            Column(Modifier.width(150.dp).clickable { vm.open(Screen.PlaylistPage(p.id, p.name)) }) {
+                Thumb(p.thumbnail, 150.dp)
+                Spacer(Modifier.height(6.dp))
+                Text(p.name, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Medium,
+                    style = MaterialTheme.typography.bodyMedium)
+                Text("${p.count} songs", maxLines = 1, style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+@Composable
 fun PlaylistScreen(vm: AppViewModel, page: Screen.PlaylistPage) {
     val version by vm.playlistsVersion.collectAsStateWithLifecycle()
     var menu by remember { mutableStateOf(false) }
@@ -153,7 +195,7 @@ fun PlaylistScreen(vm: AppViewModel, page: Screen.PlaylistPage) {
                 val p = current
                 if (p != null && !p.readOnly) DropdownMenuItem(text = { Text("Rename") },
                     leadingIcon = { Icon(Icons.Filled.Edit, null) }, onClick = { menu = false; renaming = true })
-                if (p != null) DropdownMenuItem(text = { Text("Delete playlist") },
+                if (p != null && p.kind != "mix") DropdownMenuItem(text = { Text("Delete playlist") },
                     leadingIcon = { Icon(Icons.Filled.Delete, null) }, onClick = { menu = false; deleting = true })
             }
         }

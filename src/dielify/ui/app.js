@@ -113,16 +113,21 @@ async function viewLibrary(tab = libTab) {
     let body;
     if (tab === "playlists") {
       show(welcome(), h("h1", {}, "Library"), tabs, h("p", { class: "muted" }, "Loading playlists…"));
-      const [{ playlists }, yt] = await Promise.all([api("/api/playlists"),
-        api("/api/yt/my-playlists").catch(() => ({ items: [] }))]);
+      const [{ playlists: all }, yt, mixStatus] = await Promise.all([api("/api/playlists"),
+        api("/api/yt/my-playlists").catch(() => ({ items: [] })), api("/api/mixes").catch(() => null)]);
+      const playlists = all.filter((p) => p.kind !== "mix");
+      const mixList = all.filter((p) => p.kind === "mix");
       const synced = new Set(playlists.map((p) => p.yt_id).filter(Boolean));
       const notSynced = yt.items.filter((i) => !synced.has(i.id));
       body = [
+        h("h2", {}, "Dielify mixes"),
+        mixList.length ? h("div", { class: "grid" }, mixList.map(playlistCard))
+          : h("p", { class: "muted small" }, mixStatus && mixStatus.artists && mixStatus.looked_up < mixStatus.artists
+            ? `Dielify is learning your genres (${mixStatus.looked_up} of ${mixStatus.artists} artists looked up). Your genre, decade and vibe mixes appear when it's done.`
+            : "Your genre, decade and vibe mixes appear here once your library has enough songs."),
         h("div", { class: "row" }, h("h2", { style: "flex:1" }, "Your playlists"),
           h("button", { class: "primary", onclick: () => newPlaylist([]) }, "New playlist")),
-        playlists.length ? h("div", { class: "grid" }, playlists.map((p) =>
-          h("div", { class: "card", onclick: () => viewPlaylist(p.id) }, art(p.thumbnail),
-            h("div", { class: "t" }, p.name), h("div", { class: "s" }, describePlaylist(p)))))
+        playlists.length ? h("div", { class: "grid" }, playlists.map(playlistCard))
           : h("p", { class: "muted" }, "None yet. Make one, or sync one of your YouTube Music playlists below."),
         notSynced.length ? [h("h2", {}, "On YouTube Music, not synced"),
           h("p", { class: "muted small" }, "Sync one to keep it in Dielify: its songs download to this PC, and changes go both ways."),
@@ -215,8 +220,11 @@ async function viewDiscover() {
     if (status.offline) return show(h("h1", {}, "Discover"), offlineNotice());
     if (needsSignIn()) return show(h("h1", {}, "Discover"), welcome());
     show(h("h1", {}, "Discover"), h("p", { class: "muted" }, "Loading your YouTube Music home…"));
-    const [home, charts, forYou] = await Promise.all([api("/api/discover/home?shelves=8"),
-      api("/api/discover/charts").catch(() => null), api("/api/discover/for-you").catch(() => null)]);
+    const [home, charts, forYou, mixStatus] = await Promise.all([api("/api/discover/home?shelves=8"),
+      api("/api/discover/charts").catch(() => null), api("/api/discover/for-you").catch(() => null),
+      api("/api/mixes").catch(() => null)]);
+    const madeForYou = mixStatus && mixStatus.mixes.length
+      ? [h("h2", {}, "Made for you"), h("div", { class: "shelf" }, mixStatus.mixes.map(playlistCard))] : null;
     const shelves = home.shelves.filter((s) => s.items.length).map((s) =>
       [h("h2", {}, s.title), h("div", { class: "shelf" }, s.items.map(ytCard))]);
     const chartShelf = charts && charts.playlists.length
@@ -227,7 +235,7 @@ async function viewDiscover() {
     const mine = forYou ? [trackShelf("On repeat", forYou.on_repeat),
       forYou.more_like.length ? [h("h2", {}, "More like your top songs"), h("div", { class: "shelf" }, forYou.more_like.map(ytCard))] : null,
       trackShelf("Forgotten favourites", forYou.forgotten)] : null;
-    if (view === "discover") show(h("h1", {}, "Discover"), mine, shelves, chartShelf);
+    if (view === "discover") show(h("h1", {}, "Discover"), madeForYou, mine, shelves, chartShelf);
   } catch (e) { failed(e); }
 }
 
@@ -374,9 +382,12 @@ async function renderDownloads(active) {
 
 // --- playlists ---------------------------------------------------------------------------------
 function describePlaylist(p) {
+  if (p.kind === "mix") return `${p.count} songs · ${p.description || "Dielify mix"} · new every week`;
   return [`${p.count} songs`, p.read_only ? "from YouTube Music (one way)" : p.yt_id ? "synced with YouTube Music" : "only in Dielify",
     p.pending ? `${p.pending} change${p.pending === 1 ? "" : "s"} waiting` : null].filter(Boolean).join(" · ");
 }
+const playlistCard = (p) => h("div", { class: "card", onclick: () => viewPlaylist(p.id) }, art(p.thumbnail),
+  h("div", { class: "t" }, p.name), h("div", { class: "s" }, describePlaylist(p)));
 const songIn = (i) => ({ id: i.id, type: i.type === "video" ? "video" : "song", title: i.title, artists: i.artists,
   album: i.album, duration_s: i.duration_s, thumbnail: i.thumbnail });
 
@@ -442,7 +453,7 @@ async function viewPlaylist(id) {
             h("button", { disabled: !songs.length, onclick: () => { const s = shuffle(songs); songActions(s[0], s); } }, "Shuffle"),
             p.yt_id ? h("button", { onclick: async () => { if (await playlistAction(() => api(`/api/playlists/${id}/sync`, { method: "POST" }), "Synced")) viewPlaylist(id); } }, "Sync now") : null,
             p.read_only ? null : h("button", { onclick: rename }, "Rename"),
-            h("button", { onclick: del }, "Delete")))),
+            p.kind === "mix" ? null : h("button", { onclick: del }, "Delete")))),
       h("table", { class: "tracks" }, h("tbody", {}, entries.map((e, i) => h("tr", {},
         h("td", { class: "n" }, i + 1),
         h("td", {}, e.item.title, h("div", { class: "muted small" }, e.item.artists.join(", "), e.item.album ? ` · ${e.item.album}` : "",

@@ -307,6 +307,17 @@ src/dielify/
   with a fake YouTube (tests/test_playlists.py). Published as **v0.8.1**. **Confirmed by
   Josh** ("both work"): the PC updated 0.8.0 -> 0.8.1 by itself and restarted (the
   installer mutex-wait fix works), and playlist sync works with his real YouTube account.
+- Item 3 built (0.8.2): Dielify mixes. `tags.py`: artist genres from MusicBrainz (search
+  `artist:"x" OR alias:"x"`, exact name/alias match required: plain top hit gave a
+  "Kanye West Tribute Band"; Kanye is "Ye" with alias; 1 req/1.1 s, backs off on 503,
+  artist_tags cached 90 days; only artist names leave the PC). `mixes.py`: weekly
+  read-only playlists (kind=mix, stable ids per mix_key): up to 6 genres (>=15 songs,
+  <60% overlap), 3 decades, vibes Chill / High energy / Feel good guessed from genre
+  words; play-weighted weekly sample of 50 + up to 10 new finds (YouTube similar) in
+  genre mixes. MixMaker: every 30 min tags up to 300 artists, builds once >=80% looked
+  up, rebuilds weekly. GET /api/mixes, POST /api/mixes/refresh. Apps: "Made for you"
+  on Discover, "Dielify mixes" in Library > Playlists. Also fixed: settings.json save
+  retries when Windows briefly locks it (intermittent Access denied).
 - Idea for later: pre-resolve the next song in a list so skipping feels instant.
 
 ## Open questions for Josh

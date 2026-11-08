@@ -232,6 +232,13 @@ fun TrackShelf(vm: AppViewModel, title: String, tracks: List<com.dielify.app.net
 
 // --- Discover ---------------------------------------------------------------------------------
 
+private data class DiscoverData(
+    val home: com.dielify.app.net.HomeFeed,
+    val charts: com.dielify.app.net.Charts?,
+    val forYou: com.dielify.app.net.ForYou?,
+    val mixes: List<com.dielify.app.net.PlaylistSummary>,
+)
+
 @Composable
 fun DiscoverScreen(vm: AppViewModel) {
     Page(vm, "Discover", back = false, tabs = true, actions = { TopActions(vm) }) { pad ->
@@ -240,9 +247,11 @@ fun DiscoverScreen(vm: AppViewModel) {
                 val home = vm.server.home()
                 val charts = runCatching { vm.server.charts() }.getOrNull()
                 val forYou = runCatching { vm.server.forYou() }.getOrNull()
-                Triple(home, charts, forYou)
-            }) { (home, charts, forYou) ->
+                val mixes = runCatching { vm.server.mixes().mixes }.getOrDefault(emptyList())
+                DiscoverData(home, charts, forYou, mixes)
+            }) { (home, charts, forYou, mixes) ->
                 LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) {
+                    item(key = "mixes") { MixShelf(vm, mixes) }
                     if (forYou != null) {
                         item(key = "fy-repeat") { TrackShelf(vm, "On repeat", forYou.onRepeat) }
                         item(key = "fy-more") { ShelfRow(vm, "More like your top songs", forYou.moreLike) }
