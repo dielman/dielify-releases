@@ -441,7 +441,7 @@ src/dielify/
   (shuffle) and maps "jump" back; phone also handles "jump" now (it ignored it before).
   Phone shuffle: the first queue edit lays the list out in the shuffled order and turns
   shuffle off (otherwise Media3 inserts at random places). No drag-to-move on the phone yet.
-- **Built 0.9.0 (not published; Josh: "all of them for a .9 update", 9 Nov):**
+- **Published v0.9.0 (9 Nov; not yet confirmed by Josh; Josh: "all of them for a .9 update", 9 Nov):**
   - Lyrics: `lyrics.py` (YouTube Music timed lyrics via get_watch_playlist "lyrics" id ->
     get_lyrics(timestamps=True); else LRCLIB lrclib.net/api/get, only artist/title/album/length
     sent), table `lyrics` (none remembered 14 days), kept at download time (TrackInfo.lyrics_id,
