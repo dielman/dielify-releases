@@ -390,7 +390,7 @@ src/dielify/
   ("i wanted playlists not a fucktonne of single songs"); the daily Discovery thread is
   no longer started (discovery.py and /api/discover/outside kept). Downloads: "Clear
   finished" (POST /api/downloads/clear-finished) removes done + cancelled rows (songs
-  stay in the library; failed rows stay).
+  stay in the library; failed rows stay). Published **v0.8.9** (8 Nov).
 - GitHub's australiaeast edge returned 504 for .../releases/download/*/manifest.json (all
   versions; APK, .sig and the API asset route were fine) on 8 Nov evening, so the phone's
   update check failed. The APK can be installed from the release page in the phone's
