@@ -363,7 +363,7 @@ src/dielify/
   Phone: `RemoteDevicePlayer` (Media3 SimpleBasePlayer for the other device) is swapped
   into the media session while another device is active, so the app screens,
   notification, lock screen and headset buttons control the PC (= step 2). Tested: 5
-  server tests; PC bar + picker live against a fake phone. Not yet on Josh's devices.
+  server tests; PC bar + picker live against a fake phone. Published **v0.8.7** (8 Nov). Not yet on Josh's devices.
 
 ## Backlog (Josh, 8 Nov; after Phase 8 item 6). Build together: they share one ratings table.
 
