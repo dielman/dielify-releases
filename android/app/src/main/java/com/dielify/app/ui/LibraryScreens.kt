@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.DownloadForOffline
 import androidx.compose.material.icons.filled.OfflinePin
 import androidx.compose.material.icons.filled.Explore
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.PlayArrow
@@ -430,7 +431,7 @@ fun SavedAlbumScreen(vm: AppViewModel, page: Screen.SavedAlbumPage) {
                     }
                     Spacer(Modifier.height(8.dp))
                     OutlinedButton(onClick = { vm.removeFromPhone(album.tracks.map { it.id }) }) {
-                        Text("Remove from phone")
+                        Icon(Icons.Filled.Delete, null); Spacer(Modifier.width(4.dp)); Text("Remove from phone")
                     }
                 }
             }

@@ -44,6 +44,40 @@ function h(tag, attrs = {}, ...children) {
   return el;
 }
 const $ = (id) => document.getElementById(id);
+
+// --- icons (Material Symbols paths, drawn inline: no fonts or files to load) ------------------
+const ICONS = {
+  play: "M8 5v14l11-7z",
+  pause: "M6 19h4V5H6v14zm8-14v14h4V5h-4z",
+  next: "M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z",
+  prev: "M6 6h2v12H6zm3.5 6l8.5 6V6z",
+  playlistAdd: "M14 10H3v2h11v-2zm0-4H3v2h11V6zm4 8v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zM3 16h7v-2H3v2z",
+  download: "M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z",
+  check: "M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z",
+  close: "M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z",
+  up: "M4 12l1.41 1.41L11 7.83V20h2V7.83l5.58 5.59L20 12l-8-8-8 8z",
+  remove: "M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z",
+  shuffle: "M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z",
+  devices: "M4 6h18V4H4c-1.1 0-2 .9-2 2v11H0v3h14v-3H4V6zm19 2h-6c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h6c.55 0 1-.45 1-1V9c0-.55-.45-1-1-1zm-1 9h-4v-7h4v7z",
+  sync: "M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z",
+  edit: "M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z",
+  back: "M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z",
+};
+function icon(name, cls = "ico") {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("class", cls);
+  svg.setAttribute("aria-hidden", "true");
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  path.setAttribute("d", ICONS[name]);
+  svg.append(path);
+  return svg;
+}
+// A round icon-only button; `title` is its tooltip and its name for screen readers.
+const ib = (name, title, onclick, attrs = {}) =>
+  h("button", { class: "ib", title, "aria-label": title, onclick: (e) => { e.stopPropagation(); onclick(e); }, ...attrs }, icon(name));
+// A normal button with an icon in front of its words.
+const ibtn = (name, label, attrs) => h("button", attrs, icon(name, "ico lead"), label);
 const main = $("main");
 function show(...nodes) {
   main.replaceChildren(...nodes.flat(Infinity).filter((n) => n !== null && n !== undefined && n !== false));
@@ -163,7 +197,7 @@ const artistCard = (r) => h("div", { class: "card", onclick: () => viewArtist(r.
 async function viewArtist(id) {
   try {
     const { artist, albums } = await api(`/api/library/artists/${id}`);
-    show(h("button", { onclick: () => viewLibrary("artists") }, "← Artists"),
+    show(h("button", { onclick: () => viewLibrary("artists") }, icon("back", "ico lead"), "Artists"),
       h("h1", { style: "margin-top:16px" }, artist.name), h("div", { class: "grid" }, albums.map(albumCard)));
   } catch (e) { failed(e); }
 }
@@ -171,14 +205,14 @@ async function viewArtist(id) {
 async function viewAlbum(id) {
   try {
     const { album, tracks } = await api(`/api/library/albums/${id}`);
-    show(h("button", { onclick: () => viewLibrary() }, "← Library"),
+    show(h("button", { onclick: () => viewLibrary() }, icon("back", "ico lead"), "Library"),
       h("div", { class: "hero", style: "margin-top:16px" }, art(media(album.cover_url, 400), "♪", ""),
         h("div", {},
           h("div", { class: "muted small" }, "ALBUM"), h("h1", {}, album.name),
           h("div", { class: "muted" }, album.artist, album.year ? ` · ${album.year}` : "", ` · ${tracks.length} songs`),
           h("div", { class: "row", style: "margin-top:12px" },
-            h("button", { class: "primary", onclick: () => playList(tracks, 0) }, "▶ Play"),
-            h("button", { onclick: () => playList(shuffle(tracks), 0) }, "Shuffle")))),
+            ibtn("play", "Play", { class: "primary", onclick: () => playList(tracks, 0) }),
+            ibtn("shuffle", "Shuffle", { onclick: () => playList(shuffle(tracks), 0) })))),
       trackTable(tracks));
   } catch (e) { failed(e); }
 }
@@ -199,7 +233,9 @@ function trackTable(tracks, showAlbum = false) {
       h("td", { class: "n" }, t.track_no || i + 1),
       h("td", { class: "title", onclick: () => playList(tracks, i) }, t.title,
         h("div", { class: "muted small" }, t.artist, showAlbum ? ` · ${t.album}` : "")),
-      h("td", { class: "d" }, dur(t.duration_s))))));
+      h("td", { class: "d" }, dur(t.duration_s)),
+      h("td", { class: "a" }, t.video_id ? ib("playlistAdd", "Add to playlist", () => addToPlaylist(
+        [{ type: "song", id: t.video_id, title: t.title, artists: t.artist ? [t.artist] : [], album: t.album || null }])) : null)))));
 }
 const shuffle = (xs) => xs.map((x) => [Math.random(), x]).sort((a, b) => a[0] - b[0]).map((x) => x[1]);
 
@@ -287,8 +323,8 @@ async function viewCollection(type, id, from = "discover") {
     const missing = tracks.filter((t) => !t.library_track_id).length;
     const have = tracks.filter((t) => t.library_track_id).map((t) => t.library_track_id);
     const back = from === "library"
-      ? h("button", { onclick: () => { go("library"); viewLibrary("playlists"); } }, "← Playlists")
-      : h("button", { onclick: () => go("discover") }, "← Discover");
+      ? h("button", { onclick: () => { go("library"); viewLibrary("playlists"); } }, icon("back", "ico lead"), "Playlists")
+      : h("button", { onclick: () => go("discover") }, icon("back", "ico lead"), "Discover");
     show(back,
       h("div", { class: "hero", style: "margin-top:16px" }, art(info.thumbnail, "♪", ""),
         h("div", {},
@@ -307,12 +343,14 @@ function ytTrackTable(items) {
   return h("table", { class: "tracks" }, h("tbody", {}, items.map((t, i) =>
     h("tr", {},
       h("td", { class: "n" }, i + 1),
-      h("td", {}, t.title, h("div", { class: "muted small" }, t.artists.join(", "), t.album ? ` · ${t.album}` : "")),
+      h("td", { class: "title", onclick: () => songActions(t, items) }, t.title,
+        h("div", { class: "muted small" }, t.artists.join(", "), t.album ? ` · ${t.album}` : "")),
       h("td", { class: "d" }, dur(t.duration_s)),
-      h("td", { class: "a" }, h("button", { onclick: () => songActions(t, items) }, "▶ Play"),
-        h("button", { title: "Add to playlist", onclick: () => addToPlaylist([t]) }, "+ Playlist"),
-        t.library_track_id ? null : h("button", { onclick: () => requestDownload(
-          { type: t.type, id: t.id, title: t.title, artists: t.artists, album: t.album, next: true }) }, "Download"))))));
+      h("td", { class: "a" }, ib("playlistAdd", "Add to playlist", () => addToPlaylist([t])),
+        t.library_track_id
+          ? h("span", { class: "ib in-lib", title: "In your library" }, icon("check"))
+          : ib("download", "Download", () => requestDownload(
+            { type: t.type, id: t.id, title: t.title, artists: t.artists, album: t.album, next: true })))))));
 }
 
 async function viewYtSearch(q, type = "song") {
@@ -355,7 +393,7 @@ async function renderDownloads(active) {
   const waiting = active.downloads.filter((d) => d.status === "queued");
   const waitingTotal = active.active_total - (running ? 1 : 0);
   const pace = active.seconds_per_song || 20;
-  const cancel = (d) => h("button", { onclick: async () => { await api(`/api/downloads/${d.id}`, { method: "DELETE" }); pollDownloads(); } }, "Cancel");
+  const cancel = (d) => ib("close", "Cancel", async () => { await api(`/api/downloads/${d.id}`, { method: "DELETE" }); pollDownloads(); });
   const who = (d) => h("div", {}, h("div", {}, d.title),
     h("div", { class: "muted small" }, d.artist || "", d.error ? h("div", { class: "warn" }, d.error) : null));
 
@@ -368,7 +406,7 @@ async function renderDownloads(active) {
     h("div", { class: "bar" }, h("div", { style: `width:${Math.round(running.progress * 100)}%` })), cancel(running))] : null;
   const line = waiting.length ? [h("h2", {}, `Waiting in line (${waitingTotal})`), waiting.map((d, i) => h("div", { class: "job" },
     who(d), h("div", { class: "small muted" }, `#${i + 1} in line · ${minutes((i + 1 + (running ? 1 : 0)) * pace)}`),
-    h("div", {}, d.next || i === 0 ? null : h("button", { title: "Download this next", onclick: async () => { await api(`/api/downloads/${d.id}/next`, { method: "POST" }); pollDownloads(); } }, "Move up"), cancel(d)))),
+    h("div", {}, d.next || i === 0 ? null : ib("up", "Download this next", async () => { await api(`/api/downloads/${d.id}/next`, { method: "POST" }); pollDownloads(); }), cancel(d)))),
     waitingTotal > waiting.length ? h("p", { class: "muted small" }, `…and ${waitingTotal - waiting.length} more`) : null] : null;
   const clear = h("button", { style: "margin-left:12px; font-size:13px", onclick: async () => {
     const r = await api("/api/downloads/clear-finished", { method: "POST" });
@@ -377,7 +415,7 @@ async function renderDownloads(active) {
   } }, "Clear finished");
   const done = finished.length ? [h("h2", {}, "Finished", clear), finished.map((d) => h("div", { class: "job" }, who(d),
     h("div", { class: `small status-${d.status}` }, label[d.status]),
-    d.track_id ? h("button", { onclick: async () => playList([await api(`/api/library/tracks/${d.track_id}`)], 0) }, "▶ Play") : h("span")))] : null;
+    d.track_id ? ib("play", "Play", async () => playList([await api(`/api/library/tracks/${d.track_id}`)], 0)) : h("span")))] : null;
 
   if (view !== "downloads") return;
   const keep = main.scrollTop;  // re-drawn every 1.5 s: don't jump back to the top
@@ -447,25 +485,25 @@ async function viewPlaylist(id) {
       if (p.yt_id && !confirm(`Remove “${e.item.title}”? This playlist is synced, so it's also removed on YouTube Music. The song stays in your library.`)) return;
       if (await playlistAction(() => api(`/api/playlists/${id}/entries/${e.entry_id}?on_youtube=${!!p.yt_id}`, { method: "DELETE" }), "Removed")) viewPlaylist(id);
     };
-    show(h("button", { onclick: () => { go("library"); viewLibrary("playlists"); } }, "← Playlists"),
+    show(h("button", { onclick: () => { go("library"); viewLibrary("playlists"); } }, icon("back", "ico lead"), "Playlists"),
       h("div", { class: "hero", style: "margin-top:16px" }, art(p.thumbnail, "♪", ""),
         h("div", {}, h("div", { class: "muted small" }, "PLAYLIST"), h("h1", {}, p.name),
           h("div", { class: "muted" }, describePlaylist(p)),
           p.sync_error ? h("div", { class: "warn small" }, `Couldn't reach YouTube: ${p.sync_error}`) : null,
           have < songs.length ? h("div", { class: "muted small" }, `${songs.length - have} not on this PC yet: they're downloading. Play works anyway.`) : null,
           h("div", { class: "row", style: "margin-top:12px" },
-            h("button", { class: "primary", disabled: !songs.length, onclick: () => songActions(songs[0], songs) }, "▶ Play"),
-            h("button", { disabled: !songs.length, onclick: () => { const s = shuffle(songs); songActions(s[0], s); } }, "Shuffle"),
-            p.yt_id ? h("button", { onclick: async () => { if (await playlistAction(() => api(`/api/playlists/${id}/sync`, { method: "POST" }), "Synced")) viewPlaylist(id); } }, "Sync now") : null,
-            p.read_only ? null : h("button", { onclick: rename }, "Rename"),
-            p.kind === "mix" ? null : h("button", { onclick: del }, "Delete")))),
+            ibtn("play", "Play", { class: "primary", disabled: !songs.length, onclick: () => songActions(songs[0], songs) }),
+            ibtn("shuffle", "Shuffle", { disabled: !songs.length, onclick: () => { const s = shuffle(songs); songActions(s[0], s); } }),
+            p.yt_id ? ibtn("sync", "Sync now", { onclick: async () => { if (await playlistAction(() => api(`/api/playlists/${id}/sync`, { method: "POST" }), "Synced")) viewPlaylist(id); } }) : null,
+            p.read_only ? null : ibtn("edit", "Rename", { onclick: rename }),
+            p.kind === "mix" ? null : ibtn("remove", "Delete", { onclick: del })))),
       h("table", { class: "tracks" }, h("tbody", {}, entries.map((e, i) => h("tr", {},
         h("td", { class: "n" }, i + 1),
-        h("td", {}, e.item.title, h("div", { class: "muted small" }, e.item.artists.join(", "), e.item.album ? ` · ${e.item.album}` : "",
-          e.item.library_track_id ? " · ✓ in library" : "")),
+        h("td", { class: "title", onclick: () => songActions(e.item, songs) }, e.item.title,
+          h("div", { class: "muted small" }, e.item.artists.join(", "), e.item.album ? ` · ${e.item.album}` : "")),
         h("td", { class: "d" }, dur(e.item.duration_s)),
-        h("td", { class: "a" }, h("button", { onclick: () => songActions(e.item, songs) }, "▶ Play"),
-          p.read_only ? null : h("button", { onclick: () => remove(e) }, "Remove")))))));
+        h("td", { class: "a" }, e.item.library_track_id ? h("span", { class: "ib in-lib", title: "In your library" }, icon("check")) : null,
+          p.read_only ? null : ib("remove", "Remove from this playlist", () => remove(e))))))));
   } catch (e) { failed(e); }
 }
 
@@ -693,6 +731,8 @@ function showPassword(login) {
 // this PC or a phone. Songs started here play on the active device; the device button in the
 // bar moves the music between devices.
 const audio = $("audio");
+[["btn-prev", "prev"], ["btn-play", "play"], ["btn-next", "next"], ["btn-addpl", "playlistAdd"], ["btn-devices", "devices"]]
+  .forEach(([id, name]) => $(id).replaceChildren(icon(name)));
 const player = { list: [], index: -1, current: null, counted: false };
 audio.volume = 0.8;
 
@@ -750,7 +790,9 @@ function showSong(song) {  // song: {title, artist, album, cover (our cover url)
   else if (song && song.thumb) cover.src = song.thumb;
 }
 function showTime(posS, durS, playing) {
-  $("btn-play").textContent = playing ? "⏸" : "▶";
+  const want = playing ? "pause" : "play";
+  if ($("btn-play").dataset.icon !== want) { $("btn-play").replaceChildren(icon(want)); $("btn-play").dataset.icon = want; }
+  $("btn-play").title = playing ? "Pause" : "Play";
   $("t-cur").textContent = dur(posS) || "0:00";
   $("t-dur").textContent = dur(durS) || "0:00";
   if (!seeking) $("seek").value = durS ? Math.round((posS / durS) * 1000) : 0;

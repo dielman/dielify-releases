@@ -126,7 +126,9 @@ fun PlaylistsTab(vm: AppViewModel) {
                                 }
                             }
                         }
-                        OutlinedButton(onClick = { vm.importPlaylist(it) }) { Text("Sync") }
+                        OutlinedButton(onClick = { vm.importPlaylist(it) }) {
+                            Icon(Icons.Filled.Sync, null); Spacer(Modifier.width(4.dp)); Text("Sync")
+                        }
                     }
                 }
             }

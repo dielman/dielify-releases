@@ -77,7 +77,15 @@ h2 { font-size: 16px; margin: 24px 0 10px; }
 .tracks tr.playing td { color: var(--accent-2); }
 .tracks .n { width: 36px; color: var(--muted); text-align: right; }
 .tracks .d { width: 60px; color: var(--muted); text-align: right; }
-.tracks .a { width: 140px; text-align: right; }
+.tracks .a { width: 96px; text-align: right; white-space: nowrap; }
+.tracks td.title { cursor: pointer; }
+.tracks td.title:hover { color: var(--accent-2); }
+.ico { width: 20px; height: 20px; fill: currentColor; display: block; }
+.ico.lead { display: inline-block; width: 18px; height: 18px; vertical-align: -4px; margin-right: 6px; }
+button.ib, span.ib { background: none; border: none; width: 34px; height: 34px; padding: 7px; border-radius: 50%;
+  color: var(--muted); display: inline-flex; align-items: center; justify-content: center; vertical-align: middle; }
+button.ib:hover { color: var(--text); background: var(--panel-2); }
+span.ib.in-lib { color: #1db954; }
 .tracks .title { cursor: pointer; }
 
 .hero { display: flex; gap: 20px; align-items: flex-end; margin-bottom: 20px; }
