@@ -572,6 +572,12 @@ src/dielify/
 
 ## Decisions log
 
+- 2026-11-09 (Josh): **the code lives in github.com/dielman/dielify-releases** (remote `origin`,
+  PUBLIC), the same repo the releases come from. First push 9 Nov: main (replaced the README-only
+  main; release tags untouched) + phase-1-live..phase-8. Push branches there when Josh asks. Josh
+  knows it's public (home/Tailscale addresses and household details in CLAUDE.md/README are visible;
+  no secrets in the history, checked 9 Nov). Never commit anything private there.
+
 - 2026-11-07: Working name `dielify`. Browser-header auth chosen over OAuth (see above).
   Pillow added as a dependency to square-crop non-square video thumbnails for cover
   art. Credentials refuse to save unencrypted on non-Windows unless the explicit
