@@ -164,6 +164,7 @@ private fun TabBar(vm: AppViewModel) {
 fun TopActions(vm: AppViewModel) {
     LinkLabel(vm)
     CastButton()
+    JamButton(vm)
     IconButton(onClick = { vm.open(Screen.StatsPage) }) { Icon(Icons.Filled.Insights, "Your stats") }
     IconButton(onClick = { vm.open(Screen.Settings) }) { Icon(Icons.Filled.Settings, "Settings") }
 }
@@ -452,6 +453,7 @@ fun TrackRow(vm: AppViewModel, t: Track, showArtist: Boolean, onClick: () -> Uni
                 QueueMenuItems({ menu = false },
                     radio = t.videoId?.let { v -> { vm.songRadio(v, t.title, com.dielify.app.playback.MediaItems.fromTrack(t)) } },
                     taste = TasteTarget(com.dielify.app.net.Taste.songKey(t.videoId, t.id)!!, "${t.title} - ${t.artist}"), vm = vm,
+                    jam = t.videoId?.let { { vm.addTracksToJam(listOf(t)) } },
                 ) { next -> vm.queueTracks(listOf(t), next) }
                 DropdownMenuItem(text = { Text("Remove from my library") }, leadingIcon = { Icon(Icons.Filled.Delete, null) },
                     onClick = { menu = false; confirm = true })

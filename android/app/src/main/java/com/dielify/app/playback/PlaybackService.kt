@@ -296,6 +296,7 @@ class PlaybackService : MediaLibraryService() {
         followActiveDevice(shown)
         // the home-screen widget follows whatever the session shows
         current = this
+        dielify.jamHost.attach(shown, scope)  // this phone hosting a Jam
         shown.addListener(widgetListener)
         refreshWidget()
     }

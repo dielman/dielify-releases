@@ -1,5 +1,6 @@
 package com.dielify.app.ui
 
+import androidx.compose.material.icons.filled.Groups
 import com.dielify.app.dielify
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.foundation.clickable
@@ -60,7 +61,7 @@ fun UpNextButton(vm: AppViewModel) {
 /** Play next / Add to queue (and Start radio), for a song's ⋮ menu. */
 @Composable
 fun QueueMenuItems(close: () -> Unit, radio: (() -> Unit)? = null, taste: TasteTarget? = null, vm: AppViewModel? = null,
-                   add: (next: Boolean) -> Unit) {
+                   jam: (() -> Unit)? = null, add: (next: Boolean) -> Unit) {
     DropdownMenuItem(text = { Text("Play next") }, leadingIcon = { Icon(Icons.AutoMirrored.Filled.PlaylistPlay, null) },
         onClick = { close(); add(true) })
     DropdownMenuItem(text = { Text("Add to queue") }, leadingIcon = { Icon(Icons.AutoMirrored.Filled.QueueMusic, null) },
@@ -68,6 +69,11 @@ fun QueueMenuItems(close: () -> Unit, radio: (() -> Unit)? = null, taste: TasteT
     if (radio != null) DropdownMenuItem(text = { Text("Start radio") },
         leadingIcon = { Icon(Icons.Filled.Radio, null) },
         onClick = { close(); radio() })
+    val inJam = vm?.jam?.collectAsStateWithLifecycle()?.value
+    if (jam != null && inJam != null) DropdownMenuItem(
+        text = { Text(if (inJam.youHost) "Add to your Jam" else "Add to ${inJam.host}'s Jam") },
+        leadingIcon = { Icon(androidx.compose.material.icons.Icons.Filled.Groups, null) },
+        onClick = { close(); jam() })
     if (taste != null && vm != null) TasteMenuItem(vm, close, taste)
 }
 

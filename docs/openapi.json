@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Dielify",
-    "version": "0.9.7"
+    "version": "0.9.8"
   },
   "paths": {
     "/api/auth/login": {
@@ -1526,6 +1526,361 @@
         }
       }
     },
+    "/api/blend": {
+      "get": {
+        "tags": [
+          "together"
+        ],
+        "summary": "Get Blend",
+        "description": "Blend: a weekly playlist with each person in your household who also turned it on.",
+        "operationId": "get_blend_api_blend_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlendOut"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "together"
+        ],
+        "summary": "Set Blend",
+        "operationId": "set_blend_api_blend_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BlendIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlendOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/jam": {
+      "get": {
+        "tags": [
+          "together"
+        ],
+        "summary": "Get Jam",
+        "description": "The Jam going in your household (null: none). The host's app checks this every few\nseconds and adds new songs to what it plays.",
+        "operationId": "get_jam_api_jam_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/JamOut"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Response Get Jam Api Jam Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "together"
+        ],
+        "summary": "Start Jam",
+        "description": "Host a Jam on this device: everyone in the household can add songs to what it plays.",
+        "operationId": "start_jam_api_jam_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JamStart"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JamOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "together"
+        ],
+        "summary": "End Jam",
+        "operationId": "end_jam_api_jam_delete",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/jam/join": {
+      "post": {
+        "tags": [
+          "together"
+        ],
+        "summary": "Join Jam",
+        "operationId": "join_jam_api_jam_join_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JamOut"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/jam/songs": {
+      "post": {
+        "tags": [
+          "together"
+        ],
+        "summary": "Add To Jam",
+        "description": "Add songs to the Jam (joins it if you hadn't). With a child in the Jam, only songs\nher controls allow go in; `left_out` says which didn't.",
+        "operationId": "add_to_jam_api_jam_songs_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JamAdd"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JamOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/jam/songs/{song_id}": {
+      "delete": {
+        "tags": [
+          "together"
+        ],
+        "summary": "Remove From Jam",
+        "operationId": "remove_from_jam_api_jam_songs__song_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "song_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Song Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JamOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jam/playing": {
+      "post": {
+        "tags": [
+          "together"
+        ],
+        "summary": "Jam Playing",
+        "description": "The host's player: which song is playing now.",
+        "operationId": "jam_playing_api_jam_playing_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JamState"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JamOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/jam/leave": {
+      "post": {
+        "tags": [
+          "together"
+        ],
+        "summary": "Leave Jam",
+        "description": "Leave (the host leaving ends it).",
+        "operationId": "leave_jam_api_jam_leave_post",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/cast/token": {
       "post": {
         "tags": [
@@ -3019,6 +3374,64 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/SmartPlaylistIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaylistDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/playlists/{playlist_id}/share": {
+      "put": {
+        "tags": [
+          "playlists"
+        ],
+        "summary": "Share Playlist",
+        "description": "Share your playlist with the household: everyone sees it and can add and remove songs\n(a kids account sees only the songs her controls allow). Only Dielify-only playlists.",
+        "operationId": "share_playlist_api_playlists__playlist_id__share_put",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "playlist_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Playlist Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShareIn"
               }
             }
           }
@@ -4582,6 +4995,83 @@
         ],
         "title": "ArtistList"
       },
+      "BlendIn": {
+        "properties": {
+          "on": {
+            "type": "boolean",
+            "title": "On"
+          }
+        },
+        "type": "object",
+        "required": [
+          "on"
+        ],
+        "title": "BlendIn"
+      },
+      "BlendOut": {
+        "properties": {
+          "on": {
+            "type": "boolean",
+            "title": "On",
+            "description": "You turned Blend on"
+          },
+          "allowed": {
+            "type": "boolean",
+            "title": "Allowed",
+            "description": "False: a kids account whose parent hasn't allowed Blend"
+          },
+          "partners": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Partners",
+            "description": "People in your household you have a Blend with"
+          },
+          "waiting_for": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Waiting For",
+            "description": "People in your household who haven't turned Blend on yet"
+          },
+          "playlists": {
+            "items": {
+              "$ref": "#/components/schemas/BlendPlaylist"
+            },
+            "type": "array",
+            "title": "Playlists"
+          }
+        },
+        "type": "object",
+        "required": [
+          "on",
+          "allowed",
+          "partners",
+          "waiting_for",
+          "playlists"
+        ],
+        "title": "BlendOut"
+      },
+      "BlendPlaylist": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "BlendPlaylist"
+      },
       "CastToken": {
         "properties": {
           "token": {
@@ -5588,6 +6078,152 @@
         ],
         "title": "ItemList"
       },
+      "JamAdd": {
+        "properties": {
+          "songs": {
+            "items": {
+              "$ref": "#/components/schemas/DownloadRequest"
+            },
+            "type": "array",
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "Songs"
+          }
+        },
+        "type": "object",
+        "required": [
+          "songs"
+        ],
+        "title": "JamAdd"
+      },
+      "JamOut": {
+        "properties": {
+          "host": {
+            "type": "string",
+            "title": "Host"
+          },
+          "device": {
+            "type": "string",
+            "title": "Device",
+            "description": "The device playing the music"
+          },
+          "you_host": {
+            "type": "boolean",
+            "title": "You Host"
+          },
+          "members": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Members"
+          },
+          "started_at": {
+            "type": "number",
+            "title": "Started At"
+          },
+          "index": {
+            "type": "integer",
+            "title": "Index",
+            "description": "The song playing now (-1: not started)"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version",
+            "description": "Goes up with every change: the host's app adds new songs when it changes"
+          },
+          "songs": {
+            "items": {
+              "$ref": "#/components/schemas/JamSongOut"
+            },
+            "type": "array",
+            "title": "Songs"
+          },
+          "left_out": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Left Out",
+            "description": "Songs that weren't added (or were taken out) and why",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "host",
+          "device",
+          "you_host",
+          "members",
+          "started_at",
+          "index",
+          "version",
+          "songs"
+        ],
+        "title": "JamOut"
+      },
+      "JamSongOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id",
+            "description": "Use to take it out again"
+          },
+          "item": {
+            "$ref": "#/components/schemas/Item"
+          },
+          "added_by": {
+            "type": "string",
+            "title": "Added By"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "item",
+          "added_by"
+        ],
+        "title": "JamSongOut"
+      },
+      "JamStart": {
+        "properties": {
+          "device": {
+            "type": "string",
+            "maxLength": 60,
+            "title": "Device",
+            "description": "This device's name, shown to the others"
+          },
+          "songs": {
+            "items": {
+              "$ref": "#/components/schemas/DownloadRequest"
+            },
+            "type": "array",
+            "maxItems": 500,
+            "title": "Songs",
+            "description": "Start with these (type song/video)",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "device"
+        ],
+        "title": "JamStart"
+      },
+      "JamState": {
+        "properties": {
+          "index": {
+            "type": "integer",
+            "minimum": -1.0,
+            "title": "Index"
+          }
+        },
+        "type": "object",
+        "required": [
+          "index"
+        ],
+        "title": "JamState"
+      },
       "KidControls": {
         "properties": {
           "explicit": {
@@ -5681,6 +6317,18 @@
             "type": "boolean",
             "title": "Parent Sees Stats",
             "default": false
+          },
+          "blend": {
+            "type": "boolean",
+            "title": "Blend",
+            "description": "May make a Blend with someone in the household",
+            "default": false
+          },
+          "jam": {
+            "type": "boolean",
+            "title": "Jam",
+            "description": "May join a Jam (every song in it is filtered for her)",
+            "default": true
           },
           "picks": {
             "items": {
@@ -6503,6 +7151,18 @@
           },
           "item": {
             "$ref": "#/components/schemas/Item"
+          },
+          "added_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Added By",
+            "description": "Who added it (shared playlists)"
           }
         },
         "type": "object",
@@ -6613,6 +7273,30 @@
               }
             ],
             "title": "Thumbnail"
+          },
+          "shared": {
+            "type": "boolean",
+            "title": "Shared",
+            "description": "Shared with the household: everyone can add and remove songs",
+            "default": false
+          },
+          "owner": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner",
+            "description": "Who made it"
+          },
+          "mine": {
+            "type": "boolean",
+            "title": "Mine",
+            "description": "False: someone else's list shared with you (you can't rename/delete it)",
+            "default": true
           }
         },
         "type": "object",
@@ -7294,6 +7978,17 @@
           "cache_limit_gb"
         ],
         "title": "SettingsView"
+      },
+      "ShareIn": {
+        "properties": {
+          "shared": {
+            "type": "boolean",
+            "title": "Shared",
+            "default": true
+          }
+        },
+        "type": "object",
+        "title": "ShareIn"
       },
       "Shelf": {
         "properties": {

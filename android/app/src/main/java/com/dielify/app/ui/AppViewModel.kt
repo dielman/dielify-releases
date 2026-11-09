@@ -45,6 +45,7 @@ sealed interface Screen {
     data class SavedAlbumPage(val album: String, val artist: String) : Screen
     data object StatsPage : Screen
     data class PlaylistPage(val id: Long, val name: String) : Screen
+    data object JamPage : Screen
 }
 
 data class PlayerUi(
@@ -131,6 +132,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         app.dielify.plays.flush()
         viewModelScope.launch { app.dielify.ratings.refresh() }
         viewModelScope.launch { app.dielify.taste.refresh() }
+        viewModelScope.launch {  // the household's Jam (shown in the top bar, "Add to Jam" in song menus)
+            while (true) {
+                runCatching { server.jam() }.onSuccess { _jam.value = it }
+                kotlinx.coroutines.delay(if (_jam.value != null) 5_000 else 20_000)
+            }
+        }
         viewModelScope.launch {
             updater.check()
             val s = updater.state.value
@@ -245,6 +252,52 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val vid = MediaItems.videoId(m) ?: return run { messages.tryEmit("No radio for this song (it isn't from YouTube Music)") }
         songRadio(vid, m.mediaMetadata.title?.toString() ?: "this song", m)
     }
+
+    // --- Jam: one shared queue for the household --------------------------------------------------
+
+    private val _jam = MutableStateFlow<com.dielify.app.net.Jam?>(null)
+    val jam: StateFlow<com.dielify.app.net.Jam?> = _jam
+
+    private fun jamDone(j: com.dielify.app.net.Jam?, what: String) {
+        _jam.value = j
+        if (j != null && j.leftOut.isNotEmpty()) messages.tryEmit("Not added: " + j.leftOut.joinToString("; "))
+        else if (what.isNotEmpty()) messages.tryEmit(what)
+    }
+
+    private fun jamCall(what: String, block: suspend () -> com.dielify.app.net.Jam?) = viewModelScope.launch {
+        try { jamDone(block(), what) } catch (e: ApiError) { messages.tryEmit(e.message ?: "Couldn't reach the Jam") }
+    }
+
+    /** Host a Jam on this phone, starting with the song playing now. */
+    fun startJam() = jamCall("Jam started: others can add songs now") {
+        val c = controller
+        val keep = c?.currentMediaItem?.let { m ->
+            MediaItems.videoId(m)?.let { v -> com.dielify.app.net.JamSongIn(id = v, title = m.mediaMetadata.title?.toString(),
+                artists = listOfNotNull(m.mediaMetadata.artist?.toString())) }
+        }
+        val j = server.startJam(com.dielify.app.net.JamStart(android.os.Build.MODEL, listOfNotNull(keep)))
+        getApplication<Application>().dielify.jamHost.begin(j)
+        j
+    }
+
+    fun joinJam() = jamCall("You're in the Jam") { server.joinJam() }
+
+    fun leaveJam(host: Boolean) = jamCall(if (host) "Jam ended" else "You left the Jam") {
+        if (host) { server.endJam(); getApplication<Application>().dielify.jamHost.stop() } else server.leaveJam()
+        null
+    }
+
+    fun removeFromJam(id: Long) = jamCall("") { server.removeFromJam(id) }
+
+    fun addToJam(items: List<com.dielify.app.net.Item>) = jamCall("Added to the Jam") {
+        server.addToJam(items.filter { it.isSong }.map { com.dielify.app.net.JamSongIn(id = it.id, title = it.title, artists = it.artists, album = it.album) })
+    }
+
+    fun addTracksToJam(tracks: List<Track>) = jamCall("Added to the Jam") {
+        server.addToJam(tracks.mapNotNull { t -> t.videoId?.let { com.dielify.app.net.JamSongIn(id = it, title = t.title, artists = listOf(t.artist), album = t.album) } })
+    }
+
+    fun playlistsChanged() { playlistsVersion.value++ }
 
     /** Leave a song or playlist out of your taste (or count it again). */
     fun setTaste(kind: String, key: String, name: String, out: Boolean) = viewModelScope.launch {

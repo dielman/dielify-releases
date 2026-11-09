@@ -94,6 +94,7 @@ fun App(vm: AppViewModel) {
             is Screen.SavedAlbumPage -> SavedAlbumScreen(vm, screen)
             Screen.StatsPage -> StatsScreen(vm)
             is Screen.PlaylistPage -> PlaylistScreen(vm, screen)
+            is Screen.JamPage -> JamScreen(vm)
         } }
     } }
 }

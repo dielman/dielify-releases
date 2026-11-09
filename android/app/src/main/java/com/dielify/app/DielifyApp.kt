@@ -30,6 +30,8 @@ class DielifyApp : Application(), SingletonImageLoader.Factory {
     /** Thumbs up / down / ban (the player skips banned songs). */
     val ratings by lazy { com.dielify.app.net.Ratings(server) }
     val taste by lazy { com.dielify.app.net.Taste(server) }
+    /** This phone hosting a Jam (the playback service plays it). */
+    val jamHost by lazy { com.dielify.app.playback.JamHost(server) }
     /** Never-ending discovery play (Discover). */
     /** Lyrics, kept on the phone once seen (Now playing > lyrics). */
     val lyrics by lazy { com.dielify.app.net.LyricsStore(this, server) }

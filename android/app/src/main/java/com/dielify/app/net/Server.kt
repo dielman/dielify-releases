@@ -190,7 +190,7 @@ class Server(private val context: Context, private val accounts: AccountStore) {
 
     private suspend fun send(method: String, path: String, body: String = ""): String = call {
         Request.Builder().url(it.resolve(path)!!)
-            .method(method, if (method == "DELETE" && body.isEmpty()) null else body.toRequestBody(JSON_TYPE))
+            .method(method, if (method == "GET" || (method == "DELETE" && body.isEmpty())) null else body.toRequestBody(JSON_TYPE))
             .build()
     }
 
@@ -329,6 +329,27 @@ class Server(private val context: Context, private val accounts: AccountStore) {
         get<LyricsSearch>("api/library/lyrics-search?q=" + java.net.URLEncoder.encode(q, "UTF-8")).results
     suspend fun recapPeriods(): List<RecapPeriod> = get<RecapPeriods>("api/recap/periods").periods
     suspend fun recap(period: String): Recap = get("api/recap?period=$period")
+    // --- 0.9.8 Together ---
+    suspend fun sharePlaylist(id: Long, shared: Boolean): PlaylistDetail = json.decodeFromString(PlaylistDetail.serializer(),
+        send("PUT", "api/playlists/$id/share", json.encodeToString(ShareIn.serializer(), ShareIn(shared))))
+    suspend fun blend(): BlendState = get("api/blend")
+    suspend fun setBlend(on: Boolean): BlendState = json.decodeFromString(BlendState.serializer(),
+        send("PUT", "api/blend", json.encodeToString(BlendIn.serializer(), BlendIn(on))))
+    /** The household's Jam, or null. */
+    suspend fun jam(): Jam? {
+        val body = send("GET", "api/jam")
+        return if (body.isBlank() || body.trim() == "null") null else json.decodeFromString(Jam.serializer(), body)
+    }
+    private fun jamOf(body: String): Jam = json.decodeFromString(Jam.serializer(), body)
+    suspend fun startJam(body: JamStart): Jam = jamOf(send("POST", "api/jam", json.encodeToString(JamStart.serializer(), body)))
+    suspend fun joinJam(): Jam = jamOf(send("POST", "api/jam/join"))
+    suspend fun addToJam(songs: List<JamSongIn>): Jam =
+        jamOf(send("POST", "api/jam/songs", json.encodeToString(JamAdd.serializer(), JamAdd(songs))))
+    suspend fun removeFromJam(id: Long): Jam = jamOf(send("DELETE", "api/jam/songs/$id"))
+    suspend fun jamPlaying(body: JamPlaying): Jam =
+        jamOf(send("POST", "api/jam/playing", json.encodeToString(JamPlaying.serializer(), body)))
+    suspend fun leaveJam() { send("POST", "api/jam/leave") }
+    suspend fun endJam() { send("DELETE", "api/jam") }
     suspend fun setTaste(body: TasteIn): List<TasteItem> = json.decodeFromString(TasteList.serializer(),
         send("PUT", "api/taste", json.encodeToString(TasteIn.serializer(), body))).items
     suspend fun lyrics(query: String): Lyrics = get("api/lyrics?$query")

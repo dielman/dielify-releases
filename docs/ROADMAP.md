@@ -160,7 +160,7 @@ No crossfade (Josh, 9 Nov: dropped, PC and phone).
   (Media3 Cast). Streams from the PC over the home network. Checked on Josh's speakers.
 - **Home-screen widget**: cover, title, play/pause/next; shows the active device too.
 
-## 0.9.8: Together
+## 0.9.8: Together (built 9 Nov, not published)
 
 - **Shared household playlists**: lists more than one person can edit. A child sees only
   the songs her filter allows.

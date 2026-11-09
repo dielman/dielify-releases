@@ -1,5 +1,8 @@
 package com.dielify.app.ui
 
+import kotlinx.coroutines.launch
+import androidx.compose.material.icons.filled.Groups
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -55,6 +58,8 @@ import com.dielify.app.net.PlaylistSummary
 import com.dielify.app.net.SongIn
 
 private fun describe(p: PlaylistSummary): String = if (p.kind == "mix") "${p.count} songs · ${p.description ?: "Dielify mix"} · new every week"
+else if (p.kind == "blend") "${p.count} songs · Blend · new every week"
+else if (p.shared) "${p.count} songs · " + (if (p.mine) "shared with the household" else "shared by ${p.owner}")
 else if (p.kind == "smart") "${p.count} songs · smart: ${p.description ?: ""} (change the rules on the PC)" else listOfNotNull(
     "${p.count} songs",
     when {
@@ -76,7 +81,7 @@ fun PlaylistsTab(vm: AppViewModel) {
         val status = runCatching { vm.server.mixes() }.getOrNull()
         Triple(all, yt, status)
     }) { (all, yt, status) ->
-        val mine = all.filter { it.kind != "mix" }
+        val mine = all.filter { it.kind != "mix" && it.kind != "blend" }
         val mixes = all.filter { it.kind == "mix" }
         val synced = mine.mapNotNull { it.ytId }.toSet()
         val notSynced = yt.filter { it.id !in synced }
@@ -94,6 +99,7 @@ fun PlaylistsTab(vm: AppViewModel) {
                 )
             }
             items(mixes, key = { "m${it.id}" }) { p -> PlaylistRow(vm, p) }
+            item { BlendSection(vm) }
             item {
                 Row(Modifier.fillMaxWidth().padding(16.dp, 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("Your playlists", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
@@ -191,15 +197,27 @@ fun PlaylistScreen(vm: AppViewModel, page: Screen.PlaylistPage) {
     var deleting by remember { mutableStateOf(false) }
     var removing by remember { mutableStateOf<PlaylistEntry?>(null) }
     var current by remember { mutableStateOf<PlaylistSummary?>(null) }
+    val scope = rememberCoroutineScope()
     Page(vm, current?.name ?: page.name, actions = {
         Box {
             IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "More") }
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                 val p = current
-                if (p != null && !p.readOnly) DropdownMenuItem(text = { Text("Rename") },
+                if (p != null && p.mine && p.kind == "user" && p.ytId == null) DropdownMenuItem(
+                    text = { Text(if (p.shared) "Stop sharing" else "Share with household") },
+                    leadingIcon = { Icon(androidx.compose.material.icons.Icons.Filled.Groups, null) },
+                    onClick = {
+                        menu = false
+                        scope.launch {
+                            try { vm.server.sharePlaylist(p.id, !p.shared); vm.playlistsChanged()
+                                vm.messages.tryEmit(if (p.shared) "Not shared any more" else "Shared with the household")
+                            } catch (e: com.dielify.app.net.ApiError) { vm.messages.tryEmit(e.message ?: "Couldn't change that") }
+                        }
+                    })
+                if (p != null && !p.readOnly && p.mine) DropdownMenuItem(text = { Text("Rename") },
                     leadingIcon = { Icon(Icons.Filled.Edit, null) }, onClick = { menu = false; renaming = true })
                 if (p != null && p.kind != "mix") TasteMenuItem(vm, { menu = false }, TasteTarget(p.id.toString(), p.name), kind = "playlist")
-                if (p != null && p.kind != "mix") DropdownMenuItem(text = { Text("Delete playlist") },
+                if (p != null && p.kind != "mix" && p.kind != "blend" && p.mine) DropdownMenuItem(text = { Text("Delete playlist") },
                     leadingIcon = { Icon(Icons.Filled.Delete, null) }, onClick = { menu = false; deleting = true })
             }
         }

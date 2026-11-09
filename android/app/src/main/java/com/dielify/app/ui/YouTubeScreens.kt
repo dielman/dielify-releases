@@ -162,6 +162,7 @@ fun ItemRow(vm: AppViewModel, item: Item, queue: List<Item> = listOf(item),
                 if (item.isSong) QueueMenuItems({ menu = false },
                     radio = { vm.songRadio(item.id, item.title, com.dielify.app.playback.MediaItems.fromItem(item)) },
                     taste = TasteTarget(item.id, "${item.title} - ${item.artists.joinToString(", ")}"), vm = vm,
+                    jam = { vm.addToJam(listOf(item)) },
                 ) { next -> vm.queueItems(listOf(item), next) }
                 if (item.type == "artist") DropdownMenuItem(
                     text = { Text("Artist radio") },

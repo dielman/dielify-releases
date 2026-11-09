@@ -237,6 +237,9 @@ data class PlaylistSummary(
     @SerialName("synced_at") val syncedAt: Double? = null,
     @SerialName("sync_error") val syncError: String? = null,
     val thumbnail: String? = null,
+    val shared: Boolean = false,
+    val owner: String? = null,
+    val mine: Boolean = true,
 )
 
 @Serializable data class PlaylistList(val playlists: List<PlaylistSummary>)
@@ -248,7 +251,11 @@ data class MixStatus(
     @SerialName("looked_up") val lookedUp: Int = 0,
     @SerialName("built_at") val builtAt: Double? = null,
 )
-@Serializable data class PlaylistEntry(@SerialName("entry_id") val entryId: Long, val item: Item)
+@Serializable data class PlaylistEntry(
+    @SerialName("entry_id") val entryId: Long,
+    val item: Item,
+    @SerialName("added_by") val addedBy: String? = null,
+)
 @Serializable data class PlaylistDetail(val playlist: PlaylistSummary, val entries: List<PlaylistEntry>)
 @Serializable data class NewPlaylist(val name: String, @SerialName("on_youtube") val onYoutube: Boolean)
 @Serializable data class ImportPlaylist(@SerialName("yt_id") val ytId: String)
