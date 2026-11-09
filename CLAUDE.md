@@ -465,6 +465,9 @@ src/dielify/
   empty answers (JSONDecodeError on the home feed, seen 17:43 in Josh's log) retried once, and
   Discover falls back to the last home feed that loaded. Josh: ship these with 0.9.5 Discovery
   (not a separate fix release). Meanwhile the phone installs 0.9.4 from the release page.
+  Also for 0.9.5 (Josh: playlists don't belong in Settings): "Keep on this phone" is a switch on
+  each playlist's page (replaces the one-off "Save on phone" there); Settings lists only the kept
+  playlists, with switches to stop keeping them.
 
 ## Backlog (Josh, 8 Nov; after Phase 8 item 6)
 

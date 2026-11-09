@@ -235,10 +235,8 @@ fun PlaylistScreen(vm: AppViewModel, page: Screen.PlaylistPage) {
                                 if (p.ytId != null) OutlinedButton(onClick = { vm.syncPlaylist(p) }) {
                                     Icon(Icons.Filled.Sync, null); Spacer(Modifier.width(4.dp)); Text("Sync now")
                                 }
-                                if (have.isNotEmpty()) OutlinedButton(onClick = { vm.saveLibraryToPhone(have) }) {
-                                    Icon(Icons.Filled.DownloadForOffline, null); Spacer(Modifier.width(4.dp)); Text("Save on phone")
-                                }
                             }
+                            KeepPlaylistSwitch(vm, p.id, Modifier.fillMaxWidth().padding(top = 8.dp))
                             if (have.size < songs.size) Text(
                                 "${songs.size - have.size} not on your PC yet: they're downloading. Tap any song to play it now.",
                                 Modifier.padding(top = 8.dp), style = MaterialTheme.typography.bodySmall,
