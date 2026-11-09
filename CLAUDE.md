@@ -132,7 +132,7 @@ src/dielify/
 | 6 | Android app | Find, request and listen on the road | **Done** 2026-11-08 — closed by Josh before the car test ("assume it works"); Android Auto untested |
 | 7 | Polish (scope set by Josh 8 Nov) | Backups to E:, signed phone release with in-app updates, download-next, playlists, music-video fix | **Done** 2026-11-08 — 0.6.0 published; phone self-update to be confirmed with the first Phase 8 release (Josh) |
 | 8 | Listening features (Josh, 8 Nov) | 1 instant play + download, 2 play history + stats, 4 two-way playlist sync, 3 Dielify-made genre/vibe playlists, 5 outside discovery, 6 remote control between devices | In progress (branch `phase-8`) |
-| 9 | Road to 1.0 (Josh, 9 Nov) | Releases 0.9.1-0.9.9 in `docs/ROADMAP.md`: household + kids accounts first, then discovery, library, sound, phone, together, hardening | In progress: 0.9.8 published |
+| 9 | Road to 1.0 (Josh, 9 Nov) | Releases 0.9.1-0.9.9 in `docs/ROADMAP.md`: household + kids accounts first, then discovery, library, sound, phone, together, hardening | In progress: 0.9.9 published |
 
 ## Current status
 
@@ -555,7 +555,8 @@ src/dielify/
     the queue after the playing song, reports on transitions). Phone: Jam icon in top bars, JamScreen,
     "Add to Jam" in song menus. Phone Server.send no longer sends a body with GET.
 
-- 0.9.9 Beautification (Josh, 10 Nov: all 27 items; plan in docs/ROADMAP.md). Decisions: font **Inter**
+- **Published v0.9.9** Beautification (10 Nov; 178 tests; installer 123 MB, APK 8 MB; not yet confirmed by Josh on
+  devices; tag v0.9.9 on phase-8). Josh, 10 Nov: all 27 items; plan in docs/ROADMAP.md. Decisions: font **Inter**
   (Josh OK'd downloading the font files from Google Fonts), phone colours from the **song's cover**
   (not Material You), app icon: "get creative" (draw options for Josh to pick).
   - Stage 1 built (not released): `artwork.py`. Colours per album (table art_colors, key al:<album id>,

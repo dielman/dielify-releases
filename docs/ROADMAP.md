@@ -16,7 +16,7 @@ count up the last digit: 0.9.1, 0.9.2 ... then 1.0.0.
 | 0.9.6 | Library power | smart playlists, search by lyrics (removed in 0.9.9), year in review |
 | 0.9.7 | Sound + phone extras | equaliser, cast to speakers, home-screen widget (no crossfade: Josh, 9 Nov) |
 | 0.9.8 | Together | shared household playlists, Blend, Jam |
-| 0.9.9 | Beautification | one design, real artwork, new icon; lyrics removed, Discover cached (built, not published) |
+| 0.9.9 | Beautification | one design, real artwork, new icon; lyrics removed, Discover cached (published 10 Nov) |
 | 0.9.10 | 1.0 hardening | clean-PC install, car test, security review, restore drill, help pages |
 | 1.0.0 | Release | the last 0.9 build, renamed, once Josh is happy |
 
@@ -169,7 +169,7 @@ No crossfade (Josh, 9 Nov: dropped, PC and phone).
 - **Jam**: one shared queue, e.g. in the car. The host plays; others add songs from their
   phones. If a child is in the Jam, every song is filtered for her.
 
-## 0.9.9: Beautification (Josh, 10 Nov: all 27 items) - built, not published
+## 0.9.9: Beautification (Josh, 10 Nov: all 27 items) - published 10 Nov
 
 Josh picked everything on the list (artwork, colour, PC, phone, motion, brand, words). Built in
 stages; Josh sees PC screenshots after stage 2 before the phone work starts.
@@ -204,7 +204,7 @@ phone's cover-to-player animation (pages slide instead). Also in 0.9.9 (Josh, 10
   running or waiting; slow YouTube calls are logged.
 - Inter font fix on the PC (it never loaded before).
 
-Left: publish 0.9.9 (Josh says when).
+Published 10 Nov (v0.9.9).
 
 ## 0.9.10: 1.0 hardening
 
