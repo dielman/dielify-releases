@@ -37,23 +37,40 @@ def _err(e: Exception) -> str:
 
 # --- reading ----------------------------------------------------------------------------
 
+def household(profile: str) -> list[str]:
+    """Everyone who shares this person's music store (themselves included)."""
+    from .library import people, person
+    store = person(profile)["store"]
+    return [p["profile"] for p in people() if p["store"] == store] or [profile]
+
+
+def _visible(profile: str) -> tuple[str, list]:
+    """SQL: playlists this person may open: their own, and lists shared in their household."""
+    others = [p for p in household(profile) if p.casefold() != profile.casefold()]
+    if not others:
+        return "p.profile = ?", [profile]
+    return f"(p.profile = ? OR (p.shared = 1 AND p.profile IN ({','.join('?' * len(others))})))", [profile, *others]
+
+
 def all_playlists(profile: str) -> list[dict]:
     from . import smart
     smart.refresh_stale(profile)  # smart playlists: songs worked out again when they're old
+    where, args = _visible(profile)
     with connect() as conn:
         rows = conn.execute(
             "SELECT p.*, (SELECT COUNT(*) FROM playlist_items i WHERE i.playlist_id = p.id) AS count, "
             "(SELECT COUNT(*) FROM playlist_ops o WHERE o.playlist_id = p.id) AS pending, "
             "(SELECT i.video_id FROM playlist_items i WHERE i.playlist_id = p.id ORDER BY i.position LIMIT 1) "
-            "AS first_video FROM playlists p WHERE p.profile = ? ORDER BY p.name COLLATE NOCASE", (profile,)).fetchall()
+            f"AS first_video FROM playlists p WHERE {where} ORDER BY p.name COLLATE NOCASE", args).fetchall()
     return [dict(r) for r in rows]
 
 
 def get(profile: str, playlist_id: int) -> dict | None:
     from . import smart
     smart.refresh_stale(profile, playlist_id)
+    where, args = _visible(profile)
     with connect() as conn:
-        row = conn.execute("SELECT * FROM playlists WHERE id = ? AND profile = ?", (playlist_id, profile)).fetchone()
+        row = conn.execute(f"SELECT p.* FROM playlists p WHERE p.id = ? AND {where}", (playlist_id, *args)).fetchone()
         if row is None:
             return None
         items = conn.execute("SELECT * FROM playlist_items WHERE playlist_id = ? ORDER BY position, id",
@@ -78,14 +95,35 @@ def _read_only_reason(pl: dict) -> str:
 
 # --- local changes ------------------------------------------------------------------------
 
-def _insert_items(conn, playlist_id: int, items: list[YTItem], start: int, sets: list[str | None] | None = None):
+def _insert_items(conn, playlist_id: int, items: list[YTItem], start: int, sets: list[str | None] | None = None,
+                  added_by: str | None = None):
     now = time.time()
     for n, it in enumerate(items):
         conn.execute(
             "INSERT INTO playlist_items (playlist_id, position, video_id, set_video_id, title, artist, album, "
-            "duration_s, thumbnail, added_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            "duration_s, thumbnail, added_at, added_by) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
             (playlist_id, start + n, it.id, sets[n] if sets else None, it.title, ", ".join(it.artists) or None,
-             it.album, it.duration_s, it.thumbnail, now))
+             it.album, it.duration_s, it.thumbnail, now, added_by))
+
+
+def _mine(pl: dict, profile: str, what: str) -> None:
+    """Only the person who made a shared playlist can rename, share or delete it."""
+    if pl["profile"].casefold() != profile.casefold():
+        raise ValueError(f"Only {pl['profile']} can {what} \"{pl['name']}\" (it's shared with you)")
+
+
+def set_shared(profile: str, playlist_id: int, shared: bool) -> dict:
+    """Share a playlist with the household (everyone can add and remove songs), or stop."""
+    pl = get(profile, playlist_id)
+    if pl is None:
+        raise KeyError("No such playlist")
+    _mine(pl, profile, "share")
+    if shared and (pl["yt_id"] or pl.get("kind", "user") != "user"):
+        raise ValueError("Only playlists that are only in Dielify can be shared (not ones synced with "
+                         "YouTube Music, mixes or smart playlists)")
+    with connect() as conn:
+        conn.execute("UPDATE playlists SET shared = ?, updated_at = ? WHERE id = ?", (int(shared), time.time(), playlist_id))
+    return get(profile, playlist_id)
 
 
 def _touch(conn, playlist_id: int) -> None:
@@ -152,7 +190,7 @@ class Playlists:
         with self._lock(playlist_id), connect() as conn:
             start = (conn.execute("SELECT MAX(position) FROM playlist_items WHERE playlist_id = ?",
                                   (playlist_id,)).fetchone()[0] or 0) + 1
-            _insert_items(conn, playlist_id, items, start)
+            _insert_items(conn, playlist_id, items, start, added_by=profile)
             _touch(conn, playlist_id)
             if pl["yt_id"]:
                 for it in items:
@@ -199,6 +237,7 @@ class Playlists:
         pl = get(profile, playlist_id)
         if pl is None:
             raise KeyError("No such playlist")
+        _mine(pl, profile, "rename")
         name = name.strip()[:150]
         if not name:
             raise ValueError("Give the playlist a name")
@@ -218,6 +257,7 @@ class Playlists:
         pl = get(profile, playlist_id)
         if pl is None:
             raise KeyError("No such playlist")
+        _mine(pl, profile, "delete")
         if on_youtube and pl["yt_id"]:
             if pl["read_only"]:
                 raise ValueError(f"\"{pl['name']}\" can't be deleted")

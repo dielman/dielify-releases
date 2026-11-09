@@ -45,6 +45,8 @@ class Controls:
     quiet_from: str = "21:00"
     quiet_to: str = "07:00"
     parent_sees_stats: bool = False
+    blend: bool = False                # may make a Blend with someone in the household (0.9.8)
+    jam: bool = True                   # may join a Jam (songs in it are filtered for her)
     picks: list[dict] = field(default_factory=list)  # the parent's picks: YTItem dicts (albums, artists, playlists, songs)
 
     @classmethod

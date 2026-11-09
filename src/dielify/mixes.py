@@ -237,6 +237,8 @@ class MixMaker:
                 tags.tag_some(self.mb, self._stop)
             st = tags.status()
             ready = st["artists"] and st["looked_up"] >= 0.8 * st["artists"]
+            from . import blend
+            blend.rebuild_all()  # weekly Blends between people who turned it on
             profiles = library.profiles()
             for p in profiles:
                 built = last_built(p)

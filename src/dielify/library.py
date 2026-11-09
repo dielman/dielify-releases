@@ -353,6 +353,11 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE playlists ADD COLUMN description TEXT")
     if "rules" not in pcols:  # 0.9.6: smart playlists (smart.py)
         conn.execute("ALTER TABLE playlists ADD COLUMN rules TEXT")
+    if "shared" not in pcols:  # 0.9.8: shared household playlists (playlists.py)
+        conn.execute("ALTER TABLE playlists ADD COLUMN shared INTEGER NOT NULL DEFAULT 0")
+    icols = {r[1] for r in conn.execute("PRAGMA table_info(playlist_items)")}
+    if "added_by" not in icols:  # 0.9.8: who added a song to a shared playlist
+        conn.execute("ALTER TABLE playlist_items ADD COLUMN added_by TEXT")
     tcols = {r[1] for r in conn.execute("PRAGMA table_info(tracks)")}
     if "loudness" not in tcols:  # 0.9: volume levelling (leveller.py); NULL = not measured yet
         conn.execute("ALTER TABLE tracks ADD COLUMN loudness REAL")

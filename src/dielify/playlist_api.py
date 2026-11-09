@@ -25,11 +25,15 @@ class PlaylistSummary(BaseModel):
     synced_at: float | None
     sync_error: str | None
     thumbnail: str | None
+    shared: bool = Field(False, description="Shared with the household: everyone can add and remove songs")
+    owner: str | None = Field(None, description="Who made it")
+    mine: bool = Field(True, description="False: someone else's list shared with you (you can't rename/delete it)")
 
 
 class PlaylistEntry(BaseModel):
     entry_id: int = Field(description="Use to remove this entry")
     item: Item
+    added_by: str | None = Field(None, description="Who added it (shared playlists)")
 
 
 class PlaylistDetail(BaseModel):
@@ -103,20 +107,27 @@ def _thumb(video_id: str | None) -> str | None:
     return f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg" if video_id else None
 
 
-def _summary(p: dict) -> PlaylistSummary:
+def _summary(p: dict, viewer: str | None = None) -> PlaylistSummary:
     first = p.get("first_video") or (p["items"][0]["video_id"] if p.get("items") else None)
+    mine = viewer is None or p["profile"].casefold() == viewer.casefold()
     return PlaylistSummary(id=p["id"], name=p["name"], yt_id=p["yt_id"], read_only=bool(p["read_only"]),
                            kind=p.get("kind") or "user", description=p.get("description"),
                            count=p["count"] if "count" in p else len(p.get("items", [])),
                            pending=p.get("pending", 0), synced_at=p["synced_at"], sync_error=p["sync_error"],
-                           thumbnail=_thumb(first))
+                           thumbnail=_thumb(first), shared=bool(p.get("shared")), owner=p["profile"], mine=mine)
 
 
 def _detail(s: Session, p: dict) -> PlaylistDetail:
     yt = [YTItem("song", i["video_id"], i["title"], [i["artist"]] if i["artist"] else [], i["album"],
                  duration_s=i["duration_s"], thumbnail=i["thumbnail"] or _thumb(i["video_id"])) for i in p["items"]]
-    return PlaylistDetail(playlist=_summary(p), entries=[PlaylistEntry(entry_id=i["id"], item=it)
-                                                         for i, it in zip(p["items"], _items(yt, s.lib))])
+    # a kids account only sees the songs her controls allow (also in a shared list): match by video id
+    allowed = {it.id: it for it in _items(yt, s.lib)}
+    entries = [PlaylistEntry(entry_id=i["id"], item=allowed[i["video_id"]], added_by=i.get("added_by"))
+               for i in p["items"] if i["video_id"] in allowed]
+    summary = _summary(p, s.user.profile)
+    if s.kid:
+        summary.count = len(entries)
+    return PlaylistDetail(playlist=summary, entries=entries)
 
 
 def _not_kid(s: Session) -> None:
@@ -136,7 +147,7 @@ def _guard(fn):
 
 @router.get("/playlists", response_model=PlaylistList)
 def list_playlists(s: Session = Depends(session)) -> PlaylistList:
-    return PlaylistList(playlists=[_summary(p) for p in pl.all_playlists(s.user.profile)])
+    return PlaylistList(playlists=[_summary(p, s.user.profile) for p in pl.all_playlists(s.user.profile)])
 
 
 @router.post("/playlists", response_model=PlaylistDetail, status_code=201)
@@ -176,6 +187,17 @@ def set_smart_rules(playlist_id: int, body: SmartPlaylistIn, s: Session = Depend
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No such smart playlist")
     _smart(lambda: smart.update(s.user.profile, playlist_id, body.name, body.rules.model_dump()))
     return _detail(s, pl.get(s.user.profile, playlist_id))
+
+
+class ShareIn(BaseModel):
+    shared: bool = True
+
+
+@router.put("/playlists/{playlist_id}/share", response_model=PlaylistDetail)
+def share_playlist(playlist_id: int, body: ShareIn, s: Session = Depends(session)) -> PlaylistDetail:
+    """Share your playlist with the household: everyone sees it and can add and remove songs
+    (a kids account sees only the songs her controls allow). Only Dielify-only playlists."""
+    return _detail(s, _guard(lambda: pl.set_shared(s.user.profile, playlist_id, body.shared)))
 
 
 @router.get("/playlists/{playlist_id}", response_model=PlaylistDetail)

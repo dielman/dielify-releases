@@ -944,6 +944,174 @@ def get_stats(period: Literal["week", "month", "year", "all"] = "month",
                  top_songs=songs, top_artists=artists, top_albums=albums)
 
 
+# --- 0.9.8 Together: Blend and Jam -------------------------------------------------------
+
+class BlendPlaylist(BaseModel):
+    id: int
+    name: str
+
+
+class BlendOut(BaseModel):
+    on: bool = Field(description="You turned Blend on")
+    allowed: bool = Field(description="False: a kids account whose parent hasn't allowed Blend")
+    partners: list[str] = Field(description="People in your household you have a Blend with")
+    waiting_for: list[str] = Field(description="People in your household who haven't turned Blend on yet")
+    playlists: list[BlendPlaylist]
+
+
+class BlendIn(BaseModel):
+    on: bool
+
+
+def _blend_out(s: "Session") -> BlendOut:
+    from . import blend
+    from .playlists import household
+    me = s.lib.profile
+    others = [p for p in household(me) if p.casefold() != me.casefold()]
+    partners = blend.partners(me)
+    with connect() as conn:
+        rows = conn.execute("SELECT id, name FROM playlists WHERE profile = ? AND kind = 'blend' ORDER BY name",
+                            (me,)).fetchall()
+    return BlendOut(on=blend.wants(me), allowed=blend.allowed(me), partners=partners,
+                    waiting_for=[p for p in others if p not in partners],
+                    playlists=[BlendPlaylist(id=r["id"], name=r["name"]) for r in rows])
+
+
+@router.get("/blend", response_model=BlendOut, tags=["together"])
+def get_blend(s: Session = Depends(session)) -> BlendOut:
+    """Blend: a weekly playlist with each person in your household who also turned it on."""
+    return _blend_out(s)
+
+
+@router.put("/blend", response_model=BlendOut, tags=["together"])
+def set_blend(body: BlendIn, s: Session = Depends(session)) -> BlendOut:
+    from . import blend
+    if body.on and not blend.allowed(s.lib.profile):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "A parent needs to allow Blend for this account first")
+    blend.set_wanted(s.lib.profile, body.on)
+    blend.rebuild_all()  # new Blends are made now, old ones go
+    return _blend_out(s)
+
+
+class JamSongOut(BaseModel):
+    id: int = Field(description="Use to take it out again")
+    item: Item
+    added_by: str
+
+
+class JamOut(BaseModel):
+    host: str
+    device: str = Field(description="The device playing the music")
+    you_host: bool
+    members: list[str]
+    started_at: float
+    index: int = Field(description="The song playing now (-1: not started)")
+    version: int = Field(description="Goes up with every change: the host's app adds new songs when it changes")
+    songs: list[JamSongOut]
+    left_out: list[str] = Field([], description="Songs that weren't added (or were taken out) and why")
+
+
+class JamStart(BaseModel):
+    device: str = Field(max_length=60, description="This device's name, shown to the others")
+    songs: list[DownloadRequest] = Field([], max_length=500, description="Start with these (type song/video)")
+
+
+class JamAdd(BaseModel):
+    songs: list[DownloadRequest] = Field(min_length=1, max_length=200)
+
+
+class JamState(BaseModel):
+    index: int = Field(ge=-1)
+
+
+def _jam_out(s: "Session", jam, left_out=None) -> JamOut:
+    items = [YTItem("song", x.video_id, x.title, x.artists, x.album, duration_s=x.duration_s, thumbnail=x.thumbnail)
+             for x in jam.songs]
+    have = s.lib.video_ids()
+    return JamOut(host=jam.host, device=jam.device, you_host=jam.host.casefold() == s.lib.profile.casefold(),
+                  members=list(jam.members), started_at=jam.started_at, index=jam.index, version=jam.version,
+                  songs=[JamSongOut(id=x.id, item=Item(**vars(i), library_track_id=have.get(i.id)), added_by=x.added_by)
+                         for x, i in zip(jam.songs, items)],
+                  left_out=left_out or [])
+
+
+def _jam(fn):
+    from . import jam
+    try:
+        return fn()
+    except jam.JamError as e:
+        raise HTTPException(e.code, str(e)) from e
+
+
+def _jam_items(songs: list) -> list[YTItem]:
+    return [YTItem(x.type if x.type in ("song", "video") else "song", x.id, x.title or x.id, x.artists, x.album)
+            for x in songs if x.type in ("song", "video")]
+
+
+@router.get("/jam", response_model=JamOut | None, tags=["together"])
+def get_jam(s: Session = Depends(session)) -> JamOut | None:
+    """The Jam going in your household (null: none). The host's app checks this every few
+    seconds and adds new songs to what it plays."""
+    from . import jam
+    j = jam.current(s.lib.profile)
+    return _jam_out(s, j) if j else None
+
+
+@router.post("/jam", response_model=JamOut, tags=["together"])
+def start_jam(body: JamStart, s: Session = Depends(session)) -> JamOut:
+    """Host a Jam on this device: everyone in the household can add songs to what it plays."""
+    from . import jam
+    call = lambda fn, *a: youtube.call(s.lib.profile, fn, *a)  # noqa: E731
+    j = _jam(lambda: jam.start(s.lib.profile, body.device, _jam_items(body.songs), call))
+    return _jam_out(s, j)
+
+
+@router.post("/jam/join", response_model=JamOut, tags=["together"])
+def join_jam(s: Session = Depends(session)) -> JamOut:
+    from . import jam
+    call = lambda fn, *a: youtube.call(s.lib.profile, fn, *a)  # noqa: E731
+    j, removed = _jam(lambda: jam.join(s.lib.profile, call))
+    return _jam_out(s, j, removed)
+
+
+@router.post("/jam/songs", response_model=JamOut, tags=["together"])
+def add_to_jam(body: JamAdd, s: Session = Depends(session)) -> JamOut:
+    """Add songs to the Jam (joins it if you hadn't). With a child in the Jam, only songs
+    her controls allow go in; `left_out` says which didn't."""
+    from . import jam
+    call = lambda fn, *a: youtube.call(s.lib.profile, fn, *a)  # noqa: E731
+    j, why = _jam(lambda: jam.add(s.lib.profile, _jam_items(body.songs), call))
+    return _jam_out(s, j, why)
+
+
+@router.delete("/jam/songs/{song_id}", response_model=JamOut, tags=["together"])
+def remove_from_jam(song_id: int, s: Session = Depends(session)) -> JamOut:
+    from . import jam
+    return _jam_out(s, _jam(lambda: jam.remove(s.lib.profile, song_id)))
+
+
+@router.post("/jam/playing", response_model=JamOut, tags=["together"])
+def jam_playing(body: JamState, s: Session = Depends(session)) -> JamOut:
+    """The host's player: which song is playing now."""
+    from . import jam
+    return _jam_out(s, _jam(lambda: jam.playing(s.lib.profile, body.index)))
+
+
+@router.post("/jam/leave", status_code=204, tags=["together"])
+def leave_jam(s: Session = Depends(session)) -> Response:
+    """Leave (the host leaving ends it)."""
+    from . import jam
+    _jam(lambda: jam.leave(s.lib.profile))
+    return Response(status_code=204)
+
+
+@router.delete("/jam", status_code=204, tags=["together"])
+def end_jam(s: Session = Depends(session)) -> Response:
+    from . import jam
+    _jam(lambda: jam.end(s.lib.profile))
+    return Response(status_code=204)
+
+
 # --- 0.9.7: casting to speakers ---------------------------------------------------------
 
 class CastToken(BaseModel):

@@ -303,6 +303,8 @@ class KidControls(BaseModel):
     quiet_from: str = Field("21:00", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
     quiet_to: str = Field("07:00", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
     parent_sees_stats: bool = False
+    blend: bool = Field(False, description="May make a Blend with someone in the household")
+    jam: bool = Field(True, description="May join a Jam (every song in it is filtered for her)")
     picks: list[dict] = Field([], description="The parent's picks: YouTube items (album, artist, playlist, song)")
 
 
@@ -330,6 +332,9 @@ def put_controls(name: str, body: KidControls, s: Session = Depends(desktop_sess
     except ValueError as e:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e)) from e
     kids_home.forget(profile)
+    import threading
+    from . import blend
+    threading.Thread(target=blend.rebuild_all, daemon=True, name="dielify-blend").start()  # Blend allowed / not
     return KidControls(**asdict(c))
 
 
