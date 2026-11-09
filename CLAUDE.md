@@ -132,7 +132,7 @@ src/dielify/
 | 6 | Android app | Find, request and listen on the road | **Done** 2026-11-08 — closed by Josh before the car test ("assume it works"); Android Auto untested |
 | 7 | Polish (scope set by Josh 8 Nov) | Backups to E:, signed phone release with in-app updates, download-next, playlists, music-video fix | **Done** 2026-11-08 — 0.6.0 published; phone self-update to be confirmed with the first Phase 8 release (Josh) |
 | 8 | Listening features (Josh, 8 Nov) | 1 instant play + download, 2 play history + stats, 4 two-way playlist sync, 3 Dielify-made genre/vibe playlists, 5 outside discovery, 6 remote control between devices | In progress (branch `phase-8`) |
-| 9 | Road to 1.0 (Josh, 9 Nov) | Releases 0.9.1-0.9.9 in `docs/ROADMAP.md`: household + kids accounts first, then discovery, library, sound, phone, together, hardening | In progress: 0.9.1 built, not published |
+| 9 | Road to 1.0 (Josh, 9 Nov) | Releases 0.9.1-0.9.9 in `docs/ROADMAP.md`: household + kids accounts first, then discovery, library, sound, phone, together, hardening | In progress: 0.9.1 published |
 
 ## Current status
 
@@ -407,7 +407,7 @@ src/dielify/
   desktop_api, several times an hour. Not investigated yet.
 
 **Phase 9 — in progress** (started 9 Nov 2026, branch `phase-8` for now; plan in docs/ROADMAP.md):
-- 0.9.1 built (household foundations, no visible change), 146 tests pass, **not published**:
+- **Published v0.9.1** (9 Nov; not yet confirmed by Josh): household foundations, no visible change, 146 tests:
   tables `people` (profile COLLATE NOCASE, role parent|child, store), `library_items` (per-person
   song list: added_at/by, play_count, last_played, starred_at, pinned) and `stars` (album/artist).
   tracks.profile = the store's owner (folder); old per-person columns on tracks/albums/artists
