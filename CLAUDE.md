@@ -132,7 +132,7 @@ src/dielify/
 | 6 | Android app | Find, request and listen on the road | **Done** 2026-11-08 — closed by Josh before the car test ("assume it works"); Android Auto untested |
 | 7 | Polish (scope set by Josh 8 Nov) | Backups to E:, signed phone release with in-app updates, download-next, playlists, music-video fix | **Done** 2026-11-08 — 0.6.0 published; phone self-update to be confirmed with the first Phase 8 release (Josh) |
 | 8 | Listening features (Josh, 8 Nov) | 1 instant play + download, 2 play history + stats, 4 two-way playlist sync, 3 Dielify-made genre/vibe playlists, 5 outside discovery, 6 remote control between devices | In progress (branch `phase-8`) |
-| 9 | Road to 1.0 (Josh, 9 Nov) | Releases 0.9.1-0.9.9 in `docs/ROADMAP.md`: household + kids accounts first, then discovery, library, sound, phone, together, hardening | In progress: 0.9.6 published, 0.9.7 built |
+| 9 | Road to 1.0 (Josh, 9 Nov) | Releases 0.9.1-0.9.9 in `docs/ROADMAP.md`: household + kids accounts first, then discovery, library, sound, phone, together, hardening | In progress: 0.9.7 published |
 
 ## Current status
 
@@ -520,8 +520,8 @@ src/dielify/
   - Recaps: `recap.py`, GET /api/recap?period=2026|2026-11, GET /api/recap/periods (a year from 1 Dec or once
     over). Only your own. PC: Stats > Recaps; phone: Stats > Recaps chip.
 
-- 0.9.7 Sound + phone extras built (9 Nov; version 0.9.7, 175 tests, phone release build OK (7 MB),
-  **not published**, nothing tried on Josh's devices). No crossfade (Josh).
+- **Published v0.9.7** Sound + phone extras (9 Nov; 175 tests, phone release build 7 MB; not yet tried
+  on Josh's devices). No crossfade (Josh).
   - Equaliser: PC = Web Audio (lowshelf 120 Hz + 5 peaking bands 60/230/910/3600/14000 + highshelf 8 kHz,
     pre-gain = -max boost), built only once it isn't Flat; localStorage "eq". Phone = SoundEq on
     android.media.audiofx.Equalizer for the ExoPlayer audio session, preset curve read off at the phone's

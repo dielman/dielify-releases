@@ -150,7 +150,7 @@ Built only from Dielify's own data, filtered by the parent's controls:
 - **Year in review**: a recap page per person (top songs, artists, genres, minutes,
   firsts). Any month, plus a December edition. A child's recap is hers only.
 
-## 0.9.7: Sound + phone extras (0.9.7 and 0.9.8 combined, Josh 9 Nov; built, not published)
+## 0.9.7: Sound + phone extras (0.9.7 and 0.9.8 combined, Josh 9 Nov; published 9 Nov)
 
 No crossfade (Josh, 9 Nov: dropped, PC and phone).
 - **Equaliser**: presets plus bass and treble on the phone (Android's equaliser on
