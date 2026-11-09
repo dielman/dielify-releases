@@ -1166,7 +1166,9 @@ function playAt(i) {
   }
   delete audio.dataset.key;
   applyVolume();
-  audio.play().catch((e) => toast(`Can't play: ${e.message}`));
+  // AbortError = another song was started before this one began (e.g. a double click, or
+  // Next pressed quickly): the newer one plays, so it's not an error worth showing.
+  audio.play().catch((e) => { if (e.name !== "AbortError") toast(`Can't play: ${e.message}`); });
   paintBar();
   topUpEndless();
 }
