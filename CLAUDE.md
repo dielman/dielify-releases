@@ -617,7 +617,7 @@ src/dielify/
 - **0.9.10 TV** (Josh, 10 Nov; plan in docs/ROADMAP.md; hardening moved to 0.9.11). Decisions: one APK for phone
   + TV; QR sign-in approved from a phone, a **parent picks the person**; Android TV emulator OK'd (Google TV,
   API 36, x86_64, installed: `android sdk install system-images/android-36/google-tv/x86_64` with
-  E:\Android\Sdk\cmdline-tools\latestinndroid.exe, the new CLI; sdkmanager.bat now forwards to it and
+  E:\Android\Sdk\cmdline-tools\latest\bin\android.exe, the new CLI; sdkmanager.bat now forwards to it and
   splits ';' package names). Command-line tools 16111833 installed there (sha1 checked).
   - Step 1 built (not released, 184 tests): `pairing.py` (in memory: secret hash + 8-char code from a no-0/O/1/I
     alphabet, 10 min, max 5 pending, 10 starts per address) + `pair_api.py`: POST /api/pair/start (no auth),
