@@ -14,9 +14,9 @@ count up the last digit: 0.9.1, 0.9.2 ... then 1.0.0.
 | 0.9.4 | Fixes from Josh's testing | docs/ISSUES-0.9.3.md: kids Discover speed, remove from library, green bar, open on Discover, Back keeps the search, song + artist radio |
 | 0.9.5 | Discovery | new releases from your artists, artist About pages, time-of-day mix, leave out of my taste |
 | 0.9.6 | Library power | smart playlists, search by lyrics, year in review |
-| 0.9.7 | Sound | crossfade, equaliser |
-| 0.9.8 | Phone extras | cast to speakers, home-screen widget |
-| 0.9.9 | Together | shared household playlists, Blend, Jam |
+| 0.9.7 | Sound + phone extras | crossfade, equaliser, cast to speakers, home-screen widget |
+| 0.9.8 | Together | shared household playlists, Blend, Jam |
+| 0.9.9 | Beautification | make both apps look good: one design, real artwork everywhere, a proper Now playing |
 | 0.9.10 | 1.0 hardening | clean-PC install, car test, security review, restore drill, help pages |
 | 1.0.0 | Release | the last 0.9 build, renamed, once Josh is happy |
 
@@ -150,20 +150,18 @@ Built only from Dielify's own data, filtered by the parent's controls:
 - **Year in review**: a recap page per person (top songs, artists, genres, minutes,
   firsts). Any month, plus a December edition. A child's recap is hers only.
 
-## 0.9.7: Sound
+## 0.9.7: Sound + phone extras (0.9.7 and 0.9.8 combined, Josh 9 Nov)
 
 - **Crossfade**: 0–12 s on the PC (two-player setup already exists) and the phone. Never
   between songs of the same album played in order. Uses the loudness data to blend evenly.
 - **Equaliser**: presets plus bass and treble on the phone (Android's equaliser on
   Media3's audio session) and the PC (Web Audio filters). Set per device.
 
-## 0.9.8: Phone extras
-
 - **Cast to speakers**: Google Cast from the phone to Nest speakers and Chromecasts
   (Media3 Cast). Streams from the PC over the home network. Checked on Josh's speakers.
 - **Home-screen widget**: cover, title, play/pause/next; shows the active device too.
 
-## 0.9.9: Together
+## 0.9.8: Together
 
 - **Shared household playlists**: lists more than one person can edit. A child sees only
   the songs her filter allows.
@@ -171,6 +169,25 @@ Built only from Dielify's own data, filtered by the parent's controls:
   parent's OK and the result is filtered.
 - **Jam**: one shared queue, e.g. in the car. The host plays; others add songs from their
   phones. If a child is in the Jam, every song is filtered for her.
+
+## 0.9.9: Beautification (Josh, 9 Nov: "we need to work on making the app pretty")
+
+Draft, to agree with Josh before it starts (he points at what bothers him most):
+- **One look for both apps**: a small design system (colours, type sizes, spacing, corner
+  radii, icon set) used by the PC app and the phone, so they look like the same product.
+- **Real artwork everywhere**: no music-note placeholders. Artist pictures from YouTube
+  Music (already fetched for About), playlist covers made from their songs' album covers
+  (2x2), smart playlists and mixes with generated covers.
+- **Now playing**: full-screen on the PC, big cover with the background tinted from the
+  cover's colours, on the phone too.
+- **Pages with headers**: album, artist and playlist pages with a large header image and
+  the cover colour behind it.
+- **Motion**: smooth screen changes, cover transitions between the player bar and Now
+  playing, button feedback.
+- **Lists and cards**: consistent card sizes, tidy song rows, better empty and loading
+  states (skeletons, not "Loading…").
+- **App icon and installer look** refreshed.
+- Before/after screenshots of every screen for Josh to approve.
 
 ## 0.9.10: 1.0 hardening
 
