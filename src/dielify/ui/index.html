@@ -4,54 +4,74 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Dielify</title>
+  <link rel="stylesheet" href="fonts/inter.css">
   <link rel="stylesheet" href="app.css">
 </head>
 <body>
-  <header class="top">
-    <div class="brand">Dielify</div>
+  <aside class="side">
+    <div class="brand"><span class="brand-mark" aria-hidden="true"></span>Dielify</div>
     <nav id="nav">
-      <button data-view="library">Library</button>
-      <button data-view="discover">Discover</button>
-      <button data-view="downloads">Downloads <span id="dl-badge" class="badge" hidden></span></button>
-      <button data-view="stats">Stats</button>
-      <button data-view="settings">Settings</button>
+      <button data-view="discover"><span class="nav-ico" data-icon="explore"></span><span>Discover</span></button>
+      <button data-view="library"><span class="nav-ico" data-icon="library"></span><span>Library</span></button>
+      <button data-view="jam"><span class="nav-ico" data-icon="groups"></span><span>Jam</span><span id="jam-badge" class="badge" hidden></span></button>
+      <button data-view="downloads"><span class="nav-ico" data-icon="download"></span><span>Downloads</span><span id="dl-badge" class="badge" hidden></span></button>
+      <button data-view="stats"><span class="nav-ico" data-icon="insights"></span><span>Stats</span></button>
+      <button data-view="settings"><span class="nav-ico" data-icon="settings"></span><span>Settings</span></button>
     </nav>
-    <form id="search" autocomplete="off">
-      <input id="search-input" type="search" placeholder="Search your library">
-    </form>
-    <button id="update-pill" class="pill update" hidden title="A new version of Dielify is ready">Update</button>
-    <div id="offline-pill" class="pill" hidden title="Dielify isn't contacting YouTube">Offline</div>
-  </header>
+    <div class="side-head"><span>Your playlists</span><button id="side-new" class="ib" title="New playlist" aria-label="New playlist"></button></div>
+    <div id="side-playlists" class="side-list"></div>
+  </aside>
 
-  <main id="main"><p class="muted pad">Loading…</p></main>
+  <div class="mainwrap">
+    <header class="top">
+      <form id="search" autocomplete="off">
+        <span class="search-ico" aria-hidden="true"></span>
+        <input id="search-input" type="search" placeholder="Search your library">
+      </form>
+      <div class="spacer"></div>
+      <button id="update-pill" class="pill update" hidden title="A new version of Dielify is ready">Update</button>
+      <div id="offline-pill" class="pill" hidden title="Dielify isn't contacting YouTube">Offline</div>
+    </header>
+    <main id="main"><div class="skel-page"></div></main>
+  </div>
 
   <div id="connect-strip" class="connect-strip" hidden></div>
   <footer class="player" id="player">
-    <img id="np-cover" alt="" hidden>
-    <div class="np-text">
-      <div id="np-title" class="np-title">Nothing playing</div>
-      <div id="np-artist" class="muted small"></div>
-    </div>
-    <div class="controls">
-      <button id="btn-prev" title="Previous" aria-label="Previous">⏮</button>
-      <button id="btn-play" class="play" title="Play" aria-label="Play">▶</button>
-      <button id="btn-next" title="Next" aria-label="Next">⏭</button>
+    <div class="np">
+      <img id="np-cover" alt="" hidden title="Now playing">
+      <div class="np-text">
+        <div id="np-title" class="np-title">Nothing playing</div>
+        <div id="np-artist" class="np-artist"></div>
+      </div>
       <button id="btn-up" class="thumb" title="Thumbs up" aria-label="Thumbs up"></button>
       <button id="btn-down" class="thumb" title="Thumbs down (hold to ban)" aria-label="Thumbs down"></button>
-      <button id="btn-addpl" title="Add to playlist" aria-label="Add to playlist">＋</button>
     </div>
-    <div class="seek">
-      <span id="t-cur" class="small muted">0:00</span>
-      <input id="seek" type="range" min="0" max="1000" value="0" aria-label="Position">
-      <span id="t-dur" class="small muted">0:00</span>
+    <div class="centre">
+      <div class="controls">
+        <button id="btn-prev" title="Previous" aria-label="Previous"></button>
+        <button id="btn-play" class="play" title="Play" aria-label="Play"></button>
+        <button id="btn-next" title="Next" aria-label="Next"></button>
+      </div>
+      <div class="seek">
+        <span id="t-cur" class="time">0:00</span>
+        <input id="seek" type="range" min="0" max="1000" value="0" aria-label="Position">
+        <span id="t-dur" class="time">0:00</span>
+      </div>
     </div>
     <div class="tools">
-      <button id="btn-sleep" class="devices-btn" title="Sleep timer" aria-label="Sleep timer"></button>
       <button id="btn-lyrics" class="devices-btn" title="Lyrics" aria-label="Lyrics"></button>
       <button id="btn-queue" class="devices-btn" title="Up next" aria-label="Up next"></button>
-      <button id="btn-devices" class="devices-btn" title="Play on another device" aria-label="Devices">🔊</button>
+      <button id="btn-devices" class="devices-btn" title="Play on another device" aria-label="Devices"></button>
+      <button id="btn-more" class="devices-btn" title="More" aria-label="More"></button>
+      <div class="vol"><span class="vol-ico" aria-hidden="true"></span><input id="volume" type="range" min="0" max="100" value="80" title="Volume" aria-label="Volume"></div>
     </div>
-    <input id="volume" type="range" min="0" max="100" value="80" title="Volume" aria-label="Volume">
+    <!-- in the "More" menu (they open their own menus) -->
+    <div id="more-menu" class="menu more-menu" hidden>
+      <button id="btn-addpl" title="Add to playlist"></button>
+      <button id="btn-sleep" title="Sleep timer"></button>
+      <button id="btn-eq" title="Equaliser"></button>
+      <button id="btn-np" title="Now playing"></button>
+    </div>
     <audio id="audio" preload="auto"></audio>
   </footer>
 
