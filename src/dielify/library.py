@@ -383,11 +383,12 @@ def connect():
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     conn.create_function("fold", 1, _fold, deterministic=True)  # Unicode-aware lower()
-    conn.execute("PRAGMA journal_mode = WAL")
-    # Tables and migrations, one thread at a time: two threads adding the same column to a
-    # new database at once failed with "duplicate column name". (Run on every connection,
-    # so a database restored from a backup is brought up to date too.)
+    # Journal mode, tables and migrations, one thread at a time: two threads adding the same
+    # column to a new database at once failed with "duplicate column name", and switching a new
+    # database to WAL from many threads at once failed with "database is locked". (Run on every
+    # connection, so a database restored from a backup is brought up to date too.)
     with _ready_lock:
+        conn.execute("PRAGMA journal_mode = WAL")
         conn.executescript(SCHEMA)
         _migrate(conn)
         conn.commit()

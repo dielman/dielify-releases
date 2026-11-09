@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import threading
 import time
 from typing import Callable
 
@@ -87,14 +88,37 @@ def from_lrclib(artist: str, title: str, album: str | None, duration_s: int | No
     return {"lines": None, "text": plain, "source": "LRCLIB"} if plain else None
 
 
+class Busy(Exception):
+    """Too many lyrics lookups at once: ask again later."""
+
+
+# Looking lyrics up waits for YouTube (one call at a time per sign-in) and LRCLIB. A phone
+# saving 165 songs asked for all their lyrics at once (9 Nov 2026): every server thread
+# ended up waiting here and the PC stopped answering anything. So: two lookups at a time,
+# and a request that can't get a turn soon is told to try later (cached lyrics are instant).
+_lookups = threading.BoundedSemaphore(2)
+WAIT_S = 4.0
+
+
 def find(key: str, youtube: Callable[[], dict | None] | None, artist: str | None, title: str | None,
-         album: str | None = None, duration_s: int | None = None, fresh: bool = False) -> dict | None:
+         album: str | None = None, duration_s: int | None = None, fresh: bool = False,
+         wait_s: float = WAIT_S) -> dict | None:
     """Cached lyrics, else YouTube Music (if `youtube` is given), else LRCLIB; the result
-    (or "none") is kept. Synced lyrics from LRCLIB win over YouTube's unsynced ones."""
+    (or "none") is kept. Synced lyrics from LRCLIB win over YouTube's unsynced ones.
+    Raises Busy when two other lookups are running for longer than wait_s."""
     if not fresh:
         known, body = cached(key)
         if known:
             return body
+    if not _lookups.acquire(timeout=wait_s):
+        raise Busy("Busy looking up other lyrics: try again in a minute")
+    try:
+        return _look_up(key, youtube, artist, title, album, duration_s)
+    finally:
+        _lookups.release()
+
+
+def _look_up(key, youtube, artist, title, album, duration_s) -> dict | None:
     found = None
     try:
         found = youtube() if youtube else None

@@ -61,6 +61,10 @@ def create_app(queue: DownloadQueue | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        # More threads for the plain (non-async) endpoints than anyio's 40, so slow YouTube
+        # lookups can't take every one of them.
+        import anyio.to_thread
+        anyio.to_thread.current_default_thread_limiter().total_tokens = 100
         queue.start()
         playlists.start()
         mix_maker.start()
@@ -112,7 +116,7 @@ def create_app(queue: DownloadQueue | None = None) -> FastAPI:
         return JSONResponse({"detail": detail}, status_code=500)
 
     @app.get("/api/health", tags=["status"])
-    def health() -> dict:
+    async def health() -> dict:  # async: answers even when every worker thread is busy
         return {"status": "ok", "version": __version__}
 
     @app.middleware("http")

@@ -1,5 +1,6 @@
 package com.dielify.app.net
 
+import kotlinx.coroutines.sync.withPermit
 import android.content.Context
 import android.net.Uri
 import kotlinx.coroutines.Dispatchers
@@ -32,7 +33,9 @@ class LyricsStore(context: Context, private val server: Server) {
     fun cached(song: Song): Lyrics? = song.key?.let { file(it) }?.takeIf { it.exists() }
         ?.let { runCatching { Server.json.decodeFromString(Lyrics.serializer(), it.readText()) }.getOrNull() }
 
-    /** The phone's copy, else the PC's. null: none, or the PC can't be reached. */
+    private val asking = kotlinx.coroutines.sync.Semaphore(1)
+
+    /** The phone's copy, else the PC's. null: none, or the PC can't be reached (or is busy). */
     suspend fun get(song: Song): Lyrics? = withContext(Dispatchers.IO) {
         val key = song.key ?: return@withContext null
         cached(song)?.let { return@withContext it }
@@ -48,7 +51,7 @@ class LyricsStore(context: Context, private val server: Server) {
             song.durationS?.let { add("duration_s=$it") }
         }.joinToString("&")
         try {
-            val l = server.lyrics(q)
+            val l = asking.withPermit { server.lyrics(q) }  // one question at a time
             file(key).writeText(Server.json.encodeToString(Lyrics.serializer(), l))
             trim()
             l

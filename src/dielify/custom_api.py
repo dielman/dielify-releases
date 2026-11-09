@@ -1019,7 +1019,10 @@ def get_lyrics(video_id: str | None = Query(None, max_length=64), track_id: int 
         found = lyrics.cached(key)[1]
     else:
         yt = (lambda: youtube.call(s.user.profile, "lyrics", video_id)) if video_id else None
-        found = lyrics.find(key, yt, artist, title, album, duration_s)
+        try:
+            found = lyrics.find(key, yt, artist, title, album, duration_s)
+        except lyrics.Busy as e:
+            raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(e), headers={"Retry-After": "60"}) from e
     if not found:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No lyrics for this song")
     lines = [LyricLine(ms=ms, text=txt) for ms, txt in (found["lines"] or [])]

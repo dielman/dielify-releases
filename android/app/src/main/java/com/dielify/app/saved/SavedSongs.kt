@@ -1,5 +1,6 @@
 package com.dielify.app.saved
 
+import kotlinx.coroutines.sync.withPermit
 import android.content.Context
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
@@ -124,7 +125,13 @@ class SavedSongs(private val context: Context) {
     }
 
     /** Called by the worker: download the song (and its cover) from the PC, then list it. */
-    internal suspend fun download(server: Server, t: Track) = withContext(Dispatchers.IO) {
+    internal suspend fun download(server: Server, t: Track) = saving.withPermit { downloadNow(server, t) }
+
+    // Two songs at a time: "Keep on this phone" for a 165-song playlist started them all at
+    // once (9 Nov 2026) and, with their lyrics, swamped the PC.
+    private val saving = kotlinx.coroutines.sync.Semaphore(2)
+
+    private suspend fun downloadNow(server: Server, t: Track) = withContext(Dispatchers.IO) {
         val ext = t.suffix.ifEmpty { "audio" }.filter { it.isLetterOrDigit() }
         val audioName = "${t.id}.$ext"
         val audio = File(dir, audioName)
