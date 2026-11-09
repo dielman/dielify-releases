@@ -938,6 +938,136 @@ def get_stats(period: Literal["week", "month", "year", "all"] = "month",
                  top_songs=songs, top_artists=artists, top_albums=albums)
 
 
+# --- 0.9.6: recap (year in review / any month) and search by lyrics ---------------------
+
+class RecapGenre(BaseModel):
+    name: str
+    plays: int
+
+
+class RecapDay(BaseModel):
+    date: str
+    minutes: int
+
+
+class RecapFirst(BaseModel):
+    title: str
+    artist: str | None
+    track_id: int | None
+    cover_url: str | None
+    started_at: float
+
+
+class Recap(BaseModel):
+    period: str = Field(description="2026 (the year) or 2026-11 (a month)")
+    title: str = Field(description='"Your 2026" or "November 2026"')
+    since: float
+    until: float
+    minutes: int
+    plays: int
+    songs: int
+    artists: int
+    days_listened: int
+    longest_streak_days: int = Field(description="Most days in a row with music")
+    busiest_day: RecapDay | None
+    favourite_hour: int | None = Field(description="0-23, local time")
+    top_songs: list[StatSong]
+    top_artists: list[StatArtist]
+    top_albums: list[StatAlbum]
+    top_genres: list[RecapGenre]
+    first_song: RecapFirst | None = Field(description="The first song you played in the period")
+    new_artists: int = Field(description="Artists you heard for the first time")
+    top_new_artists: list[StatArtist]
+
+
+class RecapPeriod(BaseModel):
+    period: str
+    title: str
+    kind: Literal["year", "month"]
+
+
+class RecapPeriods(BaseModel):
+    periods: list[RecapPeriod] = Field(description="Newest first. A year shows from 1 December (or once it's over)")
+
+
+@router.get("/recap/periods", response_model=RecapPeriods, tags=["stats"])
+def recap_periods(s: Session = Depends(session)) -> RecapPeriods:
+    from . import recap
+    return RecapPeriods(periods=[RecapPeriod(**p) for p in recap.periods(s.lib)])
+
+
+@router.get("/recap", response_model=Recap, tags=["stats"])
+def get_recap(period: str = Query(min_length=4, max_length=7, pattern=r"^\d{4}(-\d{2})?$"),
+              s: Session = Depends(session)) -> Recap:
+    """Your recap: top songs, artists, albums and genres, minutes, streaks, firsts. Only
+    ever your own (a kids account's recap is hers only)."""
+    from . import recap
+    try:
+        r = recap.build(s.lib, period)
+    except ValueError as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e)) from e
+    tracks: dict = {}
+
+    def track(tid):
+        if tid and tid not in tracks:
+            tracks[tid] = s.lib.track(tid)
+        return tracks.get(tid)
+
+    def cover(tid):
+        t = track(tid)
+        return f"/api/library/tracks/{tid}/cover" if t is not None and t["has_cover"] else None
+
+    def artist(a):
+        t = track(a["track_id"])
+        return StatArtist(name=a["name"], plays=a["plays"], minutes=round((a.get("secs") or 0) / 60),
+                          cover_url=cover(a["track_id"]), artist_id=t["artist_id"] if t is not None else None)
+
+    f = r["first_song"]
+    return Recap(
+        **{k: r[k] for k in ("period", "title", "since", "until", "minutes", "plays", "songs", "artists",
+                             "days_listened", "longest_streak_days", "favourite_hour", "new_artists")},
+        busiest_day=RecapDay(**r["busiest_day"]) if r["busiest_day"] else None,
+        top_songs=[StatSong(title=(track(x["track_id"]) or {"title": x["title"]})["title"], artist=x["artist"], album=None,
+                            plays=x["plays"],
+                            minutes=round((x["secs"] or 0) / 60), track_id=x["track_id"] if track(x["track_id"]) else None,
+                            video_id=x["video_id"], cover_url=cover(x["track_id"]), thumbnail=_thumb(x["video_id"]))
+                   for x in r["top_songs"]],
+        top_artists=[artist(a) for a in r["top_artists"]],
+        top_albums=[StatAlbum(name=a["name"], artist=a["artist"], plays=a["plays"], cover_url=cover(a["track_id"]),
+                              album_id=(track(a["track_id"]) or {"album_id": None})["album_id"]) for a in r["top_albums"]],
+        top_genres=[RecapGenre(**g) for g in r["top_genres"]],
+        first_song=RecapFirst(title=f["title"], artist=f["artist"], track_id=f["track_id"] if track(f["track_id"]) else None,
+                              cover_url=cover(f["track_id"]), started_at=f["started_at"]) if f else None,
+        top_new_artists=[artist(a) for a in r["top_new_artists"]])
+
+
+class LyricsHit(BaseModel):
+    track: Track
+    line: str = Field(description="The line of the lyrics that matched best")
+
+
+class LyricsSearch(BaseModel):
+    results: list[LyricsHit]
+
+
+@router.get("/library/lyrics-search", response_model=LyricsSearch, tags=["library"])
+def lyrics_search(q: str = Query(min_length=2, max_length=200), limit: int = Query(50, ge=1, le=200),
+                  s: Session = Depends(session)) -> LyricsSearch:
+    """Songs in your library whose lyrics have all these words ("quoted words" = that
+    phrase). Only songs whose lyrics Dielify has kept (older songs fill in over time)."""
+    from . import lyrics
+    by_video = s.lib.video_ids()
+    out = []
+    for key, line in lyrics.search(q, 1000):
+        tid = by_video.get(key) if not key.startswith("tr-") else (int(key[3:]) if key[3:].isdigit() else None)
+        t = s.lib.track(tid) if tid else None
+        if t is not None:
+            out.append(LyricsHit(track=_track_out(t), line=line))
+            if len(out) >= limit:
+                break
+    return LyricsSearch(results=out)
+
+
 # --- ratings: thumbs up / down / ban --------------------------------------------------
 
 class Rating(BaseModel):

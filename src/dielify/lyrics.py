@@ -49,6 +49,52 @@ def store(key: str, found: dict | None) -> None:
     with connect() as conn:
         conn.execute("INSERT OR REPLACE INTO lyrics (key, body, source, fetched_at) VALUES (?,?,?,?)",
                      (key, body, found["source"] if found else None, time.time()))
+        conn.execute("DELETE FROM lyrics_fts WHERE key = ?", (key,))
+        if found:
+            conn.execute("INSERT INTO lyrics_fts (key, text) VALUES (?,?)", (key, index_text(found)))
+
+
+def index_text(body: dict) -> str:
+    """The words of the lyrics, one line each (timed lines if there are, else the text)."""
+    lines = [t for _, t in body.get("lines") or [] if t and t.strip() and t.strip() != "♪"]
+    return "\n".join(lines) if lines else (body.get("text") or "")
+
+
+def _index_missing(conn) -> None:
+    """Lyrics kept before 0.9.6 (or by an older copy) go into the search index once."""
+    if conn.execute("SELECT COUNT(*) FROM lyrics WHERE body IS NOT NULL").fetchone()[0] ==             conn.execute("SELECT COUNT(*) FROM lyrics_fts").fetchone()[0]:
+        return
+    conn.execute("DELETE FROM lyrics_fts")
+    rows = conn.execute("SELECT key, body FROM lyrics WHERE body IS NOT NULL").fetchall()
+    conn.executemany("INSERT INTO lyrics_fts (key, text) VALUES (?,?)",
+                     [(r["key"], index_text(json.loads(r["body"]))) for r in rows])
+
+
+def _fts_query(q: str) -> str | None:
+    """User words -> an FTS5 query: every word must appear; "quoted words" as a phrase."""
+    phrases = re.findall(r'"([^"]+)"', q)
+    rest = re.sub(r'"[^"]*"', " ", q)
+    words = re.findall(r"[\w']+", rest, flags=re.UNICODE)
+    parts = ['"' + p.replace('"', "") + '"' for p in phrases if p.strip()] + ['"' + w.replace('"', "") + '"' for w in words]
+    return " ".join(parts) or None
+
+
+def search(q: str, limit: int = 200) -> list[tuple[str, str]]:
+    """[(key, the matching line)] for lyrics with all these words, best matches first."""
+    query = _fts_query(q)
+    if not query:
+        return []
+    with connect() as conn:
+        _index_missing(conn)
+        rows = conn.execute("SELECT key, text FROM lyrics_fts WHERE lyrics_fts MATCH ? ORDER BY rank LIMIT ?",
+                            (query, limit)).fetchall()
+    words = [w.casefold() for w in re.findall(r"[\w']+", q.replace('"', " "), flags=re.UNICODE)]
+    out = []
+    for r in rows:
+        lines = r["text"].splitlines() or [""]
+        best = max(lines, key=lambda line: sum(w in line.casefold() for w in words))
+        out.append((r["key"], best.strip()))
+    return out
 
 
 def parse_lrc(text: str) -> list[tuple[int, str]]:
@@ -135,3 +181,56 @@ def _look_up(key, youtube, artist, title, album, duration_s) -> dict | None:
                 return None  # don't remember "none" when we couldn't ask
     store(key, found)
     return found
+
+
+class Backfill:
+    """Background: lyrics for library songs that have none yet (songs downloaded before
+    0.9.0), so search by lyrics finds them. One song at a time, only at quiet moments
+    (`call` should be the API's youtube.background), and it waits its turn behind people's
+    lookups, so it can't swamp the PC."""
+
+    def __init__(self, call: Callable[..., object] | None):
+        self.call = call
+        self._stop = threading.Event()
+
+    def _next(self):
+        with connect() as conn:
+            return conn.execute(
+                "SELECT t.id, t.video_id, t.title, t.artist, t.duration_s, t.profile, al.name AS album "
+                "FROM tracks t JOIN albums al ON al.id = t.album_id "
+                "WHERE COALESCE(t.video_id, 'tr-' || t.id) NOT IN (SELECT key FROM lyrics) "
+                "ORDER BY t.created_at DESC LIMIT 1").fetchone()
+
+    def run_once(self) -> bool:
+        """Look one song up. False: nothing left (or it couldn't, try later)."""
+        row = self._next()
+        if row is None:
+            return False
+        key = key_of(row["video_id"], row["id"])
+        yt = (lambda: self.call(row["profile"], "lyrics", row["video_id"])) if self.call and row["video_id"] else None
+        try:
+            found = find(key, yt, row["artist"], row["title"], row["album"], row["duration_s"], wait_s=600)
+        except Busy:
+            return False
+        if found is None and cached(key) == (False, None):  # LRCLIB unreachable: not remembered
+            return False
+        return True
+
+    def _loop(self) -> None:
+        from . import settings as settings_mod
+        self._stop.wait(10 * 60)
+        while not self._stop.is_set():
+            busy = False
+            try:
+                if not settings_mod.load().offline:
+                    busy = self.run_once()
+            except Exception:  # noqa: BLE001
+                log.exception("Lyrics backfill failed")
+            self._stop.wait(5 if busy else 3600)
+
+    def start(self) -> None:
+        self._stop.clear()
+        threading.Thread(target=self._loop, daemon=True, name="dielify-lyrics-backfill").start()
+
+    def stop(self) -> None:
+        self._stop.set()

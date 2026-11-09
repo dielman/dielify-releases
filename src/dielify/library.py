@@ -196,6 +196,9 @@ CREATE TABLE IF NOT EXISTS lyrics (
     fetched_at REAL NOT NULL
 );
 
+-- Full-text index of the lyrics above (0.9.6 search by lyrics; lyrics.index_text).
+CREATE VIRTUAL TABLE IF NOT EXISTS lyrics_fts USING fts5(key UNINDEXED, text, tokenize = 'unicode61 remove_diacritics 2');
+
 -- Songs never-ending discovery play brought in (explore.py): thumbs down deletes these.
 CREATE TABLE IF NOT EXISTS explore_songs (
     profile  TEXT NOT NULL,
@@ -340,6 +343,8 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE playlists ADD COLUMN kind TEXT NOT NULL DEFAULT 'user'")
         conn.execute("ALTER TABLE playlists ADD COLUMN mix_key TEXT")
         conn.execute("ALTER TABLE playlists ADD COLUMN description TEXT")
+    if "rules" not in pcols:  # 0.9.6: smart playlists (smart.py)
+        conn.execute("ALTER TABLE playlists ADD COLUMN rules TEXT")
     tcols = {r[1] for r in conn.execute("PRAGMA table_info(tracks)")}
     if "loudness" not in tcols:  # 0.9: volume levelling (leveller.py); NULL = not measured yet
         conn.execute("ALTER TABLE tracks ADD COLUMN loudness REAL")

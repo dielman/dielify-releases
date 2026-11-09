@@ -38,6 +38,8 @@ def _err(e: Exception) -> str:
 # --- reading ----------------------------------------------------------------------------
 
 def all_playlists(profile: str) -> list[dict]:
+    from . import smart
+    smart.refresh_stale(profile)  # smart playlists: songs worked out again when they're old
     with connect() as conn:
         rows = conn.execute(
             "SELECT p.*, (SELECT COUNT(*) FROM playlist_items i WHERE i.playlist_id = p.id) AS count, "
@@ -48,6 +50,8 @@ def all_playlists(profile: str) -> list[dict]:
 
 
 def get(profile: str, playlist_id: int) -> dict | None:
+    from . import smart
+    smart.refresh_stale(profile, playlist_id)
     with connect() as conn:
         row = conn.execute("SELECT * FROM playlists WHERE id = ? AND profile = ?", (playlist_id, profile)).fetchone()
         if row is None:
@@ -65,6 +69,8 @@ def by_yt_id(profile: str, yt_id: str) -> dict | None:
 
 
 def _read_only_reason(pl: dict) -> str:
+    if pl.get("kind") == "smart":
+        return f"\"{pl['name']}\" is a smart playlist: change its rules instead"
     if pl.get("kind") == "mix":
         return f"\"{pl['name']}\" is a Dielify mix: it's rebuilt every week, so it can't be edited"
     return f"\"{pl['name']}\" can only be changed in YouTube Music"

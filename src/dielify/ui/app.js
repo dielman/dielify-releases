@@ -210,6 +210,7 @@ async function viewLibrary(tab = libTab) {
             ? `Dielify is learning your genres (${mixStatus.looked_up} of ${mixStatus.artists} artists looked up). Your genre, decade and vibe mixes appear when it's done.`
             : "Your genre, decade and vibe mixes appear here once your library has enough songs."),
         h("div", { class: "row" }, h("h2", { style: "flex:1" }, "Your playlists"),
+          h("button", { onclick: () => smartEditor() }, icon("add", "ico lead"), "Smart playlist"),
           h("button", { class: "primary", onclick: () => newPlaylist([]) }, "New playlist")),
         playlists.length ? h("div", { class: "grid" }, playlists.map(playlistCard))
           : h("p", { class: "muted" }, "None yet. Make one, or sync one of your YouTube Music playlists below."),
@@ -341,10 +342,17 @@ async function viewAlbum(id) {
 async function viewLibrarySearch(q) {
   enter(`lsearch:${q}`, `“${q}”`, () => viewLibrarySearch(q));
   try {
-    const r = await api(`/api/library/search?q=${encodeURIComponent(q)}`);
+    const [r, ly] = await Promise.all([api(`/api/library/search?q=${encodeURIComponent(q)}`),
+      api(`/api/library/lyrics-search?q=${encodeURIComponent(q)}`).catch(() => ({ results: [] }))]);
+    const lyricHits = ly.results.filter((x) => !r.tracks.some((t) => t.id === x.track.id));
     show(h("h1", {}, `“${q}” in your library`),
-      r.tracks.length ? trackTable(r.tracks, true) : h("p", { class: "muted" }, "No songs found."),
+      r.tracks.length ? trackTable(r.tracks, true) : lyricHits.length ? null : h("p", { class: "muted" }, "No songs found."),
       r.albums.length ? [h("h2", {}, "Albums"), h("div", { class: "grid" }, r.albums.map(albumCard))] : null,
+      lyricHits.length ? [h("h2", {}, "In the lyrics"), h("table", { class: "tracks" }, h("tbody", {}, lyricHits.map((x, i) =>
+        h("tr", {}, h("td", { class: "n" }, i + 1),
+          h("td", { class: "title", onclick: () => playList(lyricHits.map((y) => y.track), i) }, x.track.title,
+            h("div", { class: "muted small" }, x.track.artist, " · ", h("i", {}, `“${x.line}”`))),
+          h("td", { class: "d" }, dur(x.track.duration_s)), h("td", { class: "a" }, queueBtn(() => [x.track]))))))] : null,
       h("p", {}, h("button", { class: "link", onclick: () => { go("discover"); viewYtSearch(q); } }, "Search YouTube Music instead →")));
   } catch (e) { failed(e); }
 }
@@ -598,6 +606,7 @@ async function renderDownloads(active) {
 // --- playlists ---------------------------------------------------------------------------------
 function describePlaylist(p) {
   if (p.kind === "mix") return `${p.count} songs · ${p.description || "Dielify mix"} · new every week`;
+  if (p.kind === "smart") return `${p.count} songs · smart: ${p.description || ""}`;
   return [`${p.count} songs`, p.read_only ? "from YouTube Music (one way)" : p.yt_id ? "synced with YouTube Music" : "only in Dielify",
     p.pending ? `${p.pending} change${p.pending === 1 ? "" : "s"} waiting` : null].filter(Boolean).join(" · ");
 }
@@ -608,6 +617,80 @@ const songIn = (i) => ({ id: i.id, type: i.type === "video" ? "video" : "song", 
 
 async function playlistAction(fn, done) {
   try { const r = await fn(); if (done) toast(done); return r; } catch (e) { toast(e.message, 6000); return null; }
+}
+
+// --- smart playlists (smart.py): the rule builder ---------------------------------------------
+const SMART_FIELDS = {
+  genre: ["Genre", "text"], artist: ["Artist", "text"], album: ["Album", "text"], title: ["Title", "text"],
+  plays: ["Plays", "number"], year: ["Year", "number"], length_s: ["Length (seconds)", "number"],
+  last_played: ["Last played", "days"], added: ["Added", "days"], rating: ["Rating", "rating"],
+};
+const SMART_OPS = {
+  text: [["contains", "contains"], ["not_contains", "doesn't contain"], ["is", "is"], ["is_not", "is not"]],
+  number: [["gt", "more than"], ["lt", "less than"], ["eq", "exactly"]],
+  days: [["within", "in the last … days"], ["not_within", "not in the last … days"]],
+  rating: [["is", "is"]],
+};
+const SMART_SORTS = [["random", "Shuffled (new order daily)"], ["most_played", "Most played"], ["least_played", "Least played"],
+  ["recently_added", "Recently added"], ["recently_played", "Recently played"], ["title", "Title"], ["artist", "Artist"], ["year", "Year"]];
+const select = (pairs, value) => {
+  const el = h("select", {}, pairs.map(([v, l]) => h("option", { value: v }, l)));
+  el.value = value;
+  return el;
+};
+// New smart playlist (id = null) or change one's rules.
+async function smartEditor(id = null) {
+  let data = { name: "", rules: { match: "all", sort: "random", limit: 100, rules: [{ field: "genre", op: "contains", value: "" }] } };
+  if (id) { try { data = await api(`/api/playlists/${id}/rules`); } catch (e) { return toast(e.message, 6000); } }
+  const close = () => box.remove();
+  const name = h("input", { type: "text", placeholder: "e.g. Rock I play a lot", value: data.name });
+  const match = select([["all", "every rule"], ["any", "any rule"]], data.rules.match);
+  const sort = select(SMART_SORTS, data.rules.sort);
+  const limit = h("input", { type: "number", min: "1", max: "1000", value: String(data.rules.limit), style: "width:90px" });
+  const rows = h("div", { class: "smart-rules" });
+  const addRow = (r) => {
+    const field = select(Object.entries(SMART_FIELDS).map(([k, [l]]) => [k, l]), r.field);
+    const opBox = h("span", {}), valBox = h("span", {});
+    let op, val;
+    const paint = (keepOp, keepVal) => {
+      const kind = SMART_FIELDS[field.value][1];
+      op = select(SMART_OPS[kind], keepOp && SMART_OPS[kind].some(([v]) => v === keepOp) ? keepOp : SMART_OPS[kind][0][0]);
+      val = kind === "rating" ? select([["up", "thumbs up"], ["down", "thumbs down"], ["none", "not rated"]], keepVal || "up")
+        : h("input", { type: kind === "text" ? "text" : "number", value: keepVal ?? "", style: "width:160px",
+          placeholder: kind === "days" ? "days" : kind === "number" ? "number" : "" });
+      opBox.replaceChildren(op); valBox.replaceChildren(val);
+    };
+    field.addEventListener("change", () => paint());
+    paint(r.op, r.value === "" || r.value == null ? "" : String(r.value));
+    const row = h("div", { class: "row smart-rule" }, field, opBox, valBox,
+      ib("remove", "Remove this rule", () => { row.remove(); }));
+    row.read = () => ({ field: field.value, op: op.value, value: val.value });
+    rows.append(row);
+  };
+  data.rules.rules.forEach(addRow);
+  const save = async () => {
+    const body = { name: name.value.trim(), rules: { match: match.value, sort: sort.value, limit: Number(limit.value) || 100,
+      rules: [...rows.children].map((r) => r.read()) } };
+    if (!body.name) return toast("Give it a name");
+    try {
+      const d = await api(id ? `/api/playlists/${id}/rules` : "/api/playlists/smart", { method: id ? "PUT" : "POST", body });
+      close();
+      toast(`${body.name}: ${d.entries.length} song${d.entries.length === 1 ? "" : "s"}`);
+      viewPlaylist(d.playlist.id);
+    } catch (e) { toast(e.message, 6000); }
+  };
+  const box = h("div", { class: "modal", onclick: (e) => { if (e.target === box) close(); } },
+    h("div", { class: "panel smart-editor" }, h("h2", {}, id ? "Edit smart playlist" : "New smart playlist"),
+      h("p", { class: "muted small" }, "Songs from your library that match the rules. The list keeps itself up to date."),
+      h("label", {}, "Name ", name),
+      h("div", { class: "row", style: "margin:10px 0 6px" }, "Songs that match ", match),
+      rows,
+      h("button", { class: "link", onclick: () => addRow({ field: "artist", op: "contains", value: "" }) }, "+ Add a rule"),
+      h("div", { class: "row", style: "margin-top:10px" }, "Order ", sort, " At most ", limit, " songs"),
+      h("div", { class: "row", style: "margin-top:14px" },
+        h("button", { class: "primary", onclick: save }, id ? "Save" : "Create"), h("button", { onclick: close }, "Cancel"))));
+  document.body.append(box);
+  name.focus();
 }
 
 async function newPlaylist(items) {
@@ -669,6 +752,7 @@ async function viewPlaylist(id) {
             ibtn("shuffle", "Shuffle", { disabled: !songs.length, onclick: () => { const s = shuffle(songs); songActions(s[0], s); } }),
             ibtn("queueAdd", "Add to queue", { disabled: !songs.length, onclick: () => addToQueue(songs.map(ytAsTrack), false) }),
             p.yt_id ? ibtn("sync", "Sync now", { onclick: async () => { if (await playlistAction(() => api(`/api/playlists/${id}/sync`, { method: "POST" }), "Synced")) viewPlaylist(id); } }) : null,
+            p.kind === "smart" ? ibtn("edit", "Edit rules", { onclick: () => smartEditor(p.id) }) : null,
             p.read_only ? null : ibtn("edit", "Rename", { onclick: rename }),
             p.kind === "mix" ? null : ibtn("noTaste", isLeftOut("playlist", p.id) ? "Count in my taste" : "Leave out of my taste", {
               title: "Its songs still play; they just don't shape For you, mixes and new releases",
@@ -695,7 +779,8 @@ async function viewStats(period = statsPeriod, who = null) {
       : `/api/stats?period=${period}&limit=25`);
     const title = who ? `${who}'s stats` : "Your stats";
     const tabs = h("div", { class: "tabs" }, [["week", "This week"], ["month", "This month"], ["year", "This year"], ["all", "All time"]]
-      .map(([p, l]) => h("button", { class: p === period ? "active" : "", onclick: () => viewStats(p, who) }, l)));
+      .map(([p, l]) => h("button", { class: p === period ? "active" : "", onclick: () => viewStats(p, who) }, l)),
+      who ? null : h("button", { onclick: () => viewRecap() }, "Recaps"));
     if (!st.plays) {
       return show(h("h1", {}, title), tabs, h("p", { class: "muted" }, st.history_starts
         ? "Nothing played in this period." : "No plays recorded yet. Your history starts with the next song you play."));
@@ -724,6 +809,41 @@ async function viewStats(period = statsPeriod, who = null) {
         row(i, pic(a.cover_url), a.name, a.artist || "", `${a.plays}×`, null)))),
       h("p", { class: "muted small" }, `${st.skips} skipped (under half a song) not counted.`,
         st.history_starts ? ` History since ${new Date(st.history_starts * 1000).toLocaleDateString()}.` : ""));
+  } catch (e) { failed(e); }
+}
+
+// --- recap: year in review (December edition) and any month (recap.py) ----------------------------
+async function viewRecap(period = null) {
+  enter(`recap:${period || ""}`, "Recap", () => viewRecap(period));
+  try {
+    const { periods } = await api("/api/recap/periods");
+    if (!periods.length) return show(h("h1", {}, "Recaps"), h("p", { class: "muted" }, "Play some music first: recaps come from your play history."));
+    period = period || periods[0].period;
+    const r = await api(`/api/recap?period=${period}`);
+    const pick = select(periods.map((p) => [p.period, p.title]), period);
+    pick.addEventListener("change", () => viewRecap(pick.value));
+    const pic = (cover, thumb) => cover ? art(media(cover, 96), "♪", "mini") : thumb ? art(thumb, "♪", "mini") : art(null, "♪", "mini");
+    const hours = r.minutes < 120 ? `${r.minutes} minutes` : `${Math.round(r.minutes / 60).toLocaleString()} hours`;
+    const hr = (x) => x == null ? "" : `${x % 12 || 12}${x < 12 ? "am" : "pm"}`;
+    const list = (items, line) => h("ol", { class: "recap-list" }, items.map((x) => h("li", {}, ...line(x))));
+    show(h("div", { class: "row" }, backButton("Stats", () => viewStats()), pick),
+      h("h1", { class: "recap-title" }, r.title),
+      h("div", { class: "stat-cards" }, [[hours, "of music"], [r.plays.toLocaleString(), "plays"], [r.songs, "songs"],
+        [r.artists, "artists"], [r.days_listened, "days with music"], [r.longest_streak_days, "days in a row (best)"]]
+        .map(([v, l]) => h("div", { class: "panel stat" }, h("div", { class: "big" }, String(v)), h("div", { class: "muted small" }, l)))),
+      r.top_songs.length ? [h("h2", {}, "Your top songs"), list(r.top_songs, (s) =>
+        [pic(s.cover_url, s.thumbnail), h("span", {}, h("b", {}, s.title), h("div", { class: "muted small" }, `${s.artist || ""} · ${s.plays} plays`))])] : null,
+      r.top_artists.length ? [h("h2", {}, "Your top artists"), list(r.top_artists, (a) =>
+        [pic(a.cover_url), h("span", {}, h("b", {}, a.name), h("div", { class: "muted small" }, `${a.plays} plays · ${a.minutes} min`))])] : null,
+      r.top_genres.length ? [h("h2", {}, "Your genres"), h("div", { class: "row chips" }, r.top_genres.map((g) => h("span", { class: "chip" }, g.name)))] : null,
+      r.top_albums.length ? [h("h2", {}, "Albums on repeat"), list(r.top_albums, (a) =>
+        [pic(a.cover_url), h("span", {}, h("b", {}, a.name), h("div", { class: "muted small" }, `${a.artist || ""} · ${a.plays} plays`))])] : null,
+      h("h2", {}, "Moments"),
+      h("ul", { class: "recap-moments" },
+        r.first_song ? h("li", {}, `First song: ${r.first_song.title}${r.first_song.artist ? " by " + r.first_song.artist : ""}, ${new Date(r.first_song.started_at * 1000).toLocaleDateString()}`) : null,
+        r.busiest_day ? h("li", {}, `Biggest day: ${new Date(r.busiest_day.date + "T12:00").toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}, ${r.busiest_day.minutes} minutes`) : null,
+        r.favourite_hour != null ? h("li", {}, `Favourite time: around ${hr(r.favourite_hour)}`) : null,
+        r.new_artists ? h("li", {}, `${r.new_artists} new artist${r.new_artists === 1 ? "" : "s"}${r.top_new_artists.length ? ", most of all " + r.top_new_artists.slice(0, 3).map((a) => a.name).join(", ") : ""}`) : null));
   } catch (e) { failed(e); }
 }
 

@@ -48,6 +48,7 @@ def create_app(queue: DownloadQueue | None = None) -> FastAPI:
     from .mixes import MixMaker
     from .playlists import Playlists
     from .releases import ReleaseWatcher
+    from .lyrics import Backfill
     from .subsonic_api import router as subsonic_router
 
     queue = queue or DownloadQueue()
@@ -58,6 +59,8 @@ def create_app(queue: DownloadQueue | None = None) -> FastAPI:
     kids_check = Checker(youtube.background)
     # new releases from people's artists: read at quiet moments (people's requests go first)
     releases = ReleaseWatcher(lambda p: (lambda fn, *a: youtube.background(p, fn, *a)), queue)
+    # lyrics for older songs, for search by lyrics: one at a time, at quiet moments
+    lyrics_backfill = Backfill(youtube.background)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -71,9 +74,11 @@ def create_app(queue: DownloadQueue | None = None) -> FastAPI:
         leveller.start()
         kids_check.start()
         releases.start()
+        lyrics_backfill.start()
         # outside discovery (radio charts, ListenBrainz) is off: Josh didn't want single-song
         # shelves on Discover (8 Nov). The code and /api/discover/outside stay for now.
         yield
+        lyrics_backfill.stop()
         releases.stop()
         kids_check.stop()
         leveller.stop()

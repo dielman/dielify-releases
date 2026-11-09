@@ -17,7 +17,8 @@ class PlaylistSummary(BaseModel):
     name: str
     yt_id: str | None = Field(description="Set when synced with this YouTube Music playlist")
     read_only: bool = Field(description="Can't be edited (Liked Music, Dielify mixes)")
-    kind: str = Field("user", description="user = your playlist, mix = made by Dielify weekly")
+    kind: str = Field("user", description="user = your playlist, mix = made by Dielify weekly, "
+                                          "smart = picked by rules (GET/PUT /playlists/{id}/rules)")
     description: str | None = None
     count: int
     pending: int = Field(description="Edits waiting to be sent to YouTube")
@@ -65,6 +66,33 @@ class SongIn(BaseModel):
 
 class AddSongs(BaseModel):
     songs: list[SongIn] = Field(min_length=1, max_length=500)
+
+
+class SmartRule(BaseModel):
+    field: str = Field(description="artist | album | title | genre | plays | year | length_s | last_played | added | rating")
+    op: str = Field(description="text: is, is_not, contains, not_contains; numbers: gt, lt, eq; "
+                                "last_played/added: within, not_within (days); rating: is")
+    value: str | float = Field(description="text, a number (days for last_played/added), or up/down/none for rating")
+
+
+class SmartRules(BaseModel):
+    match: str = Field("all", description="all = every rule, any = at least one")
+    rules: list[SmartRule] = Field(min_length=1, max_length=20)
+    sort: str = Field("random", description="random (new order daily) | most_played | least_played | "
+                                            "recently_added | recently_played | title | artist | year")
+    limit: int = Field(100, ge=1, le=1000)
+
+
+class SmartPlaylistIn(BaseModel):
+    name: str = Field(min_length=1, max_length=150)
+    rules: SmartRules
+
+
+def _smart(fn):
+    try:
+        return fn()
+    except ValueError as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e)) from e
 
 
 def _engine(request: Request) -> pl.Playlists:
@@ -121,6 +149,33 @@ def import_playlist(body: ImportPlaylist, request: Request, s: Session = Depends
     """Start syncing one of your YouTube Music playlists (its songs are downloaded)."""
     _not_kid(s)
     return _detail(s, _guard(lambda: _engine(request).import_youtube(s.user.profile, body.yt_id)))
+
+
+@router.post("/playlists/smart", response_model=PlaylistDetail, status_code=201)
+def create_smart(body: SmartPlaylistIn, s: Session = Depends(session)) -> PlaylistDetail:
+    """A smart playlist: songs from your library picked by rules, kept up to date."""
+    from . import smart
+    pid = _smart(lambda: smart.create(s.user.profile, body.name, body.rules.model_dump()))
+    return _detail(s, pl.get(s.user.profile, pid))
+
+
+@router.get("/playlists/{playlist_id}/rules", response_model=SmartPlaylistIn)
+def smart_rules(playlist_id: int, s: Session = Depends(session)) -> SmartPlaylistIn:
+    from . import smart
+    rules = smart.rules_of(s.user.profile, playlist_id)
+    p = pl.get(s.user.profile, playlist_id) if rules else None
+    if p is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No such smart playlist")
+    return SmartPlaylistIn(name=p["name"], rules=SmartRules(**rules))
+
+
+@router.put("/playlists/{playlist_id}/rules", response_model=PlaylistDetail)
+def set_smart_rules(playlist_id: int, body: SmartPlaylistIn, s: Session = Depends(session)) -> PlaylistDetail:
+    from . import smart
+    if smart.rules_of(s.user.profile, playlist_id) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No such smart playlist")
+    _smart(lambda: smart.update(s.user.profile, playlist_id, body.name, body.rules.model_dump()))
+    return _detail(s, pl.get(s.user.profile, playlist_id))
 
 
 @router.get("/playlists/{playlist_id}", response_model=PlaylistDetail)
