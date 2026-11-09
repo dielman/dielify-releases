@@ -132,7 +132,7 @@ src/dielify/
 | 6 | Android app | Find, request and listen on the road | **Done** 2026-11-08 — closed by Josh before the car test ("assume it works"); Android Auto untested |
 | 7 | Polish (scope set by Josh 8 Nov) | Backups to E:, signed phone release with in-app updates, download-next, playlists, music-video fix | **Done** 2026-11-08 — 0.6.0 published; phone self-update to be confirmed with the first Phase 8 release (Josh) |
 | 8 | Listening features (Josh, 8 Nov) | 1 instant play + download, 2 play history + stats, 4 two-way playlist sync, 3 Dielify-made genre/vibe playlists, 5 outside discovery, 6 remote control between devices | In progress (branch `phase-8`) |
-| 9 | Road to 1.0 (Josh, 9 Nov) | Releases 0.9.1-0.9.9 in `docs/ROADMAP.md`: household + kids accounts first, then discovery, library, sound, phone, together, hardening | In progress: 0.9.7 published, 0.9.8 built |
+| 9 | Road to 1.0 (Josh, 9 Nov) | Releases 0.9.1-0.9.9 in `docs/ROADMAP.md`: household + kids accounts first, then discovery, library, sound, phone, together, hardening | In progress: 0.9.8 published |
 
 ## Current status
 
@@ -537,8 +537,8 @@ src/dielify/
     prev/play/next as broadcasts to the running PlaybackService (PlaybackService.current.shownPlayer());
     when the service isn't running every tap opens the app.
 
-- 0.9.8 Together built (9 Nov; version 0.9.8, 179 tests, PC Jam/share checked in the browser on a dev copy,
-  phone release build OK, **not published**, nothing tried on Josh's devices).
+- **Published v0.9.8** Together (9 Nov; 179 tests, PC Jam/share checked in the browser on a dev copy;
+  not yet tried on Josh's devices).
   - Shared playlists: playlists.shared (+ playlist_items.added_by); playlists._visible: your own + shared
     ones of your household (same store). Only Dielify-only user playlists can be shared; only the owner
     renames / shares / deletes; everyone adds / removes. Kids see only songs their controls allow.
