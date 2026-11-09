@@ -4,6 +4,7 @@ python tools/make_brand.py
   android: res/drawable/ic_launcher_{background,foreground,monochrome}.xml
   PC:      src/dielify/ui/logo.svg (side bar + window favicon)
   setup:   packaging/wizard-{large,small}-{100,200}.bmp (installer pictures)
+  TV:      res/drawable-xhdpi/tv_banner.png (the Google TV launcher's 320x180 dp banner)
   docs:    docs/design/brand/icon.png
 (packaging/build.py makes dielify.ico itself, from dielify.brand.icon_image.)
 """
@@ -80,8 +81,25 @@ def wizard(w: int, h: int, scale: int, out: Path, word: bool) -> None:
     img.save(out)
 
 
+def tv_banner() -> None:
+    """Google TV's launcher shows apps as 320x180 dp banners: the icon and the name, on the app's colours."""
+    w, h = 640, 360  # xhdpi
+    img = Image.new("RGB", (w, h), brand.BG_BOTTOM)
+    glow = Image.new("RGB", (w, h), brand.BG_TOP)
+    img = Image.composite(img, glow, Image.linear_gradient("L").rotate(90).resize((w, h)))
+    icon = brand.icon_image(200)
+    img.paste(icon, (54, (h - 200) // 2), icon)
+    draw = ImageDraw.Draw(img)
+    font = ImageFont.truetype(str(FONT), 92)
+    draw.text((282, h // 2), "Dielify", font=font, fill="#F2F3F5", anchor="lm")
+    out = RES / "drawable-xhdpi"
+    out.mkdir(exist_ok=True)
+    img.save(out / "tv_banner.png")
+
+
 def main() -> None:
     android()
+    tv_banner()
     (ROOT / "src/dielify/ui/logo.svg").write_text(brand.svg(64, tile=False) + "\n", encoding="utf-8")
     pkg = ROOT / "packaging"
     for s in (1, 2):

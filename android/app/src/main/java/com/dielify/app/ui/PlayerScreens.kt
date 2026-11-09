@@ -325,7 +325,7 @@ fun SettingsScreen(vm: AppViewModel) {
 }
 
 @Composable
-private fun UpdateSection(vm: AppViewModel) {
+internal fun UpdateSection(vm: AppViewModel) {
     val state by vm.updater.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current

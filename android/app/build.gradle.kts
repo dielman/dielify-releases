@@ -81,4 +81,5 @@ dependencies {
     implementation(libs.coil.okhttp)
     implementation(libs.work)
     implementation(libs.code.scanner)
+    implementation(libs.zxing.core)  // the TV's sign-in QR code
 }

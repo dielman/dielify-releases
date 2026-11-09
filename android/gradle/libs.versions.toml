@@ -10,6 +10,7 @@ serialization = "1.12.0"
 coil = "3.6.3"
 work = "2.12.0"
 codeScanner = "16.1.0"
+zxing = "3.5.4"
 
 [libraries]
 compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
@@ -29,6 +30,7 @@ serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serializ
 coil-compose = { group = "io.coil-kt.coil3", name = "coil-compose", version.ref = "coil" }
 work = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "work" }
 code-scanner = { group = "com.google.android.gms", name = "play-services-code-scanner", version.ref = "codeScanner" }
+zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing" }
 coil-okhttp = { group = "io.coil-kt.coil3", name = "coil-network-okhttp", version.ref = "coil" }
 
 [plugins]

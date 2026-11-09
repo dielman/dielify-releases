@@ -215,6 +215,42 @@ class Server(private val context: Context, private val accounts: AccountStore) {
         return acc
     }
 
+    // --- 0.9.10: a TV signing itself in (no password: a parent's phone allows it) ---
+
+    /** Ask the PC at [address] for a sign-in code to show as a QR code. */
+    suspend fun pairStart(address: String, deviceName: String): PairStart {
+        val target = pick(listOf(address))
+        val body = json.encodeToString(PairStartIn.serializer(), PairStartIn(deviceName.take(60)))
+        return json.decodeFromString(PairStart.serializer(), withContext(Dispatchers.IO) {
+            try {
+                run(Request.Builder().url(target.resolve("api/pair/start")!!).post(body.toRequestBody(JSON_TYPE)).build())
+            } catch (e: IOException) {
+                forgetAddress()
+                throw ApiError("Lost the connection to your PC (${e.message ?: "network error"})")
+            }
+        })
+    }
+
+    /** Has the code been allowed yet? When it has, this TV is signed in (and remembered). */
+    suspend fun pairPoll(address: String, secret: String): PairStatus {
+        val target = pick(listOf(address))
+        val body = json.encodeToString(PairPollIn.serializer(), PairPollIn(secret))
+        val s = json.decodeFromString(PairStatus.serializer(), withContext(Dispatchers.IO) {
+            try {
+                run(Request.Builder().url(target.resolve("api/pair/poll")!!).post(body.toRequestBody(JSON_TYPE)).build())
+            } catch (e: IOException) {
+                forgetAddress()
+                throw ApiError("Lost the connection to your PC (${e.message ?: "network error"})")
+            }
+        })
+        if (s.status == "approved" && s.token != null) {
+            val acc = Account(listOf(address), s.username ?: "", s.profile ?: "", s.deviceId ?: 0, s.token)
+            accounts.save(acc)
+            account = acc
+        }
+        return s
+    }
+
     /** Sign out: withdraw this phone's token on the PC (if reachable), forget it here. */
     suspend fun signOut() {
         val acc = account ?: return

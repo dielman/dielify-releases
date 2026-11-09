@@ -629,7 +629,20 @@ src/dielify/
     person, Allow). Phone: Settings > Your PC > "Sign in a TV" (PairTvScreen: Google code scanner
     play-services-code-scanner 16.1.0, no camera permission; or type the code) and dielify://pair/<code> links
     open it (camera app). Checked end to end on the emulator + browser against the test copy. 401 text is now
-    "Sign in first". Next: step 2, the TV screens.
+    "Sign in first".
+  - Step 2 built (not released): the TV app = same APK, `tv/` package: TvActivity (LEANBACK_LAUNCHER, banner
+    res/drawable-xhdpi/tv_banner.png from tools/make_brand.py; manifest: leanback + touchscreen not required),
+    TvSignIn (PcFinder = NsdManager "_dielify._tcp"; after 8 s or on request type the address; QR via zxing core
+    3.5.4; polls every 2 s; refused/expired -> new code; Server.pairStart/pairPoll save the account), TvKit
+    (Focusable = grow + white outline, TvButton, TvCard, TvShelf, TvSongRow, leaveWithArrows for text boxes),
+    TvPages (Home: now mix banner, Made for you, New for you, Recently added, More like your top songs, Your
+    playlists, YouTube home shelves without single songs; Library tabs; album / artist / playlist / YouTube
+    album+playlist pages; Search = library + YouTube; Settings incl. the phone's UpdateSection), TvNowPlaying
+    (song colours, cover, progress, controls, Up next). Uses AppViewModel for data + playback. **Sized for
+    960 x 540 dp** (a 1080p TV at xhdpi). Checked on the Google TV emulator (AVD "Google_TV", made by hand in
+    ~/.android/avd; can't hear mDNS behind the emulator's NAT, so it typed 10.0.2.2:4796): sign in -> approve
+    -> Home -> Play -> Now playing -> Back -> Library -> album -> Settings -> sign out, all with remote keys.
+    Screenshots in docs/design/tv/. Next: step 3 (Play on / Jam / idle display), then the real TV.
 
 ## Backlog (Josh, 8 Nov; after Phase 8 item 6)
 

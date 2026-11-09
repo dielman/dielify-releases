@@ -28,3 +28,23 @@ data class PairApproved(@SerialName("device_name") val deviceName: String, val p
 /** The code inside a scanned QR (dielify://pair/KDW7-RT3P) or as typed. */
 fun pairCode(text: String): String = text.trim().trimEnd('/').substringAfterLast('/')
     .uppercase().filter { it.isLetterOrDigit() }.let { if (it.length == 8) it.take(4) + "-" + it.drop(4) else it }
+
+// The TV's side: ask for a code, then check until a phone (or the PC) allows it.
+
+@Serializable
+data class PairStartIn(@SerialName("device_name") val deviceName: String)
+
+@Serializable
+data class PairStart(val secret: String, val code: String, val link: String, @SerialName("expires_in") val expiresIn: Int)
+
+@Serializable
+data class PairPollIn(val secret: String)
+
+@Serializable
+data class PairStatus(
+    val status: String,                     // waiting | approved | refused | expired
+    val token: String? = null,
+    @SerialName("device_id") val deviceId: Int? = null,
+    val username: String? = null,
+    val profile: String? = null,
+)
