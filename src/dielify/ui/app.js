@@ -47,6 +47,8 @@ const $ = (id) => document.getElementById(id);
 
 // --- icons (Material Symbols paths, drawn inline: no fonts or files to load) ------------------
 const ICONS = {
+  noTaste: "M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-.78l3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01z",
+  personAdd: "M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z",
   play: "M8 5v14l11-7z",
   add: "M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z",
   radio: "M3.24 6.15C2.51 6.43 2 7.17 2 8v12c0 1.1.89 2 2 2h16c1.11 0 2-.9 2-2V8c0-1.11-.89-2-2-2H8.3l8.26-3.34L15.88 1 3.24 6.15zM7 20c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm13-8h-2v-2h-2v2H4V8h16v4z",
@@ -275,12 +277,47 @@ async function viewArtist(id) {
   try {
     const { artist, albums } = await api(`/api/library/artists/${id}`);
     enter(`artist:${id}`, artist.name, () => viewArtist(id), true);
+    const about = h("div", { class: "about" });
     show(backButton("Artists", () => { go("library"); viewLibrary("artists"); }),
       h("h1", { style: "margin-top:16px" }, artist.name, " ", artistThumbs(artist.name)),
       h("div", { class: "row", style: "margin:4px 0 12px" },
-        ibtn("radio", "Artist radio", { class: "primary", onclick: () => startRadio({ artist: artist.name }, `${artist.name} radio`) })),
+        ibtn("radio", "Artist radio", { class: "primary", onclick: () => startRadio({ artist: artist.name }, `${artist.name} radio`) }),
+        followButton(artist.name)),
+      about,
       h("div", { class: "grid" }, albums.map(albumCard)));
+    fillAbout(about, artist.name);
   } catch (e) { failed(e); }
+}
+
+// Follow: their new releases show in Discover's "New for you".
+function followButton(name, channelId = null) {
+  const b = h("button", {});
+  let on = false;
+  const paint = () => b.replaceChildren(icon(on ? "check" : "personAdd", "ico lead"), on ? "Following" : "Follow");
+  b.onclick = async () => {
+    try {
+      await api("/api/follows", { method: "PUT", body: { name, channel_id: channelId, follow: !on } });
+      on = !on; paint();
+      toast(on ? `Following ${name}: their new releases show in Discover` : `Stopped following ${name}`);
+    } catch (e) { toast(e.message, 6000); }
+  };
+  paint();
+  api("/api/follows").then((r) => { on = r.follows.some((f) => artistKey(f.name) === artistKey(name)); paint(); }).catch(() => {});
+  return b;
+}
+// The artist's About: bio (first lines, "More" for the rest) and links (open in the browser).
+async function fillAbout(box, name) {
+  box.replaceChildren(h("p", { class: "muted small" }, "Loading About…"));
+  try {
+    const a = await api(`/api/artists/about?name=${encodeURIComponent(name)}`);
+    if (!a.description && !a.links.length) return box.replaceChildren();
+    const text = h("p", { class: "bio clamp" }, a.description || "");
+    const more = a.description && a.description.length > 280
+      ? h("button", { class: "link", onclick: () => { text.classList.toggle("clamp"); more.textContent = text.classList.contains("clamp") ? "More" : "Less"; } }, "More") : null;
+    box.replaceChildren(h("h2", {}, "About"), a.description ? text : null, more,
+      a.links.length ? h("div", { class: "row links" }, a.links.map((l) =>
+        h("a", { href: l.url, target: "_blank", rel: "noopener noreferrer", class: "chip" }, l.label))) : null);
+  } catch { box.replaceChildren(); }
 }
 
 async function viewAlbum(id) {
@@ -356,9 +393,13 @@ async function viewDiscover() {
     if (status.offline) return show(h("h1", {}, "Discover"), offlineNotice());
     if (needsSignIn()) return show(h("h1", {}, "Discover"), welcome());
     show(h("h1", {}, "Discover"), h("p", { class: "muted" }, "Loading your YouTube Music home…"));
-    const [home, charts, forYou, mixStatus] = await Promise.all([api("/api/discover/home?shelves=8"),
+    const [home, charts, forYou, mixStatus, fresh] = await Promise.all([api("/api/discover/home?shelves=8"),
       api("/api/discover/charts").catch(() => null), api("/api/discover/for-you").catch(() => null),
-      api("/api/mixes").catch(() => null)]);
+      api("/api/mixes").catch(() => null), api("/api/discover/new").catch(() => null)]);
+    const newShelf = fresh && fresh.items.length ? [h("h2", {}, "New for you",
+      h("span", { class: "muted small" }, ` · from the ${fresh.watching === 1 ? "artist" : fresh.watching + " artists"} you follow or play most`)),
+    h("div", { class: "shelf" }, fresh.items.map((it) =>
+      ytCard({ ...it, artists: [it.artists.join(", ") + (it.subtitle ? ` · ${it.subtitle}` : "") + (it.year ? ` · ${it.year}` : "")] })))] : null;
     const madeForYou = mixStatus && mixStatus.mixes.length
       ? [h("h2", {}, "Made for you"), h("div", { class: "shelf" }, mixStatus.mixes.map(playlistCard))] : null;
     const shelves = home.shelves.filter((s) => s.items.length).map((s) =>
@@ -369,12 +410,16 @@ async function viewDiscover() {
       tracks.map((t, i) => h("div", { class: "card", onclick: () => playList(tracks, i) },
         art(media(t.cover_url, 320)), h("div", { class: "t" }, t.title), h("div", { class: "s" }, t.artist))))] : null;
     // (no "On repeat": YouTube's home feed already has its own)
+    const nowMix = forYou && forYou.now_mix && forYou.now_mix.tracks.length ? [h("h2", {}, forYou.now_mix.title, " ",
+      h("button", { class: "link small", onclick: () => playList(forYou.now_mix.tracks, 0) }, "▶ Play all")),
+    h("div", { class: "muted small", style: "margin:-6px 0 8px" }, forYou.now_mix.description),
+    trackShelf("", forYou.now_mix.tracks)[1]] : null;
     const mine = forYou ? [forYou.more_like.length ? [h("h2", {}, "More like your top songs"), h("div", { class: "shelf" }, forYou.more_like.map(ytCard))] : null,
       trackShelf("Forgotten favourites", forYou.forgotten)] : null;
     const endless = h("div", { class: "row", style: "margin:4px 0 8px" },
       h("button", { class: "primary", onclick: () => startEndless() }, icon("shuffle"), " Never-ending discovery"),
       h("span", { class: "muted small" }, " New songs like what you play, downloaded to check out. Thumbs down deletes one again."));
-    if (view === "discover") show(h("h1", {}, "Discover"), endless, madeForYou, mine, shelves, chartShelf);
+    if (view === "discover") show(h("h1", {}, "Discover"), endless, nowMix, newShelf, madeForYou, mine, shelves, chartShelf);
   } catch (e) { failed(e); }
 }
 
@@ -625,7 +670,11 @@ async function viewPlaylist(id) {
             ibtn("queueAdd", "Add to queue", { disabled: !songs.length, onclick: () => addToQueue(songs.map(ytAsTrack), false) }),
             p.yt_id ? ibtn("sync", "Sync now", { onclick: async () => { if (await playlistAction(() => api(`/api/playlists/${id}/sync`, { method: "POST" }), "Synced")) viewPlaylist(id); } }) : null,
             p.read_only ? null : ibtn("edit", "Rename", { onclick: rename }),
-            p.kind === "mix" ? null : ibtn("remove", "Delete", { onclick: del })))),
+            p.kind === "mix" ? null : ibtn("noTaste", isLeftOut("playlist", p.id) ? "Count in my taste" : "Leave out of my taste", {
+              title: "Its songs still play; they just don't shape For you, mixes and new releases",
+              onclick: async () => { await setTaste("playlist", p.id, p.name, !isLeftOut("playlist", p.id)); viewPlaylist(id); } }),
+            p.kind === "mix" ? null : ibtn("remove", "Delete", { onclick: del })),
+          isLeftOut("playlist", p.id) ? h("div", { class: "muted small", style: "margin-top:6px" }, "Left out of your taste") : null)),
       h("table", { class: "tracks" }, h("tbody", {}, entries.map((e, i) => h("tr", {},
         h("td", { class: "n" }, i + 1),
         h("td", { class: "title", onclick: () => songActions(e.item, songs) }, e.item.title,
@@ -796,7 +845,8 @@ async function viewSettings() {
       setting("Data folder", s.data_folder), setting("Log file", s.log_file),
       await updateSetting(setting));
     await refreshRatings();
-    show(h("h1", {}, "Settings"), youtube, music, peoplePanel(s), playbackPanel(), windows, phones, backups, ratingsPanel(), about);
+    show(h("h1", {}, "Settings"), youtube, music, peoplePanel(s), playbackPanel(), windows, phones, backups, ratingsPanel(),
+      tastePanel(), await newReleasesPanel(), about);
   } catch (e) { failed(e); }
 }
 
@@ -1358,6 +1408,26 @@ function loadRatings(list) {
 async function refreshRatings() {
   try { loadRatings((await api("/api/ratings")).ratings); } catch { /* offline from the server: keep what we had */ }
   paintThumbs();
+  refreshTaste();
+}
+
+// --- leave out of my taste (dielify/taste.py) -------------------------------------------------
+const taste = { list: [], keys: new Set() };
+const tasteKey = (kind, key) => `${kind}:${key}`;
+function loadTaste(items) {
+  taste.list = items;
+  taste.keys = new Set(items.map((t) => tasteKey(t.kind, t.key)));
+}
+async function refreshTaste() {
+  try { loadTaste((await api("/api/taste")).items); } catch { /* keep what we had */ }
+}
+const songTasteKey = (t) => t.video_id || (t.id ? `tr-${t.id}` : null);
+const isLeftOut = (kind, key) => key != null && taste.keys.has(tasteKey(kind, String(key)));
+async function setTaste(kind, key, name, out) {
+  try {
+    loadTaste((await api("/api/taste", { method: "PUT", body: { kind, key: String(key), name, out } })).items);
+    toast(out ? `“${name}” won't shape your recommendations` : `“${name}” counts in your taste again`);
+  } catch (e) { toast(e.message, 6000); }
 }
 // song: { video_id, id (library track id), artist }
 function ratingOf(song) {
@@ -1477,6 +1547,34 @@ function playbackPanel() {
     h("p", { class: "muted small" }, "Loud songs are turned down to match the rest, so the volume doesn't jump between songs. "
       + "Dielify measures each song once in the background (new downloads within a few minutes)."));
 }
+function tastePanel() {
+  return h("div", { class: "panel" }, h("h2", {}, "Left out of your taste"),
+    h("p", { class: "muted small" }, "These still play, but don't shape For you, mixes, the time-of-day mix or new releases. "
+      + "Leave a song out from its queue menu, a playlist from its page."),
+    taste.list.length ? taste.list.map((t) => h("div", { class: "setting" },
+      h("div", { class: "label" }, t.kind === "playlist" ? "Playlist" : "Song"), h("div", { class: "value" }, t.name),
+      h("button", { onclick: async () => { await setTaste(t.kind, t.key, t.name, false); viewSettings(); } }, "Count again")))
+      : h("p", { class: "muted small" }, "Nothing left out."));
+}
+async function newReleasesPanel() {
+  let r, follows;
+  try { [r, follows] = await Promise.all([api("/api/discover/new"), api("/api/follows")]); } catch { return null; }
+  const box = h("input", { type: "checkbox" });
+  box.checked = r.auto_download;
+  box.addEventListener("change", async () => {
+    try { await api("/api/discover/new/settings", { method: "PUT", body: { auto_download: box.checked } }); }
+    catch (e) { box.checked = !box.checked; toast(e.message, 6000); }
+  });
+  return h("div", { class: "panel" }, h("h2", {}, "New releases"),
+    h("p", { class: "muted small" }, `Dielify checks ${r.watching} artist${r.watching === 1 ? "" : "s"} once a day: the ones you follow and your 20 most played. `
+      + "What's new shows in Discover > New for you."),
+    h("label", { class: "row", style: "gap:8px" }, box, "Download new albums automatically"),
+    h("p", { class: "muted small" }, "Only albums that come out from now on, never an artist's older music."),
+    h("h3", {}, "Following"),
+    follows.follows.length ? follows.follows.map((f) => h("div", { class: "setting" }, h("div", { class: "value" }, f.name),
+      h("button", { onclick: async () => { await api("/api/follows", { method: "PUT", body: { name: f.name, follow: false } }); viewSettings(); } }, "Unfollow")))
+      : h("p", { class: "muted small" }, "Nobody yet. Follow an artist from their page."));
+}
 function ratingsPanel() {
   const bans = rated.list.filter((r) => r.value === BAN);
   const ups = rated.list.filter((r) => r.value === UP).length, downs = rated.list.filter((r) => r.value === DOWN).length;
@@ -1528,11 +1626,18 @@ function queueMenu(btn, tracks) {
     h("button", { onclick: () => { closeMenu(); addToQueue(tracks, false); } }, icon("queueAdd", "ico lead"), "Add to queue"),
     tracks.length === 1 && tracks[0].video_id
       ? h("button", { onclick: () => { closeMenu(); startRadio({ video_id: tracks[0].video_id }, `Radio: ${tracks[0].title}`, tracks[0]); } },
-        icon("radio", "ico lead"), "Start radio") : null);
+        icon("radio", "ico lead"), "Start radio") : null,
+    tracks.length === 1 && songTasteKey(tracks[0]) ? tasteMenuItem(tracks[0]) : null);
   document.body.append(m);
   if (r.bottom + 4 + m.offsetHeight > innerHeight - 90) m.style.top = `${r.top - m.offsetHeight - 4}px`;
   menuOpen = m;
   setTimeout(() => document.addEventListener("mousedown", menuOutside, true));
+}
+function tasteMenuItem(t) {
+  const key = songTasteKey(t), out = isLeftOut("song", key);
+  return h("button", { title: "It still plays; it just doesn't shape For you, mixes and new releases",
+    onclick: () => { closeMenu(); setTaste("song", key, `${t.title}${t.artist ? " - " + t.artist : ""}`, !out); } },
+    icon("noTaste", "ico lead"), out ? "Count in my taste again" : "Leave out of my taste");
 }
 let menuOpen = null;
 function closeMenu() {
