@@ -491,6 +491,14 @@ src/dielify/
   - Fixed: library.connect ran table setup + migrations in parallel threads ("duplicate column name" on a
     new database); now under a process lock.
 
+- After 0.9.5 (9 Nov, committed + pushed, **not released**): the PC froze at 19:29 (health 20-34 s, phone
+  "PC not reachable", PC player "play() interrupted"). Cause from the real log: Keep on this phone for
+  Bicycle (165 songs) saved all songs at once and each SaveWorker asked for lyrics; every lyrics lookup
+  waits for YouTube (one call at a time), so all 40 server threads were stuck. Fixed: lyrics lookups 2 at
+  a time (others 503 + Retry-After), /api/health async, thread limit 100; phone saves 2 songs at a time
+  and asks for one lyric at a time; PC player ignores AbortError. Also: PRAGMA journal_mode under the
+  setup lock ("database is locked" with many threads on a new db). It recovered by itself ~19:34.
+
 ## Backlog (Josh, 8 Nov; after Phase 8 item 6)
 
 - **Published v0.8.11 (9 Nov; not yet confirmed by Josh on device): ratings + ban.** `ratings.py` (table
