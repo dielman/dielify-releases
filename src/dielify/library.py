@@ -366,6 +366,34 @@ def set_person(profile: str, role: str = "parent", store: str | None = None) -> 
     return person(profile)
 
 
+def people() -> list[dict]:
+    with connect() as conn:
+        return [dict(r) for r in conn.execute("SELECT profile, role, store, created_at FROM people ORDER BY created_at")]
+
+
+def signin_of(profile: str) -> str:
+    """Whose YouTube sign-in a person uses: the owner of their store (a child uses the
+    parent's, behind the scenes)."""
+    return person(profile)["store"]
+
+
+# Tables with one row set per person (removing a person clears these; files stay).
+_PERSON_TABLES = ("library_items", "stars", "plays", "playlists", "ratings", "explore_songs",
+                  "discovery_lists")
+
+
+def forget_person(profile: str) -> None:
+    """Remove a person's library, history, ratings and playlists (not their files: songs
+    only they had stay in the store, shown under Household). Their waiting downloads stop."""
+    p = person(profile)["profile"]
+    with connect() as conn:
+        for table in _PERSON_TABLES:
+            conn.execute(f"DELETE FROM {table} WHERE profile = ?", (p,))
+        conn.execute("UPDATE downloads SET status = 'cancelled', error = 'Person removed' "
+                     "WHERE profile = ? AND status IN ('queued', 'downloading', 'processing')", (p,))
+        conn.execute("DELETE FROM people WHERE profile = ?", (p,))
+
+
 def profiles() -> list[str]:
     """Everyone who has songs in their library (for the background jobs: mixes, discovery)."""
     with connect() as conn:
@@ -534,6 +562,37 @@ class Library:
             self._join(conn, track_id, added_by)
             return conn.execute("SELECT 1 FROM library_items WHERE profile = ? AND track_id = ?",
                                 (self.profile, track_id)).fetchone() is not None
+
+    def add_many(self, track_ids: list[int], added_by: str = "added") -> int:
+        """Put songs from the store into this library. Returns how many were new to it."""
+        with connect() as conn:
+            return sum(self._join(conn, int(t), added_by) for t in track_ids)
+
+    # Songs in the store that aren't in this library (the Household shelf).
+    _HOUSEHOLD_SELECT = """
+        SELECT t.id, t.profile AS store, t.relpath, t.album_id, t.artist_id, t.title, t.artist,
+               t.year, t.track_no, t.duration_s, t.bitrate_kbps, t.suffix, t.size, t.mtime,
+               t.video_id, t.has_cover, t.loudness, t.created_at, 0 AS play_count,
+               NULL AS last_played, NULL AS starred_at, 0 AS pinned,
+               al.name AS album, ar.name AS album_artist
+        FROM tracks t JOIN albums al ON al.id = t.album_id JOIN artists ar ON ar.id = t.artist_id
+        WHERE t.profile = :store
+          AND NOT EXISTS (SELECT 1 FROM library_items li WHERE li.track_id = t.id AND li.profile = :p)"""
+
+    def household(self, query: str = "", limit: int = 200, offset: int = 0) -> list[sqlite3.Row]:
+        """Songs already on the PC (in the household's store) that aren't in this library:
+        newest first, or matching `query`."""
+        q = query.strip().casefold()
+        if q:
+            return self._q(self._HOUSEHOLD_SELECT + " AND (fold(t.title) LIKE :q OR fold(t.artist) LIKE :q "
+                           "OR fold(al.name) LIKE :q) ORDER BY fold(t.artist), fold(al.name), t.track_no "
+                           "LIMIT :n OFFSET :o", store=self.store, q=f"%{q}%", n=limit, o=offset)
+        return self._q(self._HOUSEHOLD_SELECT + " ORDER BY t.created_at DESC, t.album_id, t.track_no "
+                       "LIMIT :n OFFSET :o", store=self.store, n=limit, o=offset)
+
+    def household_track(self, track_id: int) -> sqlite3.Row | None:
+        rows = self._q(self._HOUSEHOLD_SELECT + " AND t.id = :id", store=self.store, id=track_id)
+        return rows[0] if rows else None
 
     def store_video_ids(self) -> dict[str, int]:
         """video id -> track id for every song in the store, in this library or not."""

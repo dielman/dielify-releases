@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from . import __version__, auth, credstore, winint
 from . import settings as settings_mod
 from .custom_api import Session, desktop_session, youtube
+from . import library as library_mod
 from .library import library_for
 from .paths import app_data_dir, safe_name
 
@@ -41,6 +42,18 @@ class PhoneUser(BaseModel):
     devices: list[PhoneDevice]
 
 
+class PersonInfo(BaseModel):
+    name: str
+    role: Literal["parent", "child"]
+    store: str = Field(description="Whose music folder (and YouTube sign-in) this person uses")
+    tracks: int = Field(description="Songs in their library")
+    logins: list[str] = Field(description="Their phone logins")
+
+
+class NewPerson(BaseModel):
+    name: str = Field(min_length=1, max_length=40)
+
+
 class DesktopStatus(BaseModel):
     version: str
     data_folder: str
@@ -57,6 +70,7 @@ class DesktopStatus(BaseModel):
     server_port: int
     addresses: list[str] = Field(description="Addresses phones can use")
     phone_users: list[PhoneUser]
+    people: list[PersonInfo] = Field(default_factory=list, description="Everyone sharing this PC's music")
     backup_folder: str = Field("", description='"" = backups off')
     backup_suggested: str = Field("", description="A sensible folder to offer when backups are off")
     last_backup: str | None = None
@@ -138,6 +152,11 @@ def _status() -> DesktopStatus:
                        devices=[PhoneDevice(**{k: d[k] for k in ("id", "device_name", "created_at", "last_used_at")})
                                 for d in auth.list_tokens(u.name)])
              for u in auth.list_users()]
+    store = library_mod.person(s.active_profile)["store"]
+    people = [PersonInfo(name=p["profile"], role=p["role"], store=p["store"],
+                         tracks=library_for(p["profile"], s).stats()["tracks"],
+                         logins=[u.name for u in users if u.profile.casefold() == p["profile"].casefold()])
+              for p in library_mod.people() if p["store"].casefold() == store.casefold()]
     from . import backup
     folder = Path(s.backup_folder) if s.backup_folder else None
     last = backup.last_backup(folder) if folder else None
@@ -154,7 +173,7 @@ def _status() -> DesktopStatus:
         cache_limit_gb=s.cache_limit_gb, offline=s.offline, keep_awake=s.keep_awake, start_with_windows=winint.start_with_windows(),
         server_port=s.server_port,
         addresses=[f"http://{a}:{s.server_port}" for a in bind_addresses(s) if not a.startswith("127.")],
-        phone_users=users)
+        phone_users=users, people=people)
 
 
 @router.get("/status", response_model=DesktopStatus)
@@ -220,6 +239,42 @@ def add_profile(body: NewProfile, s: Session = Depends(desktop_session)) -> Desk
     cfg.profile_library(body.name).mkdir(parents=True, exist_ok=True)
     settings_mod.set_value("active_profile", body.name)
     return _status()
+
+
+@router.post("/people", response_model=PhoneLogin)
+def add_child(body: NewPerson, s: Session = Depends(desktop_session)) -> PhoneLogin:
+    """A kids account: shares this PC's music folder and YouTube sign-in (behind the
+    scenes), has its own library, and a phone login of the same name."""
+    name = body.name.strip()
+    if safe_name(name) != name or not name.replace("-", "").replace("_", "").isalnum():
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Names: letters, digits, - and _ only")
+    cfg = settings_mod.load()
+    taken = {n.casefold() for n in _profiles(cfg)} | {p["profile"].casefold() for p in library_mod.people()}
+    taken |= {u.name.casefold() for u in auth.list_users()}
+    if name.casefold() in taken:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"{name} is already used on this PC; choose another name")
+    store = library_mod.person(cfg.active_profile)["store"]
+    library_mod.set_person(name, "child", store=store)
+    try:
+        u = auth.add_user(name, name)
+    except ValueError as e:
+        library_mod.forget_person(name)
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e)) from e
+    return PhoneLogin(name=u.name, profile=u.profile, password=u.password)
+
+
+@router.delete("/people/{name}", status_code=204)
+def remove_child(name: str, s: Session = Depends(desktop_session)) -> Response:
+    """Remove a kids account: its phone logins, library, history and playlists. Music
+    files stay (songs only they had show under Household)."""
+    p = next((p for p in library_mod.people() if p["profile"].casefold() == name.casefold()), None)
+    if p is None or p["role"] != "child":
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No such kids account")
+    for u in auth.list_users():
+        if u.profile.casefold() == p["profile"].casefold():
+            auth.remove_user(u.name)
+    library_mod.forget_person(p["profile"])
+    return Response(status_code=204)
 
 
 @router.delete("/youtube/{profile}", response_model=DesktopStatus)

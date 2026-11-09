@@ -63,6 +63,13 @@ data class Track(
 )
 
 @Serializable data class TrackList(val tracks: List<Track>)
+
+/** Who's signed in: role "child" = a kids account (shares the parent's music). */
+@Serializable data class Me(val username: String, val profile: String, val role: String, val household: List<String> = emptyList()) {
+    val shared get() = household.size > 1
+}
+@Serializable data class AddToLibrary(@SerialName("track_ids") val trackIds: List<Long>)
+@Serializable data class Added(val added: Int)
 @Serializable data class ArtistList(val artists: List<Artist>)
 @Serializable data class AlbumList(val albums: List<Album>)
 @Serializable data class ArtistDetail(val artist: Artist, val albums: List<Album>)

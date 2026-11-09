@@ -1,5 +1,7 @@
 """Lyrics: LRC parsing, sources in order, kept for offline, the API."""
 
+import time
+
 from dielify import lyrics, settings
 from test_api import SONGS, FakeDownloader, login, make_client, setup, wait_done  # noqa: F401
 
@@ -31,6 +33,10 @@ def test_api_and_downloads_keep_lyrics(monkeypatch):
         h = login(c)
         job = c.post("/api/downloads", headers=h, json={"type": "song", "id": "s1"}).json()["downloads"][0]
         done = wait_done(c, h, job["id"])
+        for _ in range(50):  # lyrics are kept just after the song is marked done
+            if lyrics.cached("s1")[1]:
+                break
+            time.sleep(0.05)
         assert lyrics.cached("s1")[1]["text"] == "Song One!"                      # kept with the download
         r = c.get(f"/api/lyrics?track_id={done['track_id']}", headers=h).json()
         assert r == {"synced": True, "lines": [{"ms": 500, "text": "Song One!"}], "text": "Song One!", "source": "LRCLIB"}

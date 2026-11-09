@@ -420,6 +420,21 @@ src/dielify/
   1,968 albums, 1,253 artists, plays all matched; move 0.04 s. Josh's real db has one profile,
   "Josh". Also fixed: artist page showed "null" after the thumbs (since 0.8.11). Phone app unchanged.
 
+- 0.9.2 built (second person), 149 tests, phone builds, **not published**. Josh: his daughter
+  uses her phone at home only (no PC person-switch, no Tailscale for her). PC Settings >
+  People: "Add a kids account" (POST /api/desktop/people: role child, store = the PC's
+  active profile's store, phone login of the same name; password screen now lists the home
+  Wi-Fi and Tailscale addresses), New password, Remove (DELETE /api/desktop/people/{name}:
+  logins + library/history/playlists via `library.forget_person`; files stay). Kids
+  account: YouTube calls use the store owner's sign-in (`signin_of`, in _YouTube.call and
+  the queue's adapter); /discover/home, /discover/charts, /yt/my-playlists return empty;
+  playlist import/sync 403, create/delete never touch YouTube; PUT /settings 403.
+  GET /api/me (role, household). Household: GET /api/library/household (store songs not in
+  your library; stream + cover allowed for preview), POST /api/library/add. PC Library tab
+  "Household" and phone Library tab "Household" appear when more than one person shares the
+  store. tests/test_kids_accounts.py. Also fixed the test_lyrics race (lyrics saved just
+  after "done"). Filters + Kids discovery are 0.9.3: don't hand the phone over before that.
+
 ## Backlog (Josh, 8 Nov; after Phase 8 item 6)
 
 - **Published v0.8.11 (9 Nov; not yet confirmed by Josh on device): ratings + ban.** `ratings.py` (table

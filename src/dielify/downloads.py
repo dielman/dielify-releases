@@ -37,7 +37,8 @@ class _Cancelled(Exception):
 
 
 def _default_adapter(profile: str) -> YTMusicAdapter:
-    auth = credstore.load(profile)
+    from .library import signin_of
+    auth = credstore.load(signin_of(profile))  # a child downloads with the parent's sign-in
     if auth is None:
         raise NotSignedIn(f"Profile '{profile}' is not signed in to YouTube Music on the PC "
                           "(run: dielify auth login)")

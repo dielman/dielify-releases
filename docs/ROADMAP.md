@@ -67,8 +67,12 @@ No visible change. Josh's library must look and behave exactly as before.
   download). For a child this is filtered by her controls (0.9.3).
 - New songs she asks for download into the shared store and join her library only.
 - Her stats, mixes, For you and discovery play come from her own plays only.
-- PC app: switch person (with a PIN for the parent profile, so a child at the PC can't
-  open the parent's settings).
+- ~~PC app: switch person with a PIN~~ dropped (Josh, 9 Nov: his daughter uses her phone
+  at home only). Her phone uses the home Wi-Fi address; no Tailscale on her phone.
+- Built in 0.9.2 as well: a kids account already gets nothing from the parent's YouTube
+  account (home feed, charts, YouTube playlists are empty; her playlists never sync) and
+  can't change settings. Kids discovery and the filters come in 0.9.3, so **don't hand the
+  phone over until 0.9.3**.
 
 ## 0.9.3: Kids accounts
 
@@ -175,6 +179,5 @@ audiobooks, a second PC / second household.
 
 ## Still to decide
 
-- Where the child uses Dielify: her phone only, the family PC (switching person), or her
-  own computer (that needs the "second PC" work, after 1.0).
+- ~~Where the child uses Dielify~~: her phone, at home (Josh, 9 Nov).
 - The defaults in the parent controls table above (Josh to confirm or change).

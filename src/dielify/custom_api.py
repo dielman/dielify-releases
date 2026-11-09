@@ -21,7 +21,7 @@ from . import auth
 from . import settings as settings_mod
 from .downloads import DownloadQueue
 from .leveller import gain_db
-from .library import CONTENT_TYPES, Library, connect, library_for
+from .library import CONTENT_TYPES, Library, connect, library_for, signin_of
 from .yt_adapter import NotSignedIn, Offline, YouTubeError, YTItem, YTMusicAdapter
 
 router = APIRouter(prefix="/api")
@@ -182,6 +182,9 @@ class Session:
     def __init__(self, user: auth.ServerUser, device_id: int, desktop: bool = False):
         self.user, self.device_id, self.desktop = user, device_id, desktop
         self.lib = library_for(user.profile)
+        # A kids account (role child) never sees anything from the parent's YouTube account
+        # (home feed, charts, YouTube playlists) and can't change settings.
+        self.kid = self.lib.role == "child"
 
 
 def _client(request: Request) -> str:
@@ -216,7 +219,8 @@ def media_session(request: Request,
 
 
 class _YouTube:
-    """One adapter per profile, one call at a time (keeps traffic human-paced)."""
+    """One adapter per YouTube sign-in, one call at a time (keeps traffic human-paced).
+    A person uses their store owner's sign-in (a child: the parent's)."""
 
     def __init__(self):
         self._adapters: dict[str, tuple[YTMusicAdapter, threading.Lock]] = {}
@@ -224,6 +228,7 @@ class _YouTube:
 
     def call(self, profile: str, fn_name: str, *args, **kwargs):
         from . import credstore
+        profile = signin_of(profile)
         with self._lock:
             if profile not in self._adapters:
                 s = settings_mod.load()
@@ -314,7 +319,10 @@ def revoke_device(device_id: int, s: Session = Depends(session)) -> Response:
 
 @router.get("/discover/home", response_model=HomeFeed, tags=["discover"])
 def discover_home(shelves: int = Query(6, ge=1, le=20), s: Session = Depends(session)) -> HomeFeed:
-    """YouTube Music's personalised home feed: mixes, playlists, new releases."""
+    """YouTube Music's personalised home feed: mixes, playlists, new releases. Empty for a
+    kids account (it's the parent's YouTube)."""
+    if s.kid:
+        return HomeFeed(shelves=[])
     feed = youtube.call(s.user.profile, "home", shelves)
     r = _ratings(s)
     return HomeFeed(shelves=[Shelf(title=sh.title, items=_items(r.arrange(sh.items), s.lib)) for sh in feed])
@@ -331,6 +339,8 @@ def discover_similar(video_id: str, limit: int = Query(25, ge=1, le=50),
 def discover_charts(country: str = Query("ZZ", min_length=2, max_length=2,
                                          description="ISO country code; ZZ = global"),
                     s: Session = Depends(session)) -> Charts:
+    if s.kid:  # no YouTube charts in a kids account
+        return Charts(country=country.upper(), countries=[], playlists=[], artists=[])
     c = youtube.call(s.user.profile, "charts", country.upper())
     return Charts(country=c["country"], countries=c["countries"],
                   playlists=_items(c["playlists"], s.lib), artists=_items(c["artists"], s.lib))
@@ -344,7 +354,10 @@ def yt_search(q: str = Query(min_length=1), type: Literal["song", "video", "albu
 
 @router.get("/yt/my-playlists", response_model=ItemList, tags=["youtube"])
 def yt_my_playlists(s: Session = Depends(session)) -> ItemList:
-    """Your own playlists on YouTube Music (open one with /yt/playlist/{id})."""
+    """Your own playlists on YouTube Music (open one with /yt/playlist/{id}). Empty for a
+    kids account."""
+    if s.kid:
+        return ItemList(items=[])
     return ItemList(items=_items(youtube.call(s.user.profile, "my_playlists"), s.lib))
 
 
@@ -518,6 +531,21 @@ class AlbumDetail(BaseModel):
 
 class TrackList(BaseModel):
     tracks: list[Track]
+
+
+class AddSongs(BaseModel):
+    track_ids: list[int] = Field(min_length=1, max_length=2000)
+
+
+class Added(BaseModel):
+    added: int = Field(description="How many were new to your library")
+
+
+class Me(BaseModel):
+    username: str
+    profile: str
+    role: Literal["parent", "child"]
+    household: list[str] = Field(description="Everyone sharing this music store")
 
 
 class LibrarySearch(BaseModel):
@@ -945,11 +973,36 @@ def discover_for_you(s: Session = Depends(session)) -> ForYou:
     return ForYou(on_repeat=on_repeat, forgotten=forgotten, more_like=_items(r.arrange(more)[:40], s.lib))
 
 
+@router.get("/me", response_model=Me, tags=["auth"])
+def me(s: Session = Depends(session)) -> Me:
+    from .library import people
+    return Me(username=s.user.name, profile=s.lib.profile, role=s.lib.role,
+              household=[p["profile"] for p in people() if p["store"] == s.lib.store])
+
+
+@router.get("/library/household", response_model=TrackList, tags=["library"])
+def library_household(q: str = "", limit: int = Query(200, ge=1, le=1000), offset: int = Query(0, ge=0),
+                      s: Session = Depends(session)) -> TrackList:
+    """Songs already on the PC that aren't in your library (someone else in the household
+    has them). Add them with POST /library/add: no download needed."""
+    return TrackList(tracks=[_track_out(t) for t in s.lib.household(q, limit, offset)])
+
+
+@router.post("/library/add", response_model=Added, tags=["library"])
+def library_add(body: AddSongs, s: Session = Depends(session)) -> Added:
+    """Add songs that are already on the PC to your library."""
+    return Added(added=s.lib.add_many(body.track_ids, "household"))
+
+
 @router.get("/library/tracks/{track_id}/stream", tags=["library"],
             response_class=FileResponse, responses={200: {"content": {"audio/*": {}}}})
 def library_stream(track_id: int, s: Session = Depends(media_session)) -> FileResponse:
-    """The original file (supports Range requests for seeking)."""
-    path = s.lib.path_of(_track(s, track_id))
+    """The original file (supports Range requests for seeking). Also plays songs on the
+    Household shelf (in your household's store, not yet in your library)."""
+    t = s.lib.track(track_id) or s.lib.household_track(track_id)
+    if t is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No such track")
+    path = s.lib.path_of(t)
     if not path.exists():
         raise HTTPException(status.HTTP_404_NOT_FOUND, "The file is missing; run a library scan")
     return FileResponse(path, media_type=CONTENT_TYPES.get(path.suffix.lower(), "application/octet-stream"))
@@ -957,7 +1010,7 @@ def library_stream(track_id: int, s: Session = Depends(media_session)) -> FileRe
 
 def _cover_response(s: Session, track_id: int | None, size: int) -> Response:
     from .subsonic_api import _cover_bytes
-    t = s.lib.track(track_id) if track_id else None
+    t = (s.lib.track(track_id) or s.lib.household_track(track_id)) if track_id else None
     path = s.lib.path_of(t) if t else None
     data = _cover_bytes(str(path), path.stat().st_mtime, size) if path and path.exists() else None
     if not data:
@@ -995,7 +1048,10 @@ def get_settings(s: Session = Depends(session)) -> SettingsView:
 
 @router.put("/settings", response_model=SettingsView, tags=["settings"])
 def put_settings(body: SettingsChange, s: Session = Depends(session)) -> SettingsView:
-    """Audio quality, format and cache limit. The music folder is changed on the PC only."""
+    """Audio quality, format and cache limit. The music folder is changed on the PC only.
+    Not from a kids account."""
+    if s.kid:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Ask a parent to change this on the PC")
     for key, value in body.model_dump(exclude_none=True).items():
         settings_mod.set_value(key, str(value))
     return _settings_view(s)

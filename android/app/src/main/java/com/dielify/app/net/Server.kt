@@ -234,6 +234,12 @@ class Server(private val context: Context, private val accounts: AccountStore) {
         get("api/library/search?limit=50&q=" + Uri.encode(q))
 
     suspend fun track(id: Long): Track = get("api/library/tracks/$id")
+    suspend fun me(): Me = get("api/me")
+    /** Songs already on the PC that someone else in the household has and you don't. */
+    suspend fun household(q: String): List<Track> =
+        get<TrackList>("api/library/household?limit=300&q=" + Uri.encode(q)).tracks
+    suspend fun addToLibrary(ids: List<Long>): Int =
+        json.decodeFromString(Added.serializer(), send("POST", "api/library/add", json.encodeToString(AddToLibrary.serializer(), AddToLibrary(ids)))).added
 
     // YouTube Music (these ask YouTube through the PC, so they need the PC to be online)
     suspend fun home(): HomeFeed = get("api/discover/home?shelves=10")

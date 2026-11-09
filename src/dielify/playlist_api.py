@@ -91,6 +91,12 @@ def _detail(s: Session, p: dict) -> PlaylistDetail:
                                                          for i, it in zip(p["items"], _items(yt, s.lib))])
 
 
+def _not_kid(s: Session) -> None:
+    """A kids account's playlists stay in Dielify: the YouTube account is the parent's."""
+    if s.kid:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Kids accounts' playlists stay in Dielify")
+
+
 def _guard(fn):
     try:
         return fn()
@@ -107,12 +113,13 @@ def list_playlists(s: Session = Depends(session)) -> PlaylistList:
 
 @router.post("/playlists", response_model=PlaylistDetail, status_code=201)
 def create_playlist(body: NewPlaylist, request: Request, s: Session = Depends(session)) -> PlaylistDetail:
-    return _detail(s, _guard(lambda: _engine(request).create(s.user.profile, body.name, body.on_youtube)))
+    return _detail(s, _guard(lambda: _engine(request).create(s.user.profile, body.name, body.on_youtube and not s.kid)))
 
 
 @router.post("/playlists/import", response_model=PlaylistDetail)
 def import_playlist(body: ImportPlaylist, request: Request, s: Session = Depends(session)) -> PlaylistDetail:
     """Start syncing one of your YouTube Music playlists (its songs are downloaded)."""
+    _not_kid(s)
     return _detail(s, _guard(lambda: _engine(request).import_youtube(s.user.profile, body.yt_id)))
 
 
@@ -133,7 +140,7 @@ def rename_playlist(playlist_id: int, body: RenamePlaylist, request: Request,
 @router.delete("/playlists/{playlist_id}", status_code=204)
 def delete_playlist(playlist_id: int, request: Request, s: Session = Depends(session),
                     on_youtube: bool = Query(False, description="Also delete it on YouTube Music")) -> Response:
-    _guard(lambda: _engine(request).delete(s.user.profile, playlist_id, on_youtube))
+    _guard(lambda: _engine(request).delete(s.user.profile, playlist_id, on_youtube and not s.kid))
     return Response(status_code=204)
 
 
@@ -177,4 +184,5 @@ def refresh_mixes(request: Request, s: Session = Depends(session)) -> Response:
 
 @router.post("/playlists/{playlist_id}/sync", response_model=PlaylistDetail)
 def sync_playlist(playlist_id: int, request: Request, s: Session = Depends(session)) -> PlaylistDetail:
+    _not_kid(s)
     return _detail(s, _guard(lambda: _engine(request).sync(s.user.profile, playlist_id)))

@@ -48,6 +48,8 @@ const $ = (id) => document.getElementById(id);
 // --- icons (Material Symbols paths, drawn inline: no fonts or files to load) ------------------
 const ICONS = {
   play: "M8 5v14l11-7z",
+  add: "M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z",
+  person: "M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z",
   pause: "M6 19h4V5H6v14zm8-14v14h4V5h-4z",
   next: "M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z",
   prev: "M6 6h2v12H6zm3.5 6l8.5 6V6z",
@@ -149,11 +151,16 @@ async function viewLibrary(tab = libTab) {
   libTab = tab;
   try {
     await refreshStatus();
+    const shared = (status.people || []).length > 1;
+    if (tab === "household" && !shared) tab = libTab = "albums";
     const tabs = h("div", { class: "tabs" },
-      ["albums", "artists", "playlists", "recent"].map((t) => h("button", { class: t === tab ? "active" : "", onclick: () => viewLibrary(t) },
-        { albums: "Albums", artists: "Artists", playlists: "Playlists", recent: "Recently played" }[t])));
+      ["albums", "artists", "playlists", "recent", ...(shared ? ["household"] : [])].map((t) => h("button", { class: t === tab ? "active" : "", onclick: () => viewLibrary(t) },
+        { albums: "Albums", artists: "Artists", playlists: "Playlists", recent: "Recently played", household: "Household" }[t])));
     let body;
-    if (tab === "playlists") {
+    if (tab === "household") {
+      body = await householdBody();
+      if (view !== "library" || libTab !== "household") return;
+    } else if (tab === "playlists") {
       show(welcome(), h("h1", {}, "Library"), tabs, h("p", { class: "muted" }, "Loading playlists…"));
       const [{ playlists: all }, yt, mixStatus] = await Promise.all([api("/api/playlists"),
         api("/api/yt/my-playlists").catch(() => ({ items: [] })), api("/api/mixes").catch(() => null)]);
@@ -196,6 +203,35 @@ async function viewLibrary(tab = libTab) {
   } catch (e) { failed(e); }
 }
 const empty = (msg) => h("p", { class: "muted" }, msg || "No music yet. Find some in Discover.");
+
+// Household: songs already on this PC that someone else in the household has and you don't.
+// Adding one puts it in your library straight away (no download).
+async function householdBody(q = "") {
+  const box = h("div", {});
+  const input = h("input", { type: "search", placeholder: "Search the household's songs", value: q, style: "max-width:360px" });
+  let timer = null;
+  input.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(() => fill(input.value), 300); });
+  const fill = async (query) => {
+    const { tracks } = await api(`/api/library/household?limit=300&q=${encodeURIComponent(query)}`);
+    const add = async (ids, msg) => {
+      const r = await api("/api/library/add", { method: "POST", body: { track_ids: ids } });
+      toast(msg || `Added ${r.added} song${r.added === 1 ? "" : "s"} to your library`); fill(input.value);
+    };
+    box.replaceChildren(...(tracks.length
+      ? [h("div", { class: "row", style: "margin:8px 0" }, h("span", { class: "muted small", style: "flex:1" },
+            `${tracks.length}${tracks.length === 300 ? "+" : ""} song${tracks.length === 1 ? "" : "s"} on this PC that aren't in your library`),
+          h("button", { onclick: () => add(tracks.map((t) => t.id)) }, icon("add", "ico lead"), "Add all shown")),
+        h("table", { class: "tracks" }, h("tbody", {}, tracks.map((t, i) => h("tr", {},
+          h("td", { class: "title", onclick: () => playList(tracks, i) }, t.title,
+            h("div", { class: "muted small" }, t.artist, ` · ${t.album}`)),
+          h("td", { class: "d" }, dur(t.duration_s)),
+          h("td", { class: "a" }, ib("add", "Add to your library", () => add([t.id], `Added “${t.title}” to your library`)))))))]
+      : [h("p", { class: "muted" }, query ? "No household songs match." : "Everything on this PC is already in your library.")]));
+  };
+  await fill(q);
+  return [h("p", { class: "muted small" }, "Songs someone else in your household has on this PC. Add them to your library: no download needed."),
+    input, box];
+}
 const albumCard = (a) => h("div", { class: "card", onclick: () => viewAlbum(a.id) },
   art(media(a.cover_url, 320)), h("div", { class: "t" }, a.name), h("div", { class: "s" }, a.artist, a.year ? ` · ${a.year}` : ""));
 const artistCard = (r) => h("div", { class: "card", onclick: () => viewArtist(r.id) },
@@ -677,7 +713,7 @@ async function viewSettings() {
       setting("Data folder", s.data_folder), setting("Log file", s.log_file),
       await updateSetting(setting));
     await refreshRatings();
-    show(h("h1", {}, "Settings"), youtube, music, playbackPanel(), windows, phones, backups, ratingsPanel(), about);
+    show(h("h1", {}, "Settings"), youtube, music, peoplePanel(s), playbackPanel(), windows, phones, backups, ratingsPanel(), about);
   } catch (e) { failed(e); }
 }
 
@@ -718,6 +754,41 @@ async function updateSetting(setting) {
   return setting("Updates", text, check, install);
 }
 
+// People sharing this PC's music: you (parent) and kids accounts. A kids account uses this
+// PC's music folder and YouTube sign-in behind the scenes, has its own library, and never
+// sees your YouTube (home feed, charts, your playlists).
+function peoplePanel(s) {
+  const people = s.people || [];
+  const songs = (n) => `${n.toLocaleString()} song${n === 1 ? "" : "s"}`;
+  return h("div", { class: "panel" }, h("h2", {}, "People"),
+    h("p", { class: "muted small" }, "Everyone here shares this PC's music files. Each person has their own library, play history, likes and playlists."),
+    people.map((p) => h("div", { class: "setting" },
+      h("div", { class: "label" }, icon("person", "ico lead"), p.name),
+      h("div", { class: "value" }, p.role === "child" ? `Kids account · ${songs(p.tracks)}` : `Parent · ${songs(p.tracks)}`,
+        p.role === "child" ? h("div", { class: "small muted" },
+          `Uses ${p.store}'s music folder and YouTube sign-in. Phone login: ${p.logins.join(", ") || "none"}`) : null),
+      p.role === "child" ? [
+        h("button", { onclick: async () => {
+          const login = p.logins[0];
+          if (!login) return toast("No phone login for this account", 5000);
+          if (!confirm(`Make a new password for ${p.name}? The old one stops working.`)) return;
+          showPassword(await api(`/api/desktop/phone-users/${encodeURIComponent(login)}/password`, { method: "POST" }));
+        } }, "New password"),
+        h("button", { onclick: async () => {
+          if (!confirm(`Remove ${p.name}'s account? Their phone is signed out and their library, history and playlists are deleted. Music files stay on this PC.`)) return;
+          try { await api(`/api/desktop/people/${encodeURIComponent(p.name)}`, { method: "DELETE" }); toast(`Removed ${p.name}`); }
+          catch (e) { toast(e.message, 6000); }
+          viewSettings();
+        } }, "Remove")] : null)),
+    h("div", { class: "row", style: "margin-top:10px" }, h("button", { onclick: addChild }, icon("add", "ico lead"), "Add a kids account")));
+}
+async function addChild() {
+  const name = prompt("Name for the kids account (letters and digits, e.g. emma). It's also their phone login:");
+  if (!name) return;
+  try { showPassword(await api("/api/desktop/people", { method: "POST", body: { name: name.trim() } })); }
+  catch (e) { toast(e.message, 6000); }
+}
+
 async function addProfile() {
   const name = prompt("Name for the new profile (letters and digits, e.g. emma):");
   if (!name) return;
@@ -734,7 +805,9 @@ async function addPhoneUser() {
 function showPassword(login) {
   show(h("h1", {}, "Phone login"), h("div", { class: "panel" },
     h("p", {}, "Type these into the phone app now. The password is shown only this once."),
-    h("div", { class: "setting" }, h("div", { class: "label" }, "Server address"), h("div", { class: "value" }, status.addresses[0] || "")),
+    (status.addresses || []).map((a) => h("div", { class: "setting" },
+      h("div", { class: "label" }, /^http:\/\/100\./.test(a) ? "Server address away from home (Tailscale)" : "Server address on home Wi-Fi"),
+      h("div", { class: "value" }, a))),
     h("div", { class: "setting" }, h("div", { class: "label" }, "User"), h("div", { class: "value secret" }, login.name)),
     h("div", { class: "setting" }, h("div", { class: "label" }, "Password"), h("div", { class: "value secret" }, login.password)),
     h("div", { class: "row", style: "margin-top:12px" }, h("button", { class: "primary", onclick: viewSettings }, "Done"))));

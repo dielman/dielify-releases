@@ -24,6 +24,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.DownloadForOffline
@@ -48,6 +49,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material.icons.filled.MoreVert
@@ -63,6 +65,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -75,9 +79,12 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dielify.app.net.Album
 import com.dielify.app.net.Artist
+import com.dielify.app.net.ApiError
 import com.dielify.app.net.Link
+import com.dielify.app.net.Me
 import com.dielify.app.net.Track
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /** Top bar + content + the mini player at the bottom. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -187,12 +194,16 @@ fun LibraryScreen(vm: AppViewModel) {
             if (searching && query.isNotBlank()) {
                 SearchResults(vm, query.trim())
             } else {
-                val tabs = listOf("Albums", "Artists", "Playlists", "Recent", "On phone")
                 val link by vm.server.link.collectAsStateWithLifecycle()
+                // More than one person on the PC: a Household tab (their songs you can add).
+                val me by produceState<Me?>(null, link) { value = runCatching { vm.server.me() }.getOrNull() ?: value }
+                val tabs = listOf("Albums", "Artists", "Playlists", "Recent") +
+                    (if (me?.shared == true) listOf("Household") else emptyList()) + "On phone"
                 val savedCount = vm.savedSongs.collectAsStateWithLifecycle().value.size
+                if (tab > tabs.lastIndex) tab = tabs.lastIndex
                 LaunchedEffect(link) {
                     // No PC? Show what's on the phone instead of an error.
-                    if (link is Link.Down && savedCount > 0) tab = 4
+                    if (link is Link.Down && savedCount > 0) tab = tabs.lastIndex
                 }
                 PrimaryScrollableTabRow(selectedTabIndex = tab, edgePadding = 8.dp) {
                     tabs.forEachIndexed { i, name -> Tab(tab == i, { tab = i }, text = { Text(name) }) }
@@ -202,7 +213,76 @@ fun LibraryScreen(vm: AppViewModel) {
                     1 -> Loaded(vm, "artists", { vm.server.artists() }) { ArtistList(vm, it) }
                     2 -> PlaylistsTab(vm)
                     3 -> Loaded(vm, "recent", { vm.server.recentAlbums() }) { AlbumGrid(vm, it) }
-                    else -> SavedAlbums(vm)
+                    tabs.lastIndex -> SavedAlbums(vm)
+                    else -> HouseholdTab(vm)
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Household: songs on the PC that someone else in the household has and you don't. Tap to
+ * listen, + to add it to your library (no download: the file's already there).
+ */
+@Composable
+private fun HouseholdTab(vm: AppViewModel) {
+    var query by rememberSaveable { mutableStateOf("") }
+    var debounced by rememberSaveable { mutableStateOf("") }
+    var refresh by remember { mutableIntStateOf(0) }
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(query) { delay(300); debounced = query.trim() }
+    fun add(ids: List<Long>, what: String) = scope.launch {
+        try {
+            val n = vm.server.addToLibrary(ids)
+            vm.messages.tryEmit(if (ids.size == 1) "Added $what to your library" else "Added $n songs to your library")
+            refresh++
+        } catch (e: ApiError) {
+            vm.messages.tryEmit(e.message ?: "Couldn't add it")
+        }
+    }
+    Column(Modifier.fillMaxSize()) {
+        OutlinedTextField(
+            query, { query = it },
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            placeholder = { Text("Search the household's songs") }, singleLine = true,
+        )
+        Loaded(vm, "$debounced#$refresh", { vm.server.household(debounced) }) { tracks ->
+            if (tracks.isEmpty()) {
+                Box(Modifier.fillMaxSize().padding(32.dp), Alignment.Center) {
+                    Text(if (debounced.isEmpty()) "Everything on the PC is already in your library." else "No household songs match.")
+                }
+                return@Loaded
+            }
+            LazyColumn(Modifier.fillMaxSize()) {
+                item {
+                    Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "${tracks.size}${if (tracks.size == 300) "+" else ""} songs on the PC that aren't in your library",
+                            Modifier.weight(1f), style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        TextButton(onClick = { add(tracks.map { it.id }, "") }) { Text("Add all") }
+                    }
+                }
+                itemsIndexed(tracks, key = { _, t -> "h${t.id}" }) { i, t ->
+                    Row(
+                        Modifier.fillMaxWidth().clickable { vm.play(tracks, i) }.padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Cover(vm, t.coverUrl, 44.dp, pixels = 150)
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(t.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(
+                                "${t.artist} · ${t.album}", maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        IconButton(onClick = { add(listOf(t.id), "“${t.title}”") }) {
+                            Icon(Icons.Filled.Add, "Add to your library")
+                        }
+                    }
                 }
             }
         }
