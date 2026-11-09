@@ -62,10 +62,7 @@ input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px s
 /* --- side bar ------------------------------------------------------------------------------ */
 .side { grid-row: 1; background: #0a0b0d; display: flex; flex-direction: column; min-height: 0; padding: 18px 12px 0; }
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 22px; letter-spacing: -.02em; padding: 2px 12px 18px; }
-.brand-mark { width: 28px; height: 28px; border-radius: 9px; background: conic-gradient(from 210deg, #ff5a5f, #ffb35a, #ff5a9e, #ff5a5f);
-  box-shadow: 0 0 0 3px rgba(255, 90, 95, .15); position: relative; }
-.brand-mark::after { content: ""; position: absolute; inset: 8px 7px 8px 10px; background: #0a0b0d;
-  clip-path: polygon(0 0, 100% 50%, 0 100%); }
+.brand-mark { width: 30px; height: 30px; display: block; }
 #nav { display: grid; gap: 2px; }
 #nav button { display: flex; align-items: center; gap: 14px; background: none; color: var(--muted); text-align: left;
   padding: 10px 12px; border-radius: var(--r-md); font-size: var(--fs-md); }

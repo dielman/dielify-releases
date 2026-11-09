@@ -584,7 +584,14 @@ src/dielify/
     for next/previous), album/artist/playlist/YouTube collection headers, playlist covers + artist photos in
     lists, Discover banner (NowMixShelf), Settings in sections, AnimatedContent page transitions, widget
     restyled. Checked on the emulator (AVD Medium_Phone_API_37.0, headless, signed in to 10.0.2.2:4796);
-    screenshots in docs/design/phone/. Waiting for Josh's OK; stage 4 = icon/splash options.
+    screenshots in docs/design/phone/. Josh: "Looks good, go".
+  - Stage 4 built (not released): icon = **Wave D** (Josh picked it from 6 options in docs/design/brand/board.png,
+    drawn by tools/brand_concepts.py): a D made of 8 sound bars, orange -> coral -> violet, on a dark tile.
+    One source: `src/dielify/brand.py` (bars(), svg(), icon_image() via Pillow). tools/make_brand.py writes
+    the phone's ic_launcher_{background,foreground,monochrome}.xml (vector + gradient), ui/logo.svg (side bar +
+    favicon) and packaging/wizard-{large,small}-{100,200}.bmp (Inno WizardImageFile / WizardSmallImageFile);
+    rerun it after changing brand.py. Tray + dielify.ico (build.py) use icon_image. Phone start-up screen:
+    values-v31/themes.xml (icon on #0E0F12). Checked: emulator drawer + start-up screen, PC side bar.
 
 ## Backlog (Josh, 8 Nov; after Phase 8 item 6)
 

@@ -186,12 +186,9 @@ def _signin_changed(profile: str) -> None:
 # --- tray --------------------------------------------------------------------------------
 
 def tray_image():
-    from PIL import Image, ImageDraw
-    img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
-    d = ImageDraw.Draw(img)
-    d.rounded_rectangle((2, 2, 62, 62), radius=14, fill=(229, 72, 77, 255))
-    d.polygon([(24, 18), (24, 46), (47, 32)], fill=(255, 255, 255, 255))
-    return img
+    """The Wave D icon (dielify.brand) for the tray."""
+    from .brand import icon_image
+    return icon_image(64)
 
 
 def _make_tray(show, quit_app):

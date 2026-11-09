@@ -24,6 +24,9 @@ UninstallDisplayName=Dielify
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
+; The Wave D pictures, from tools/make_brand.py (100% and 200% screens).
+WizardImageFile=wizard-large-100.bmp,wizard-large-200.bmp
+WizardSmallImageFile=wizard-small-100.bmp,wizard-small-200.bmp
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 ; Close a running Dielify before replacing its files.

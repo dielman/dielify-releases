@@ -22,7 +22,7 @@ PKG = ROOT / "packaging"
 sys.path.insert(0, str(ROOT / "src"))
 
 from dielify import __version__  # noqa: E402
-from dielify.desktop import tray_image  # noqa: E402
+from dielify.brand import icon_image  # noqa: E402
 
 
 def iscc() -> Path:
@@ -41,7 +41,7 @@ def tool_dir(name: str) -> Path:
 
 
 def make_icon() -> None:
-    img = tray_image().resize((256, 256))
+    img = icon_image(256)  # Pillow scales it down for the smaller sizes
     img.save(PKG / "dielify.ico", sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
 
 
