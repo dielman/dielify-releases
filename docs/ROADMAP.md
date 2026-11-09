@@ -130,7 +130,7 @@ Built only from Dielify's own data, filtered by the parent's controls:
   already on the PC are checked in the background (about 1,500 an hour) while a kids
   account blocks explicit songs; until a song is checked, a child doesn't get it.
 
-## 0.9.5: Discovery (built 9 Nov, not published)
+## 0.9.5: Discovery (published 9 Nov)
 
 - **New releases from your artists**: follow artists (or use your top 20 played). A daily
   check of their YouTube artist pages builds "New for you". Optional: download new

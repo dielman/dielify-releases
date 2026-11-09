@@ -132,7 +132,7 @@ src/dielify/
 | 6 | Android app | Find, request and listen on the road | **Done** 2026-11-08 — closed by Josh before the car test ("assume it works"); Android Auto untested |
 | 7 | Polish (scope set by Josh 8 Nov) | Backups to E:, signed phone release with in-app updates, download-next, playlists, music-video fix | **Done** 2026-11-08 — 0.6.0 published; phone self-update to be confirmed with the first Phase 8 release (Josh) |
 | 8 | Listening features (Josh, 8 Nov) | 1 instant play + download, 2 play history + stats, 4 two-way playlist sync, 3 Dielify-made genre/vibe playlists, 5 outside discovery, 6 remote control between devices | In progress (branch `phase-8`) |
-| 9 | Road to 1.0 (Josh, 9 Nov) | Releases 0.9.1-0.9.9 in `docs/ROADMAP.md`: household + kids accounts first, then discovery, library, sound, phone, together, hardening | In progress: 0.9.4 published, 0.9.5 built |
+| 9 | Road to 1.0 (Josh, 9 Nov) | Releases 0.9.1-0.9.9 in `docs/ROADMAP.md`: household + kids accounts first, then discovery, library, sound, phone, together, hardening | In progress: 0.9.5 published |
 
 ## Current status
 
@@ -469,8 +469,8 @@ src/dielify/
   each playlist's page (replaces the one-off "Save on phone" there); Settings lists only the kept
   playlists, with switches to stop keeping them.
 
-- 0.9.5 Discovery built (9 Nov; version 0.9.5, 167 tests, phone compiles, PC checked in the browser
-  against a dev copy, **not published**, nothing tried on Josh's devices). Includes the three fixes above.
+- **Published v0.9.5** Discovery (9 Nov; Josh: "let me know when 9.5 is live"; 167 tests, PC checked in the browser
+  against a dev copy; not yet tried on Josh's devices; tag v0.9.5 on phase-8 code). Includes the three fixes above.
   - Leave out of my taste: `taste.py`, table `taste_out` (song key like ratings, or playlist id = all its
     songs). Applied in history.seeds / on_repeat / forgotten / top_artists, mixes (play count 0), nowmix,
     new releases. Stats still count them. GET/PUT /api/taste. PC: song queue menu + playlist page button +
