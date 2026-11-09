@@ -132,7 +132,7 @@ src/dielify/
 | 6 | Android app | Find, request and listen on the road | **Done** 2026-11-08 — closed by Josh before the car test ("assume it works"); Android Auto untested |
 | 7 | Polish (scope set by Josh 8 Nov) | Backups to E:, signed phone release with in-app updates, download-next, playlists, music-video fix | **Done** 2026-11-08 — 0.6.0 published; phone self-update to be confirmed with the first Phase 8 release (Josh) |
 | 8 | Listening features (Josh, 8 Nov) | 1 instant play + download, 2 play history + stats, 4 two-way playlist sync, 3 Dielify-made genre/vibe playlists, 5 outside discovery, 6 remote control between devices | In progress (branch `phase-8`) |
-| 9 | Road to 1.0 (Josh, 9 Nov) | Releases 0.9.1-0.9.9 in `docs/ROADMAP.md`: household + kids accounts first, then discovery, library, sound, phone, together, hardening | In progress: 0.9.5 published, 0.9.6 built |
+| 9 | Road to 1.0 (Josh, 9 Nov) | Releases 0.9.1-0.9.9 in `docs/ROADMAP.md`: household + kids accounts first, then discovery, library, sound, phone, together, hardening | In progress: 0.9.6 published |
 
 ## Current status
 
@@ -505,8 +505,8 @@ src/dielify/
   **never shelves of single songs** in discovery. These fixes and the freeze fix ship WITH 0.9.6 Library
   power (feature release numbers are never used for fix-only releases).
 
-- 0.9.6 Library power built (9 Nov; version 0.9.6, 174 tests, PC checked in the browser on a dev copy, phone
-  compiles, **not published**, nothing tried on Josh's devices). Includes every fix since 0.9.5 (above).
+- **Published v0.9.6** Library power (9 Nov; 174 tests, PC checked in the browser on a dev copy, phone
+  compiles; not yet tried on Josh's devices). Includes every fix since 0.9.5 (above).
   - Smart playlists: `smart.py`, playlists.kind='smart' + playlists.rules (JSON; migration adds the column),
     read-only, songs worked out again when read and older than 5 min (playlists.all_playlists / get call
     smart.refresh_stale). Rules: artist/album/title/genre (text ops), plays/year/length_s (gt/lt/eq),
