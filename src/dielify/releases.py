@@ -118,7 +118,8 @@ def new_for_you(profile: str, days: int = NEW_DAYS, limit: int = LIST_LIMIT) -> 
             "JOIN albums al ON al.id = t.album_id WHERE li.profile = ?", (profile,))}
     out = []
     for r in rows:
-        if r["title"].casefold() in have:
+        # never single songs (Josh, 9 Nov): a single shows up as its album once that's out
+        if r["kind"].casefold() == "single" or r["title"].casefold() in have:
             continue
         out.append(YTItem("album", r["browse_id"], r["title"], [r["artist"]], year=r["year"],
                           thumbnail=r["thumbnail"], subtitle=r["kind"],

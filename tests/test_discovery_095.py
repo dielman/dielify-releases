@@ -109,7 +109,7 @@ def test_new_releases(monkeypatch):
     monkeypatch.setattr(custom_api, "YTMusicAdapter", ArtistYT)
     custom_api.youtube.reset()
     ArtistYT.pages = {"albums": [rel("MPREb_old", "Old One", "2001"), rel("MPREb_1", "Debut", THIS_YEAR)],
-                      "singles": [rel("MPREb_s", "Fresh Single", THIS_YEAR, "Single")]}
+                      "singles": [rel("MPREb_s", "Fresh Single", THIS_YEAR, "Single"), rel("MPREb_ep", "Fresh EP", THIS_YEAR, "EP")]}
     with make_client() as c:
         h = login(c)
         one = download(c, h, "s1")                    # Band's "Debut" is in the library
@@ -119,7 +119,8 @@ def test_new_releases(monkeypatch):
         assert releases.check("josh", call) == 1
         # first look: this year's releases count as new, older ones don't; Debut is already yours
         new = c.get("/api/discover/new", headers=h).json()
-        assert [i["title"] for i in new["items"]] == ["Fresh Single"] and new["watching"] == 1
+        # never single songs: the EP shows, the single doesn't
+        assert [i["title"] for i in new["items"]] == ["Fresh EP"] and new["watching"] == 1
         assert releases.check("josh", call) == 0      # read today already
         assert artists.cached_about("Band")["description"] == "Band are a band."
 
@@ -145,7 +146,7 @@ def test_follows_and_kids(monkeypatch):
         r = c.put("/api/follows", headers=h, json={"name": "Band", "channel_id": "UCband"})
         assert r.json()["follows"] == [{"name": "Band", "channel_id": "UCband"}]
         releases.check("josh", lambda fn, *a: custom_api.youtube.call("josh", fn, *a))
-        assert len(c.get("/api/discover/new", headers=h).json()["items"]) == 3
+        assert {i["title"] for i in c.get("/api/discover/new", headers=h).json()["items"]} == {"Rude", "Clean"}
 
         desk = {"Authorization": f"Bearer {auth.enable_desktop_token()}"}
         pw = c.post("/api/desktop/people", headers=desk, json={"name": "emma"}).json()["password"]
@@ -188,3 +189,23 @@ def test_artist_about_and_subsonic(monkeypatch):
         r = c.get("/rest/getArtistInfo2", params={"u": "josh", "p": "sesame", "v": "1.16.1", "c": "t",
                                                   "f": "json", "id": f"ar-{aid}"}).json()["subsonic-response"]
         assert r["status"] == "ok" and r["artistInfo2"]["biography"] == "Band are a band."
+
+
+def test_song_mix_opens_as_a_playlist():
+    from dielify import yt_adapter
+
+    class FakeYT:
+        def get_watch_playlist(self, videoId, radio=False, limit=25):
+            assert radio
+            return {"tracks": [{"videoId": "s9", "title": "Other", "artists": [{"name": "X"}]},
+                               {"videoId": "s1", "title": "Song One", "artists": [{"name": "Band"}],
+                                "thumbnail": [{"url": "https://i.ytimg.com/a.jpg", "width": 100}]}]}
+
+        def get_playlist(self, *a, **k):
+            raise AssertionError("song mixes can't be opened with get_playlist")
+
+    a = yt_adapter.YTMusicAdapter.__new__(yt_adapter.YTMusicAdapter)
+    a._yt, a._pace = FakeYT(), lambda: None
+    info, tracks = a.playlist("RDAMVMs1")
+    assert info.title == "Song One mix" and info.subtitle == "Songs like Song One by Band"
+    assert [t.id for t in tracks] == ["s9", "s1"]

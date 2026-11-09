@@ -498,6 +498,12 @@ src/dielify/
   a time (others 503 + Retry-After), /api/health async, thread limit 100; phone saves 2 songs at a time
   and asks for one lyric at a time; PC player ignores AbortError. Also: PRAGMA journal_mode under the
   setup lock ("database is locked" with many threads on a new db). It recovered by itself ~19:34.
+- Josh's bug report (9 Nov, also unreleased): New for you never shows singles (albums + EPs only; a single
+  shows up as its album once that's out). "More like your top songs" = playlists: YouTube Music's mix of
+  each of the top 10 songs (id RDAMVM<videoId>, "<Song> mix"; get_playlist can't open those, so
+  yt_adapter.playlist loads them via song_mix = get_watch_playlist radio; checked live: 100 songs). Josh:
+  **never shelves of single songs** in discovery. These fixes and the freeze fix ship WITH 0.9.6 Library
+  power (feature release numbers are never used for fix-only releases).
 
 ## Backlog (Josh, 8 Nov; after Phase 8 item 6)
 

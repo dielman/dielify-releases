@@ -505,8 +505,8 @@ def test_library_plays_count_and_feed_for_you(monkeypatch):
         fy = c.get("/api/discover/for-you", headers=h).json()
         assert [t["id"] for t in fy["on_repeat"]] == [tid]
         assert fy["forgotten"] == []
-        assert all(i["id"] != "s1" for i in fy["more_like"])   # suggestions are new to you
-        assert fy["more_like"]                                  # FakeYT.similar of your top song
+        # more like your top songs = YouTube's mix of each top song, as playlists (never single songs)
+        assert [(i["type"], i["id"], i["title"]) for i in fy["more_like"]] == [("playlist", "RDAMVMs1", "Song One mix")]
 
 
 def test_clear_finished_downloads_keeps_failed_and_waiting():

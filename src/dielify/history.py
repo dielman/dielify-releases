@@ -179,3 +179,11 @@ def top_artists(lib: Library, days: int = 90, limit: int = 20) -> list[str]:
                 " GROUP BY ar.id ORDER BY n DESC LIMIT ?", (lib.profile, *args2, limit * 2)).fetchall()
             names += [r["name"] for r in more if r["name"] not in names]
     return [n for n in names if n and n.casefold() not in ("various artists", "unknown artist")][:limit]
+
+
+def song_name(lib: Library, video_id: str) -> tuple[str | None, str | None]:
+    """(title, artist) of a song you played, from your play history."""
+    with connect() as conn:
+        r = conn.execute("SELECT title, artist FROM plays WHERE profile = ? AND video_id = ? "
+                         "ORDER BY started_at DESC LIMIT 1", (lib.profile, video_id)).fetchone()
+    return (r["title"], r["artist"]) if r else (None, None)

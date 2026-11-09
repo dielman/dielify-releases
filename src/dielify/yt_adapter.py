@@ -378,6 +378,7 @@ def _pkg_version(name: str) -> str | None:
 # --- the adapter ------------------------------------------------------------
 
 MIX_LIMIT = 100  # songs loaded from a YouTube mix (they are endless)
+SONG_MIX = "RDAMVM"  # + video id: YouTube Music's mix of that song
 
 class YTMusicAdapter:
     def __init__(self, auth: dict | None = None, request_delay_s: float = 1.5,
@@ -563,10 +564,26 @@ class YTMusicAdapter:
         # waiting behind it. One page, like YouTube shows.
         if playlist_id.startswith("RD"):
             limit = min(limit, MIX_LIMIT)
+        if playlist_id.startswith(SONG_MIX):  # a song's mix: only loads as the song's radio
+            return self.song_mix(playlist_id[len(SONG_MIX):], limit)
         raw = self._call("Loading the playlist", self._yt.get_playlist, playlist_id, limit=limit)
         info = to_item({**raw, "playlistId": playlist_id}) or YTItem("playlist", playlist_id, "")
         tracks = _items(t for t in raw.get("tracks") or [] if t.get("isAvailable", True))
         return info, tracks[:limit]
+
+    def song_mix(self, video_id: str, limit: int = 50) -> tuple[YTItem, list[YTItem]]:
+        """YouTube Music's mix of one song (its radio), as a playlist: "<Song> mix", the song
+        first. (get_playlist can't open these "RDAMVM" ids; checked 9 Nov 2026.)"""
+        raw = self._call("Loading the mix", self._yt.get_watch_playlist, videoId=video_id, radio=True,
+                         limit=min(limit, MIX_LIMIT))
+        tracks = _items(raw.get("tracks"))[:limit]
+        seed = next((t for t in tracks if t.id == video_id), tracks[0] if tracks else None)
+        if seed is None:
+            return YTItem("playlist", SONG_MIX + video_id, "Mix"), []
+        by = f" by {', '.join(seed.artists)}" if seed.artists else ""
+        info = YTItem("playlist", SONG_MIX + video_id, f"{seed.title} mix", thumbnail=seed.thumbnail,
+                      subtitle=f"Songs like {seed.title}{by}")
+        return info, tracks
 
     # --- your playlists: reading with the details needed to edit, and editing ----------
 

@@ -24,7 +24,7 @@ from . import settings as settings_mod
 from .downloads import DownloadQueue
 from .leveller import gain_db
 from .library import CONTENT_TYPES, Library, connect, library_for, signin_of
-from .yt_adapter import NotSignedIn, Offline, YouTubeError, YTItem, YTMusicAdapter
+from .yt_adapter import SONG_MIX, NotSignedIn, Offline, YouTubeError, YTItem, YTMusicAdapter
 
 log = logging.getLogger(__name__)
 
@@ -1127,7 +1127,8 @@ class NowMixOut(BaseModel):
 class ForYou(BaseModel):
     on_repeat: list[Track] = Field(description="Your songs you've played most in the last 2 weeks")
     forgotten: list[Track] = Field(description="Songs you played a lot, but not for 2 months")
-    more_like: list[Item] = Field(description="New to you: like your most-played songs (from YouTube Music)")
+    more_like: list[Item] = Field(description="Playlists: YouTube Music's mix of each of your most-played songs "
+                                               "(open with /yt/playlist/{id})")
     now_mix: NowMixOut | None = Field(None, description="Time-of-day mix: what you usually play now (None: "
                                                      "not enough history at this time of day yet)")
 
@@ -1140,21 +1141,22 @@ def discover_for_you(s: Session = Depends(session)) -> ForYou:
     ok = lambda t: t is not None and r.value(t["video_id"], t["artist"], t["id"]) != ratings.BAN  # noqa: E731
     on_repeat = [_track_out(t) for t in map(s.lib.track, history.on_repeat(s.lib)) if ok(t)]
     forgotten = [_track_out(t) for t in map(s.lib.track, history.forgotten(s.lib)) if ok(t)]
-    have, seen, more = s.lib.video_ids(), set(), []
-    for vid in history.seeds(s.lib):
-        try:
-            similar = youtube.call(s.user.profile, "similar", vid, 12)
-        except HTTPException:
-            continue  # offline / signed out: the library lists still work
-        for it in similar:
-            if it.id not in have and it.id not in seen:
-                seen.add(it.id)
-                more.append(it)
+    # More like your top songs: YouTube Music's mix of each of your most-played songs, as
+    # playlists (Josh, 9 Nov: playlists, never a shelf of single songs). No YouTube call here:
+    # a mix loads when it's opened (yt_adapter.song_mix).
+    more = []
+    for vid in history.seeds(s.lib, limit=10):
+        t = s.lib.track_by_video(vid)
+        title, artist = (t["title"], t["artist"]) if t is not None else history.song_name(s.lib, vid)
+        if not title or r.value(vid, artist) in (ratings.BAN, ratings.DOWN):
+            continue
+        more.append(YTItem("playlist", SONG_MIX + vid, f"{title} mix", thumbnail=f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg",
+                           subtitle=f"Songs like {title}" + (f" by {artist}" if artist else "")))
     from . import nowmix
     m = nowmix.build(s.lib)
     now = NowMixOut(title=m.title, description=m.description,
                     tracks=[_track_out(t) for t in map(s.lib.track, m.track_ids) if t is not None]) if m else None
-    return ForYou(on_repeat=on_repeat, forgotten=forgotten, more_like=_items(r.arrange(more)[:40], s.lib),
+    return ForYou(on_repeat=on_repeat, forgotten=forgotten, more_like=_items(more, s.lib),
                   now_mix=now)
 
 
