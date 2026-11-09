@@ -10,7 +10,7 @@ Nothing is stored: the list lives in memory and a device disappears when its con
 closes. The PC is always reachable; phones are while Dielify runs on them.
 
 Messages, device -> PC:
-  {"type": "hello", "device": "<stable id>", "name": "Pixel 9 Pro", "kind": "phone"|"pc"}
+  {"type": "hello", "device": "<stable id>", "name": "Pixel 9 Pro", "kind": "phone"|"pc"|"tv"}
   {"type": "state", "state": {...}}          see State below; sent on every change
   {"type": "command", "to": "<device>", "command": {...}}
   {"type": "transfer", "from": "<device>", "to": "<device>"}
@@ -323,7 +323,8 @@ async def remote(ws: WebSocket) -> None:
             await ws.close(code=4400, reason="Say hello first")
             return
         name = str(hello.get("name") or "")[:60] or ((platform.node() or "PC") if desktop else "Phone")
-        d = Device(ws, profile, str(hello["device"])[:100], name, "pc" if desktop or hello.get("kind") == "pc" else "phone")
+        kind = "pc" if desktop or hello.get("kind") == "pc" else "tv" if hello.get("kind") == "tv" else "phone"
+        d = Device(ws, profile, str(hello["device"])[:100], name, kind)
         if isinstance(hello.get("state"), dict):
             d.state = clean_state(hello["state"])
         await hub.join(d)

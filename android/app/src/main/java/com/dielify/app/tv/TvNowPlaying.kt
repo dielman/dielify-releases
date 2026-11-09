@@ -72,6 +72,7 @@ fun TvNowPlaying(vm: AppViewModel, nav: TvNav) {
                 Text(p.title, style = MaterialTheme.typography.headlineLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(listOf(p.artist, p.album).filter { it.isNotBlank() }.joinToString(" · "),
                     style = MaterialTheme.typography.titleMedium, color = Color.White.copy(alpha = 0.8f), maxLines = 1)
+                PlayingElsewhere(vm)
                 Spacer(Modifier.height(10.dp))
                 val (ms, total) = pos
                 val frac = if (total > 0) (ms / 1000f / total).coerceIn(0f, 1f) else 0f

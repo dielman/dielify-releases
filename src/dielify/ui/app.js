@@ -1638,7 +1638,7 @@ function paintBar() {
   strip.hidden = !d;
   $("btn-devices").classList.toggle("on", !!d);
   if (d) {
-    strip.textContent = `${d.kind === "pc" ? "💻" : "📱"} Playing on ${d.name}`;
+    strip.textContent = `${d.kind === "pc" ? "💻" : d.kind === "tv" ? "📺" : "📱"} Playing on ${d.name}`;
     const st = d.state || {};
     const s = st.queue && st.index >= 0 ? st.queue[st.index] : null;
     showSong(s && { title: s.title, artist: s.artist, album: s.album,
@@ -1815,7 +1815,7 @@ function renderPicker() {
         closePicker();
         if (!on) remoteSend({ type: "select", device: d.device });
       } },
-      h("span", { class: "picker-icon" }, d.kind === "pc" ? "💻" : "📱"),
+      h("span", { class: "picker-icon" }, d.kind === "pc" ? "💻" : d.kind === "tv" ? "📺" : "📱"),
       h("span", {}, h("div", {}, d.device === remote.you ? `This computer (${d.name})` : d.name),
         h("div", { class: "muted small" }, on ? (st.playing ? "Playing" : "Selected") : s ? `Paused: ${s.title}` : "")),
       on ? h("span", { class: "picker-tick" }, "✓") : null);

@@ -16,6 +16,7 @@ import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.Smartphone
+import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.filled.Speaker
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -100,7 +101,7 @@ fun DevicePicker(vm: AppViewModel) {
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     DeviceRow(
-                        if (d.kind == "pc") Icons.Filled.Computer else Icons.Filled.Smartphone, d.name,
+                        when (d.kind) { "pc" -> Icons.Filled.Computer; "tv" -> Icons.Filled.Tv; else -> Icons.Filled.Smartphone }, d.name,
                         when {
                             on && d.state?.playing == true -> "Playing: ${song?.title ?: ""}"
                             song != null -> "Paused: ${song.title}"

@@ -84,13 +84,17 @@ interface RemotePlayer {
  * Reconnects by itself, finding the PC again if the network changed.
  */
 class RemoteClient(context: Context, private val server: Server) {
+    private val tv = context.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_LEANBACK)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val client = server.http.newBuilder().readTimeout(0, TimeUnit.SECONDS)
         .pingInterval(20, TimeUnit.SECONDS).build()
     val deviceId: String = context.getSharedPreferences("remote", Context.MODE_PRIVATE).let { p ->
-        p.getString("device", null) ?: ("phone-" + UUID.randomUUID()).also { p.edit().putString("device", it).apply() }
+        p.getString("device", null) ?: ((if (isTv) "tv-" else "phone-") + UUID.randomUUID()).also { p.edit().putString("device", it).apply() }
     }
-    private val name = Build.MODEL ?: "Phone"
+    /** A Google TV (0.9.10): it shows in "Play on" lists as a TV, under its own name ("Shed TV"). */
+    private val isTv: Boolean get() = tv
+    private val name: String = if (tv) android.provider.Settings.Global.getString(context.contentResolver,
+        android.provider.Settings.Global.DEVICE_NAME)?.takeIf { it.isNotBlank() } ?: (Build.MODEL ?: "TV") else Build.MODEL ?: "Phone"
 
     private val _devices = MutableStateFlow<List<RemoteDevice>>(emptyList())
     /** The other devices of this profile (not this phone). */
@@ -200,7 +204,7 @@ class RemoteClient(context: Context, private val server: Server) {
     private inner class Listener(private val closed: kotlinx.coroutines.CompletableDeferred<Unit>) : WebSocketListener() {
         override fun onOpen(webSocket: WebSocket, response: Response) {
             webSocket.send(buildJsonObject {
-                put("type", "hello"); put("device", deviceId); put("name", name); put("kind", "phone")
+                put("type", "hello"); put("device", deviceId); put("name", name); put("kind", if (tv) "tv" else "phone")
             }.toString())
             _connected.value = true
             stateChanged()  // the player is read on the main thread

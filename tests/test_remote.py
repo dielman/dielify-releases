@@ -202,3 +202,16 @@ def test_queue_command_keeps_the_current_song():
         {"action": "queue", "queue": [{"video_id": "a", "title": "A"}, {"track_id": 5, "title": "B"}, {"video_id": "c"}], "index": 1}
     assert clean_command({"action": "queue", "queue": songs, "index": 7}) is None   # must point at a song
     assert clean_command({"action": "queue", "queue": [], "index": 0}) is None
+
+
+def test_a_tv_shows_as_a_tv():
+    """0.9.10: the Google TV app says it's a TV, so "Play on" lists show it with a TV icon."""
+    with make_client() as c:
+        h = login(c)
+        tv = connect(c, login(c, device="Shed TV"), "tv-1", "Shed TV", "tv")
+        odd = connect(c, login(c, device="x"), "x1", "Odd", "toaster")
+        listing = devices(odd)
+        kinds = {d["name"]: d["kind"] for d in listing["devices"]}
+        assert kinds == {"Shed TV": "tv", "Odd": "phone"}           # unknown kinds count as phones
+        tv.__exit__(None, None, None)
+        odd.__exit__(None, None, None)

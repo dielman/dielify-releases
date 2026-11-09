@@ -143,3 +143,13 @@ def test_kid_without_jam_permission():
         e = kid(c, {"jam": False})
         c.post("/api/jam", headers=h, json={"device": "PC"})
         assert c.post("/api/jam/join", headers=e).status_code == 403
+
+
+def test_jam_songs_without_a_type_are_songs():
+    """The phone app (0.9.8-0.9.9) left out "type" for Jam songs; the PC refused them (422)."""
+    with make_client() as c:
+        h = login(c)
+        r = c.post("/api/jam", headers=h, json={"device": "Shed TV", "songs": [{"id": "s1", "title": "Song One"}]})
+        assert r.status_code == 200 and [s["item"]["id"] for s in r.json()["songs"]] == ["s1"]
+        r = c.post("/api/jam/songs", headers=h, json={"songs": [{"id": "s2", "title": "Song Two", "artists": ["Band"]}]})
+        assert r.status_code == 200 and [s["item"]["id"] for s in r.json()["songs"]] == ["s1", "s2"]

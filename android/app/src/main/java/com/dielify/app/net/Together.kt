@@ -41,8 +41,9 @@ data class Jam(
 
 /** A song for the Jam (same shape as a download request). */
 @Serializable
+@OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
 data class JamSongIn(
-    val type: String = "song",
+    @kotlinx.serialization.EncodeDefault val type: String = "song",  // the PC needs it (it was left out until 0.9.10)
     val id: String,
     val title: String? = null,
     val artists: List<String> = emptyList(),

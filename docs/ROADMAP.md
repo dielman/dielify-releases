@@ -235,7 +235,8 @@ image was OK'd (Google TV, Android 16, x86_64; installed on E:).
 - **Install**: Developer options + Wireless debugging on the TV, then installed from the PC over
   Wi-Fi (adb). Updates: the same in-app updater as the phone.
 
-Status (10 Nov): steps 1 and 2 built and checked on the emulators (not released).
+Status (10 Nov): steps 1-3 built and checked on the emulators (not released). Also fixed: phone Jam
+songs were refused by the PC since 0.9.8 (missing "type").
 
 Steps: 1 pairing + announcing + PC code entry + phone scanner -> 2 TV app (find PC, sign in, Home /
 Library / Search, playback, Now playing) -> 3 Play on / Jam / idle display -> 4 install on the TV,

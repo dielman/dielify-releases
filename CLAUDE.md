@@ -642,7 +642,20 @@ src/dielify/
     960 x 540 dp** (a 1080p TV at xhdpi). Checked on the Google TV emulator (AVD "Google_TV", made by hand in
     ~/.android/avd; can't hear mDNS behind the emulator's NAT, so it typed 10.0.2.2:4796): sign in -> approve
     -> Home -> Play -> Now playing -> Back -> Library -> album -> Settings -> sign out, all with remote keys.
-    Screenshots in docs/design/tv/. Next: step 3 (Play on / Jam / idle display), then the real TV.
+    Screenshots in docs/design/tv/.
+  - Step 3 built (not released, 186 tests): remote control kind "tv" (remote.py hello; unknown kinds = phone),
+    RemoteClient on a TV (FEATURE_LEANBACK) says kind tv, name = Settings.Global.DEVICE_NAME, id "tv-...";
+    TV icons in the phone's Play on list (Icons.Filled.Tv) and the PC (📺). TV: Jam page (start / join / leave /
+    end, the queue; Jam device name = the TV's name), "Playing on X" + Play here on Now playing, idle cover
+    display after IDLE_S = 90 s without a key while playing (TvActivity.dispatchKeyEvent hook: the waking key does
+    nothing else, media keys still work), screen kept on while playing (view.keepScreenOn). Checked with both
+    emulators at once: phone approved the TV by its link, TV played, phone showed "Playing on <TV>", paused it,
+    listed it with a TV icon; TV Jam took songs added from the PC; idle display came and went.
+  - **Bug found (since 0.9.8, in published phone apps):** the phone's JSON leaves out fields with default values
+    (kotlinx encodeDefaults = false), so Jam songs went without "type" and the PC answered 422: starting a Jam with
+    a song playing and "Add to Jam" from phones failed. Fixed both sides: DownloadRequest.type defaults to "song"
+    (fixes installed phones once the PC updates), JamSongIn.type has @EncodeDefault. Other request bodies checked:
+    their defaults match the PC's. Next: step 4, install on Josh's TV.
 
 ## Backlog (Josh, 8 Nov; after Phase 8 item 6)
 

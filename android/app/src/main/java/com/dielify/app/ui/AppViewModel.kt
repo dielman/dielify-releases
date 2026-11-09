@@ -279,9 +279,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             MediaItems.videoId(m)?.let { v -> com.dielify.app.net.JamSongIn(id = v, title = m.mediaMetadata.title?.toString(),
                 artists = listOfNotNull(m.mediaMetadata.artist?.toString())) }
         }
-        val j = server.startJam(com.dielify.app.net.JamStart(android.os.Build.MODEL, listOfNotNull(keep)))
+        val j = server.startJam(com.dielify.app.net.JamStart(jamDeviceName(), listOfNotNull(keep)))
         getApplication<Application>().dielify.jamHost.begin(j)
         j
+    }
+
+    /** The name others see for the device playing the Jam: a TV's own name ("Shed TV"), else the phone model. */
+    private fun jamDeviceName(): String {
+        val ctx = getApplication<Application>()
+        val tv = ctx.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_LEANBACK)
+        return (if (tv) android.provider.Settings.Global.getString(ctx.contentResolver, android.provider.Settings.Global.DEVICE_NAME) else null)
+            ?.takeIf { it.isNotBlank() } ?: android.os.Build.MODEL
     }
 
     fun joinJam() = jamCall("You're in the Jam") { server.joinJam() }

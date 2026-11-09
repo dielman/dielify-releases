@@ -79,7 +79,9 @@ class Collection(BaseModel):
 
 
 class DownloadRequest(BaseModel):
-    type: Literal["song", "video", "album", "playlist"]
+    # Default "song": the phone app (0.9.8-0.9.9) left "type" out of Jam songs, so every
+    # phone Jam start / add was refused (found 10 Nov 2026, testing the TV).
+    type: Literal["song", "video", "album", "playlist"] = "song"
     id: str
     title: str | None = Field(None, description="Shown in the queue until the download starts")
     artists: list[str] = []

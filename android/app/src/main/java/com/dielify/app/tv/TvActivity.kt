@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.Search
@@ -35,6 +36,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -44,6 +46,8 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalView
+import kotlinx.coroutines.delay
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dielify.app.net.Server
@@ -55,6 +59,12 @@ import com.dielify.app.ui.Accent
 /** The Google TV front door (0.9.10). Same app, same engine as the phone; TV screens. */
 class TvActivity : ComponentActivity() {
     private val vm: AppViewModel by viewModels()
+
+    /** Sees every remote key first (the idle cover display has nothing selectable to receive keys). */
+    var keyHook: ((android.view.KeyEvent) -> Boolean)? = null
+
+    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean =
+        keyHook?.invoke(event) == true || super.dispatchKeyEvent(event)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -69,6 +79,7 @@ sealed interface TvPage {
     data object Search : TvPage
     data object Settings : TvPage
     data object NowPlaying : TvPage
+    data object Jam : TvPage
     data class Album(val id: Long, val name: String) : TvPage
     data class Artist(val id: Long, val name: String) : TvPage
     data class Playlist(val id: Long, val name: String) : TvPage
@@ -99,13 +110,41 @@ fun TvApp(vm: AppViewModel) {
     val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(Unit) { vm.messages.collect { snackbar.showSnackbar(it) } }
 
-    if (nav.top == TvPage.NowPlaying) {
-        TvNowPlaying(vm, nav)
-        return
+    // While music plays the TV stays on (no screensaver over it). After IDLE_S without a key
+    // press the slow cover display takes over; the next key brings the screen back.
+    val view = LocalView.current
+    LaunchedEffect(player.isPlaying) { view.keepScreenOn = player.isPlaying }
+    var lastKey by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    var idle by remember { mutableStateOf(false) }
+    LaunchedEffect(lastKey, player.isPlaying) {
+        idle = false
+        if (player.isPlaying) { delay(IDLE_S * 1000L); idle = true }
+    }
+    val activity = androidx.compose.ui.platform.LocalContext.current as? TvActivity
+    androidx.compose.runtime.DisposableEffect(activity) {
+        activity?.keyHook = { e ->
+            lastKey = System.currentTimeMillis()
+            val media = android.view.KeyEvent.isMediaSessionKey(e.keyCode)
+            // the key that wakes the screen does nothing else (play/pause and skip still work)
+            if (idle && !media) { if (e.action == android.view.KeyEvent.ACTION_UP) idle = false; true } else false
+        }
+        onDispose { activity?.keyHook = null }
     }
     Box(Modifier.fillMaxSize()) {
+        if (idle) { TvIdle(vm); return@Box }
+        if (nav.top == TvPage.NowPlaying) { TvNowPlaying(vm, nav); return@Box }
+        TvShell(vm, nav, player.hasItem, snackbar)
+    }
+}
+
+/** How long without a key press before the cover display, while music plays. */
+const val IDLE_S = 90
+
+@Composable
+private fun TvShell(vm: AppViewModel, nav: TvNav, playing: Boolean, snackbar: SnackbarHostState) {
+    Box(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxSize()) {
-            TvMenu(nav, player.hasItem)
+            TvMenu(nav, playing)
             Box(Modifier.weight(1f).fillMaxHeight()) { TvPageContent(vm, nav) }
         }
         SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(bottom = TvPadV))
@@ -126,6 +165,7 @@ private fun TvMenu(nav: TvNav, playing: Boolean) {
         MenuItem("Home", Icons.Filled.Home, root == TvPage.Home, Modifier.focusRequester(first)) { nav.place(TvPage.Home) }
         MenuItem("Library", Icons.Filled.LibraryMusic, root == TvPage.Library) { nav.place(TvPage.Library) }
         MenuItem("Search", Icons.Filled.Search, root == TvPage.Search) { nav.place(TvPage.Search) }
+        MenuItem("Jam", Icons.Filled.Groups, root == TvPage.Jam) { nav.place(TvPage.Jam) }
         if (playing) MenuItem("Now playing", Icons.Filled.GraphicEq, false) { nav.open(TvPage.NowPlaying) }
         Spacer(Modifier.weight(1f))
         MenuItem("Settings", Icons.Filled.Settings, root == TvPage.Settings) { nav.place(TvPage.Settings) }
@@ -156,6 +196,7 @@ private fun TvPageContent(vm: AppViewModel, nav: TvNav) {
         TvPage.Library -> TvLibrary(vm, nav)
         TvPage.Search -> TvSearch(vm, nav)
         TvPage.Settings -> TvSettings(vm)
+        TvPage.Jam -> TvJam(vm)
         TvPage.NowPlaying -> {}
         is TvPage.Album -> TvAlbum(vm, nav, p)
         is TvPage.Artist -> TvArtist(vm, nav, p)
