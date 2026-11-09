@@ -132,7 +132,7 @@ src/dielify/
 | 6 | Android app | Find, request and listen on the road | **Done** 2026-11-08 — closed by Josh before the car test ("assume it works"); Android Auto untested |
 | 7 | Polish (scope set by Josh 8 Nov) | Backups to E:, signed phone release with in-app updates, download-next, playlists, music-video fix | **Done** 2026-11-08 — 0.6.0 published; phone self-update to be confirmed with the first Phase 8 release (Josh) |
 | 8 | Listening features (Josh, 8 Nov) | 1 instant play + download, 2 play history + stats, 4 two-way playlist sync, 3 Dielify-made genre/vibe playlists, 5 outside discovery, 6 remote control between devices | In progress (branch `phase-8`) |
-| 9 | Road to 1.0 (Josh, 9 Nov) | Releases 0.9.1-0.9.9 in `docs/ROADMAP.md`: household + kids accounts first, then discovery, library, sound, phone, together, hardening | In progress: 0.9.3 published (incl. 0.9.2) |
+| 9 | Road to 1.0 (Josh, 9 Nov) | Releases 0.9.1-0.9.9 in `docs/ROADMAP.md`: household + kids accounts first, then discovery, library, sound, phone, together, hardening | In progress: 0.9.4 published |
 
 ## Current status
 
@@ -454,7 +454,7 @@ src/dielify/
   button hidden when discovery play is off. Not done: remote control parent<->kid,
   approvals on the parent's phone, quiet hours for Subsonic apps.
 
-- 0.9.4 built (Josh: "do some coding" after listing issues; Discovery moved to 0.9.5), 160
+- **Published v0.9.4** (9 Nov; not yet confirmed by Josh; GitHub's direct download link for manifest.json gave 504 right after publishing, the API asset route gave 200 and the apps fall back to it). Josh: "do some coding" after listing issues; Discovery moved to 0.9.5. 160
   tests, phone builds, PC checked in the browser, **not published**. Fixes the six issues in
   docs/ISSUES-0.9.3.md (see there). Also: a download only starts if it's still queued
   (cancel race), `_YouTube.background` (waits for 3 s without people's calls) for the kids
