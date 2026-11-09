@@ -14,7 +14,7 @@ count up the last digit: 0.9.1, 0.9.2 ... then 1.0.0.
 | 0.9.4 | Fixes from Josh's testing | docs/ISSUES-0.9.3.md: kids Discover speed, remove from library, green bar, open on Discover, Back keeps the search, song + artist radio |
 | 0.9.5 | Discovery | new releases from your artists, artist About pages, time-of-day mix, leave out of my taste |
 | 0.9.6 | Library power | smart playlists, search by lyrics, year in review |
-| 0.9.7 | Sound + phone extras | crossfade, equaliser, cast to speakers, home-screen widget |
+| 0.9.7 | Sound + phone extras | equaliser, cast to speakers, home-screen widget (no crossfade: Josh, 9 Nov) |
 | 0.9.8 | Together | shared household playlists, Blend, Jam |
 | 0.9.9 | Beautification | make both apps look good: one design, real artwork everywhere, a proper Now playing |
 | 0.9.10 | 1.0 hardening | clean-PC install, car test, security review, restore drill, help pages |
@@ -152,8 +152,7 @@ Built only from Dielify's own data, filtered by the parent's controls:
 
 ## 0.9.7: Sound + phone extras (0.9.7 and 0.9.8 combined, Josh 9 Nov)
 
-- **Crossfade**: 0–12 s on the PC (two-player setup already exists) and the phone. Never
-  between songs of the same album played in order. Uses the loudness data to blend evenly.
+No crossfade (Josh, 9 Nov: dropped, PC and phone).
 - **Equaliser**: presets plus bass and treble on the phone (Android's equaliser on
   Media3's audio session) and the PC (Web Audio filters). Set per device.
 

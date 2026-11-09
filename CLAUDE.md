@@ -690,8 +690,8 @@ src/dielify/
   data, and the parent sets kids controls (explicit / profanity, approvals, search,
   limits...). Child playlists never sync to YouTube. Files are deleted only when no
   library uses them, never by a child.
-- 2026-11-09 (Josh): roadmap changed: **0.9.7 = Sound + phone extras** (crossfade, equaliser, cast,
-  widget), **0.9.8 = Together** (shared playlists, Blend, Jam), **0.9.9 = Beautification** (making both
+- 2026-11-09 (Josh): roadmap changed: **0.9.7 = Sound + phone extras** (equaliser, cast, widget; crossfade
+  dropped entirely, PC and phone), **0.9.8 = Together** (shared playlists, Blend, Jam), **0.9.9 = Beautification** (making both
   apps pretty; scope drafted in docs/ROADMAP.md, to agree with Josh), 0.9.10 hardening as before.
 - 2026-11-08: **Version numbers** (Josh): we're far from 1.0, so releases now count up the
   last number (0.8.1, 0.8.2, ...) instead of the middle one. 0.9.0 was built but never

@@ -1253,6 +1253,50 @@ function applyVolume() {
   audio.volume = Math.max(0, Math.min(1, player.vol * levelFactor(player.current) * fade));
 }
 const keyOf = (t) => t && (t.id ? `tr-${t.id}` : t.video_id);
+
+// --- equaliser: presets + bass + treble, on this PC only (Web Audio) ---------------------------
+// The audio only goes through Web Audio once the equaliser is used (not Flat), so playback
+// for everyone else is exactly as before. Boosts are matched by turning the whole signal
+// down, so a boosted song can't distort.
+const EQ_BANDS = [60, 230, 910, 3600, 14000];
+const EQ_PRESETS = {
+  flat: ["Flat", [0, 0, 0, 0, 0]], bass: ["Bass boost", [6, 4, 1, 0, 0]], treble: ["Treble boost", [0, 0, 0, 3, 6]],
+  vocal: ["Vocal", [-2, -1, 4, 3, 0]], rock: ["Rock", [4, 2, -2, 2, 4]], pop: ["Pop", [-1, 2, 4, 2, -1]],
+  hiphop: ["Hip-hop", [5, 3, 0, 1, 2]], electronic: ["Electronic", [4, 2, 0, 2, 4]], jazz: ["Jazz", [3, 1, -1, 1, 3]],
+  classical: ["Classical", [3, 2, -1, 2, 3]], acoustic: ["Acoustic", [2, 1, 1, 2, 2]], late: ["Late night (quieter bass)", [-4, -2, 0, 0, -1]],
+};
+const eq = { ctx: null, bands: [], bass: null, treble: null, pre: null };
+function eqSettings() {
+  try { return { preset: "flat", bass: 0, treble: 0, ...JSON.parse(localStorage.getItem("eq") || "{}") }; }
+  catch { return { preset: "flat", bass: 0, treble: 0 }; }
+}
+function saveEq(st) {
+  try { localStorage.setItem("eq", JSON.stringify(st)); } catch { /* private mode: this session only */ }
+  applyEq(st);
+}
+function buildEq() {
+  const ctx = new AudioContext();
+  const node = (type, freq) => { const f = ctx.createBiquadFilter(); f.type = type; f.frequency.value = freq; return f; };
+  eq.bass = node("lowshelf", 120);
+  eq.bands = EQ_BANDS.map((f) => { const b = node("peaking", f); b.Q.value = 1.0; return b; });
+  eq.treble = node("highshelf", 8000);
+  eq.pre = ctx.createGain();
+  const chain = [eq.pre, eq.bass, ...eq.bands, eq.treble];
+  chain.reduce((a, b) => (a.connect(b), b)).connect(ctx.destination);
+  audios.forEach((a) => ctx.createMediaElementSource(a).connect(eq.pre));
+  eq.ctx = ctx;
+}
+function applyEq(st = eqSettings()) {
+  const gains = (EQ_PRESETS[st.preset] || EQ_PRESETS.flat)[1];
+  const flat = gains.every((g) => g === 0) && !st.bass && !st.treble;
+  if (!eq.ctx) { if (flat) return; buildEq(); }
+  gains.forEach((g, i) => { eq.bands[i].gain.value = g; });
+  eq.bass.gain.value = st.bass; eq.treble.gain.value = st.treble;
+  const peak = Math.max(0, ...gains.map((g, i) => g + (i < 2 ? st.bass : 0) + (i > 2 ? st.treble : 0)));
+  eq.pre.gain.value = Math.pow(10, -peak / 20);
+  if (eq.ctx.state === "suspended") eq.ctx.resume().catch(() => {});
+}
+applyEq();
 // Near the end of a song: load the next one in the spare element.
 function preloadNext() {
   if (elsewhere() || !player.current || !audio.duration || audio.duration - audio.currentTime > 25) return;
@@ -1359,7 +1403,7 @@ $("btn-addpl").addEventListener("click", () => {
   if (!t || !t.video_id) return toast(t ? "This song has no YouTube id, so it can't go in a playlist." : "Nothing playing");
   addToPlaylist([{ type: "song", id: t.video_id, title: t.title, artists: t.artist ? [t.artist] : [], album: t.album || null }]);
 });
-onAudio("play", () => { if (!elsewhere()) paintBar(); });
+onAudio("play", () => { if (eq.ctx && eq.ctx.state === "suspended") eq.ctx.resume().catch(() => {}); if (!elsewhere()) paintBar(); });
 onAudio("pause", () => { if (!elsewhere()) paintBar(); });
 onAudio("ended", () => {
   reportPlay();
@@ -1664,10 +1708,29 @@ function playbackPanel() {
     try { localStorage.setItem("level", box.checked ? "on" : "off"); } catch { /* private mode: this session only */ }
     applyVolume();
   });
+  const st = eqSettings();
+  const preset = select(Object.entries(EQ_PRESETS).map(([k, [l]]) => [k, l]), st.preset);
+  const slider = (key) => {
+    const out = h("span", { class: "muted small", style: "width:52px" }, `${st[key] > 0 ? "+" : ""}${st[key]} dB`);
+    const r = h("input", { type: "range", min: "-12", max: "12", step: "1", value: String(st[key]), style: "flex:1" });
+    r.addEventListener("input", () => {
+      const now = { ...eqSettings(), [key]: Number(r.value) };
+      out.textContent = `${now[key] > 0 ? "+" : ""}${now[key]} dB`;
+      saveEq(now);
+    });
+    return [r, out];
+  };
+  preset.addEventListener("change", () => saveEq({ ...eqSettings(), preset: preset.value }));
+  const reset = h("button", { class: "link", onclick: () => { saveEq({ preset: "flat", bass: 0, treble: 0 }); viewSettings(); } }, "Reset");
   return h("div", { class: "panel" }, h("h2", {}, "Playback on this PC"),
     h("label", { class: "row", style: "gap:8px" }, box, "Even out volume"),
     h("p", { class: "muted small" }, "Loud songs are turned down to match the rest, so the volume doesn't jump between songs. "
-      + "Dielify measures each song once in the background (new downloads within a few minutes)."));
+      + "Dielify measures each song once in the background (new downloads within a few minutes)."),
+    h("h3", {}, "Equaliser"),
+    h("div", { class: "row", style: "gap:8px" }, "Sound ", preset, reset),
+    h("div", { class: "row", style: "gap:8px;margin-top:6px" }, h("span", { style: "width:60px" }, "Bass"), ...slider("bass")),
+    h("div", { class: "row", style: "gap:8px" }, h("span", { style: "width:60px" }, "Treble"), ...slider("treble")),
+    h("p", { class: "muted small" }, "On this PC only. Changes are heard straight away."));
 }
 function tastePanel() {
   return h("div", { class: "panel" }, h("h2", {}, "Left out of your taste"),
