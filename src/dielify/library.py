@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 import random
 import sqlite3
+import threading
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -247,6 +248,58 @@ CREATE TABLE IF NOT EXISTS yt_flags (
     checked_at REAL NOT NULL
 );
 
+-- 0.9.5 Discovery. taste_out: songs / playlists a person left out of their taste (taste.py).
+-- follows: artists a person follows for new releases. yt_artists: an artist name's YouTube
+-- channel (shared; channel_id NULL = looked, none found). artist_releases: albums/singles
+-- seen on artists' YouTube pages (first_seen 0 = there on the first look). artist_about: bio
+-- + links (JSON). prefs: small per-person settings (key -> JSON value).
+CREATE TABLE IF NOT EXISTS taste_out (
+    profile  TEXT NOT NULL,
+    kind     TEXT NOT NULL,          -- song | playlist
+    key      TEXT NOT NULL,          -- video id (or tr-<id>) | playlist id
+    name     TEXT NOT NULL,
+    added_at REAL NOT NULL,
+    PRIMARY KEY (profile, kind, key)
+);
+CREATE TABLE IF NOT EXISTS follows (
+    profile    TEXT NOT NULL,
+    key        TEXT NOT NULL,        -- ratings.artist_key(name)
+    name       TEXT NOT NULL,
+    channel_id TEXT,
+    added_at   REAL NOT NULL,
+    PRIMARY KEY (profile, key)
+);
+CREATE TABLE IF NOT EXISTS yt_artists (
+    key        TEXT PRIMARY KEY,
+    name       TEXT NOT NULL,
+    channel_id TEXT,
+    checked_at REAL NOT NULL,        -- when the name was looked up
+    page_at    REAL                  -- when its releases were last read
+);
+CREATE TABLE IF NOT EXISTS artist_releases (
+    channel_id TEXT NOT NULL,
+    browse_id  TEXT NOT NULL,
+    title      TEXT NOT NULL,
+    artist     TEXT NOT NULL,
+    kind       TEXT NOT NULL,        -- Album | Single | EP ...
+    year       TEXT,
+    thumbnail  TEXT,
+    explicit   INTEGER,
+    first_seen REAL NOT NULL,
+    PRIMARY KEY (channel_id, browse_id)
+);
+CREATE TABLE IF NOT EXISTS artist_about (
+    key        TEXT PRIMARY KEY,
+    body       TEXT NOT NULL,
+    fetched_at REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS prefs (
+    profile TEXT NOT NULL,
+    key     TEXT NOT NULL,
+    value   TEXT NOT NULL,
+    PRIMARY KEY (profile, key)
+);
+
 -- Logins for our own API (auth.py): only a hash of each token is kept.
 CREATE TABLE IF NOT EXISTS device_tokens (
     id           INTEGER PRIMARY KEY,
@@ -320,15 +373,24 @@ def _to_households(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+_ready_lock = threading.Lock()
+
+
 @contextmanager
 def connect():
-    conn = sqlite3.connect(db_path(), timeout=10)
+    path = db_path()
+    conn = sqlite3.connect(path, timeout=10)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
-    conn.execute("PRAGMA journal_mode = WAL")
     conn.create_function("fold", 1, _fold, deterministic=True)  # Unicode-aware lower()
-    conn.executescript(SCHEMA)
-    _migrate(conn)
+    conn.execute("PRAGMA journal_mode = WAL")
+    # Tables and migrations, one thread at a time: two threads adding the same column to a
+    # new database at once failed with "duplicate column name". (Run on every connection,
+    # so a database restored from a backup is brought up to date too.)
+    with _ready_lock:
+        conn.executescript(SCHEMA)
+        _migrate(conn)
+        conn.commit()
     try:
         yield conn
         conn.commit()
@@ -392,7 +454,7 @@ def signin_of(profile: str) -> str:
 
 # Tables with one row set per person (removing a person clears these; files stay).
 _PERSON_TABLES = ("library_items", "stars", "plays", "playlists", "ratings", "explore_songs",
-                  "discovery_lists")
+                  "discovery_lists", "taste_out", "follows", "prefs")
 
 
 def forget_person(profile: str) -> None:

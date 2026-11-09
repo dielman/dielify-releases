@@ -58,10 +58,14 @@ def _tracks(profile: str) -> list[dict]:
             "JOIN albums al ON al.id = t.album_id "
             "JOIN artists ar ON ar.id = t.artist_id WHERE li.profile = ? AND t.video_id IS NOT NULL", (profile,)).fetchall()
     from .ratings import Ratings
+    from .taste import Taste
     r = Ratings(profile)
+    taste = Taste(profile)
     out = []
     for row in rows:
         t = dict(row)
+        if taste.out(t["video_id"], t["id"]):
+            t["play_count"] = 0  # left out of your taste: picked as if never played
         t["factor"] = r.factor(t["video_id"], t["artist"], t["id"])
         if t["factor"] > 0:  # banned songs/artists never go in a mix
             out.append(t)

@@ -207,8 +207,6 @@ def _empty(name: str, payload: dict):
 for _name, _payload in {
     "getGenres": {"genres": {"genre": []}},
     "getNowPlaying": {"nowPlaying": {"entry": []}},
-    "getArtistInfo": {"artistInfo": {}},
-    "getArtistInfo2": {"artistInfo2": {}},
     "getAlbumInfo": {"albumInfo": {}},
     "getAlbumInfo2": {"albumInfo": {}},
     "getSimilarSongs": {"similarSongs": {"song": []}},
@@ -276,6 +274,48 @@ def get_artist(ctx: Ctx) -> dict:
     if r is None:
         raise ApiError(NOT_FOUND, "Artist not found")
     return {"artist": {**artist(r), "album": [album(a) for a in ctx.lib.albums_by_artist(aid)]}}
+
+
+def _artist_info(ctx: Ctx) -> dict:
+    """The artist's bio + links, if Dielify already knows them (the apps' About, or the new
+    releases check). Otherwise they're looked up in the background for next time."""
+    try:
+        _, aid = parse_id(ctx.p.need("id"), "ar")
+    except ApiError:
+        return {}
+    r = ctx.lib.artist(aid)
+    if r is None:
+        return {}
+    from . import artists
+    about = artists.cached_about(r["name"])
+    if not about or "links" not in about:
+        import threading
+
+        from . import settings as settings_mod
+        from .custom_api import youtube
+        if not settings_mod.load().offline:
+            profile = ctx.user.profile
+            threading.Thread(target=lambda: artists.about(lambda fn, *a: youtube.background(profile, fn, *a), r["name"]),
+                             daemon=True, name="dielify-about").start()
+    out = {}
+    if about and about.get("description"):
+        out["biography"] = about["description"]
+    for link in (about or {}).get("links") or []:
+        if link["label"] == "Last.fm":
+            out["lastFmUrl"] = link["url"]
+    if about and about.get("thumbnail"):
+        out["largeImageUrl"] = about["thumbnail"]
+    return out
+
+
+@api("getArtistInfo")
+def get_artist_info(ctx: Ctx) -> dict:
+    return {"artistInfo": _artist_info(ctx)}
+
+
+@api("getArtistInfo2")
+def get_artist_info2(ctx: Ctx) -> dict:
+    return {"artistInfo2": _artist_info(ctx)}
 
 
 @api("getAlbum")

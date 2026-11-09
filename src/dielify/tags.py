@@ -67,20 +67,31 @@ class MusicBrainz:
         self.http = session or retrying_session()
         self.http.headers["User-Agent"] = USER_AGENT
         self._last = 0.0
+        self._lock = threading.Lock()
 
-    def _get(self, params: dict) -> dict | None:
+    def _get(self, params: dict, path: str = "") -> dict | None:
         for attempt in range(5):
-            wait = self._last + MIN_GAP_S - time.time()
-            if wait > 0:
-                time.sleep(wait)
-            self._last = time.time()
-            r = self.http.get(API, params={**params, "fmt": "json"}, timeout=20)
+            with self._lock:  # one request a second, also when several threads share this client
+                wait = self._last + MIN_GAP_S - time.time()
+                if wait > 0:
+                    time.sleep(wait)
+                self._last = time.time()
+            r = self.http.get(API + path, params={**params, "fmt": "json"}, timeout=20)
             if r.status_code == 503:  # busy: back off
                 time.sleep(2 * (attempt + 1))
                 continue
             r.raise_for_status()
             return r.json()
         return None
+
+    def links(self, mbid: str) -> list[dict] | None:
+        """An artist's links on MusicBrainz: [{"type": "wikipedia", "url": ...}, ...]."""
+        data = self._get({"inc": "url-rels"}, mbid)
+        if data is None:
+            return None
+        return [{"type": r.get("type") or "", "url": (r.get("url") or {}).get("resource") or ""}
+                for r in data.get("relations") or [] if (r.get("url") or {}).get("resource")
+                and not r.get("ended")]
 
     def artist(self, name: str) -> tuple[str | None, list[tuple[str, int]]] | None:
         """(MusicBrainz id, tags) for an exact name/alias match; (None, []) if there's no

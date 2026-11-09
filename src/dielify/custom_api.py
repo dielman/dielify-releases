@@ -1115,10 +1115,19 @@ def refresh_outside(request: Request, s: Session = Depends(session)) -> Response
     return Response(status_code=202)
 
 
+class NowMixOut(BaseModel):
+    title: str = Field(description='e.g. "Your Tuesday evening"')
+    description: str
+    tracks: list[Track]
+
+
 class ForYou(BaseModel):
     on_repeat: list[Track] = Field(description="Your songs you've played most in the last 2 weeks")
     forgotten: list[Track] = Field(description="Songs you played a lot, but not for 2 months")
     more_like: list[Item] = Field(description="New to you: like your most-played songs (from YouTube Music)")
+    now_mix: NowMixOut | None = Field(None, description="Time-of-day mix: what you usually play now (None: "
+                                                     "not enough history at this time of day yet)")
+
 
 
 @router.get("/discover/for-you", response_model=ForYou, tags=["discover"])
@@ -1138,7 +1147,147 @@ def discover_for_you(s: Session = Depends(session)) -> ForYou:
             if it.id not in have and it.id not in seen:
                 seen.add(it.id)
                 more.append(it)
-    return ForYou(on_repeat=on_repeat, forgotten=forgotten, more_like=_items(r.arrange(more)[:40], s.lib))
+    from . import nowmix
+    m = nowmix.build(s.lib)
+    now = NowMixOut(title=m.title, description=m.description,
+                    tracks=[_track_out(t) for t in map(s.lib.track, m.track_ids) if t is not None]) if m else None
+    return ForYou(on_repeat=on_repeat, forgotten=forgotten, more_like=_items(r.arrange(more)[:40], s.lib),
+                  now_mix=now)
+
+
+# --- 0.9.5 Discovery: new releases, artist About, follows, leave out of my taste ----------
+
+class NewReleases(BaseModel):
+    items: list[Item] = Field(description="Albums and singles from your artists that turned up lately, newest first")
+    watching: int = Field(description="How many artists are watched (followed + your most-played)")
+    auto_download: bool = Field(description="New albums download by themselves (never for a kids account)")
+
+
+class NewReleaseSettings(BaseModel):
+    auto_download: bool
+
+
+@router.get("/discover/new", response_model=NewReleases, tags=["discover"])
+def discover_new(s: Session = Depends(session)) -> NewReleases:
+    """New for you: releases from the artists you follow and your 20 most-played. The PC
+    reads their YouTube pages once a day in the background; this never waits on YouTube."""
+    from . import releases
+    items = _items(releases.new_for_you(s.lib.profile), s.lib)
+    if s.kid:  # albums without an explicit mark (singles) aren't checked: leave them out
+        c = _kid_controls(s)
+        if c and c.explicit == "block":
+            items = [i for i in items if i.explicit is False]
+    return NewReleases(items=items, watching=len(releases.watched(s.lib.profile)),
+                       auto_download=releases.auto_download(s.lib.profile) and not s.kid)
+
+
+@router.put("/discover/new/settings", response_model=NewReleases, tags=["discover"])
+def discover_new_settings(body: NewReleaseSettings, s: Session = Depends(session)) -> NewReleases:
+    from . import releases
+    if s.kid:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "A parent decides what downloads in a kids account")
+    releases.set_pref(s.lib.profile, "new_releases_auto", body.auto_download)
+    return discover_new(s)
+
+
+@router.post("/discover/new/refresh", status_code=202, tags=["discover"])
+def discover_new_refresh(request: Request, s: Session = Depends(session)) -> Response:
+    """Read your artists' pages now (in the background; reload /discover/new after a minute)."""
+    request.app.state.releases.refresh_soon(s.lib.profile)
+    return Response(status_code=202)
+
+
+class Link(BaseModel):
+    label: str
+    url: str
+
+
+class ArtistAbout(BaseModel):
+    name: str
+    description: str | None = Field(None, description="Bio from the artist's YouTube Music page")
+    thumbnail: str | None = None
+    channel_id: str | None = Field(None, description="YouTube Music channel (for artist radio)")
+    links: list[Link] = Field([], description="Website, Wikipedia, socials... (from MusicBrainz)")
+    followed: bool = Field(description="You follow this artist (their new releases show in New for you)")
+
+
+@router.get("/artists/about", response_model=ArtistAbout, tags=["library"])
+def artist_about(name: str = Query(min_length=1, max_length=300), refresh: bool = False,
+                 s: Session = Depends(session)) -> ArtistAbout:
+    """An artist's About: bio and links. Kept on the PC for 30 days (the first look can take
+    a few seconds: YouTube, then MusicBrainz)."""
+    from . import artists, releases
+    offline = settings_mod.load().offline
+    call = None if offline else (lambda fn, *a: youtube.call(s.user.profile, fn, *a))
+    a = artists.cached_about(name) if offline else artists.about(call, name, refresh)
+    a = a or {}
+    return ArtistAbout(name=name, description=a.get("description"), thumbnail=a.get("thumbnail"),
+                       channel_id=a.get("channel_id"), links=[Link(**l) for l in a.get("links") or []],
+                       followed=releases.is_followed(s.lib.profile, name))
+
+
+class FollowIn(BaseModel):
+    name: str = Field(min_length=1, max_length=300)
+    channel_id: str | None = Field(None, description="YouTube Music channel, when following from YouTube")
+    follow: bool = True
+
+
+class Follow(BaseModel):
+    name: str
+    channel_id: str | None = None
+
+
+class FollowList(BaseModel):
+    follows: list[Follow]
+
+
+@router.get("/follows", response_model=FollowList, tags=["discover"])
+def list_follows(s: Session = Depends(session)) -> FollowList:
+    from . import releases
+    return FollowList(follows=[Follow(name=f["name"], channel_id=f["channel_id"]) for f in releases.follows(s.lib.profile)])
+
+
+@router.put("/follows", response_model=FollowList, tags=["discover"])
+def set_follow(body: FollowIn, request: Request, s: Session = Depends(session)) -> FollowList:
+    """Follow an artist (or stop). Following reads their page soon, so New for you fills in."""
+    from . import releases
+    releases.set_follow(s.lib.profile, body.name, body.follow, body.channel_id)
+    if body.follow:
+        request.app.state.releases.refresh_soon(s.lib.profile)
+    return list_follows(s)
+
+
+class TasteOut(BaseModel):
+    kind: Literal["song", "playlist"]
+    key: str = Field(description="song: video id (or tr-<track id>); playlist: Dielify playlist id")
+    name: str
+    added_at: float | None = None
+
+
+class TasteIn(BaseModel):
+    kind: Literal["song", "playlist"]
+    key: str = Field(min_length=1, max_length=64)
+    name: str = Field(max_length=300)
+    out: bool = Field(True, description="true: leave it out of your taste; false: count it again")
+
+
+class TasteList(BaseModel):
+    items: list[TasteOut] = Field(description="Songs and playlists that don't shape your recommendations")
+
+
+@router.get("/taste", response_model=TasteList, tags=["discover"])
+def list_taste(s: Session = Depends(session)) -> TasteList:
+    from . import taste
+    return TasteList(items=[TasteOut(**t) for t in taste.listing(s.lib.profile)])
+
+
+@router.put("/taste", response_model=TasteList, tags=["discover"])
+def set_taste(body: TasteIn, s: Session = Depends(session)) -> TasteList:
+    """Leave a song or playlist out of your taste: it still plays, but For you, mixes, the
+    time-of-day mix and new releases ignore it."""
+    from . import taste
+    taste.set_out(s.lib.profile, body.kind, body.key, body.name, body.out)
+    return list_taste(s)
 
 
 @router.get("/me", response_model=Me, tags=["auth"])

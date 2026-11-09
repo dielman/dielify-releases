@@ -13,6 +13,7 @@ import time
 from dataclasses import dataclass
 
 from .library import Library, connect
+from .taste import Taste
 
 
 PERIODS = {"week": 7, "month": 30, "year": 365, "all": None}
@@ -113,40 +114,68 @@ def stats(lib: Library, period: str = "month", limit: int = 10) -> dict:
 
 
 def on_repeat(lib: Library, days: int = 14, limit: int = 25) -> list[int]:
-    """Library tracks you've played most lately."""
+    """Library tracks you've played most lately (not ones left out of your taste)."""
+    out, args = Taste(lib.profile).sql()
     with connect() as conn:
         rows = conn.execute(
             "SELECT p.track_id, COUNT(*) n FROM plays p JOIN library_items li ON li.track_id = p.track_id "
             "AND li.profile = p.profile "
-            "WHERE p.profile = ? AND p.started_at >= ? AND p.counted = 1 "
-            "GROUP BY p.track_id HAVING n >= 2 ORDER BY n DESC LIMIT ?",
-            (lib.profile, time.time() - days * 86400, limit)).fetchall()
+            "WHERE p.profile = ? AND p.started_at >= ? AND p.counted = 1" + out +
+            " GROUP BY p.track_id HAVING n >= 2 ORDER BY n DESC LIMIT ?",
+            (lib.profile, time.time() - days * 86400, *args, limit)).fetchall()
     return [r["track_id"] for r in rows]
 
 
 def forgotten(lib: Library, days: int = 60, limit: int = 25) -> list[int]:
     """Songs you played a lot, but not for a while (uses the play counts from before
     this history existed too)."""
+    taste = Taste(lib.profile)
     with connect() as conn:
         rows = conn.execute(
-            "SELECT track_id AS id FROM library_items WHERE profile = ? AND play_count >= 3 AND last_played IS NOT NULL "
-            "AND last_played < ? ORDER BY play_count DESC, last_played LIMIT ?",
-            (lib.profile, time.time() - days * 86400, limit)).fetchall()
-    return [r["id"] for r in rows]
+            "SELECT li.track_id AS id, t.video_id FROM library_items li JOIN tracks t ON t.id = li.track_id "
+            "WHERE li.profile = ? AND li.play_count >= 3 AND li.last_played IS NOT NULL "
+            "AND li.last_played < ? ORDER BY li.play_count DESC, li.last_played LIMIT ?",
+            (lib.profile, time.time() - days * 86400, limit + len(taste.tracks))).fetchall()
+    return [r["id"] for r in rows if not taste.out(r["video_id"], r["id"])][:limit]
 
 
 def seeds(lib: Library, days: int = 30, limit: int = 4) -> list[str]:
-    """Video ids of your most-played songs lately (to find more like them)."""
+    """Video ids of your most-played songs lately (to find more like them), leaving out
+    songs left out of your taste."""
+    taste = Taste(lib.profile)
+    out, args = taste.sql()
     with connect() as conn:
         rows = conn.execute(
             "SELECT p.video_id, COUNT(*) n FROM plays p WHERE p.profile = ? AND p.started_at >= ? "
-            "AND p.counted = 1 AND p.video_id IS NOT NULL GROUP BY p.video_id ORDER BY n DESC LIMIT ?",
-            (lib.profile, time.time() - days * 86400, limit)).fetchall()
+            "AND p.counted = 1 AND p.video_id IS NOT NULL" + out + " GROUP BY p.video_id ORDER BY n DESC LIMIT ?",
+            (lib.profile, time.time() - days * 86400, *args, limit)).fetchall()
         ids = [r["video_id"] for r in rows]
         if len(ids) < limit:  # not much history yet: fall back to all-time play counts
             more = conn.execute(
-                "SELECT t.video_id FROM library_items li JOIN tracks t ON t.id = li.track_id WHERE li.profile = ? "
+                "SELECT t.id, t.video_id FROM library_items li JOIN tracks t ON t.id = li.track_id WHERE li.profile = ? "
                 "AND t.video_id IS NOT NULL AND li.play_count > 0 "
-                "ORDER BY li.play_count DESC, li.last_played DESC LIMIT ?", (lib.profile, limit * 2)).fetchall()
-            ids += [r["video_id"] for r in more if r["video_id"] not in ids]
+                "ORDER BY li.play_count DESC, li.last_played DESC LIMIT ?",
+                (lib.profile, limit * 2 + len(taste.tracks))).fetchall()
+            ids += [r["video_id"] for r in more if r["video_id"] not in ids and not taste.out(r["video_id"], r["id"])]
     return ids[:limit]
+
+
+def top_artists(lib: Library, days: int = 90, limit: int = 20) -> list[str]:
+    """The artists you play most (album artist names as tagged), for new releases. Plays of
+    songs left out of your taste don't count. Little history: all-time play counts."""
+    out, args = Taste(lib.profile).sql()
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT ar.name, COUNT(*) n FROM plays p JOIN tracks t ON t.id = p.track_id "
+            "JOIN artists ar ON ar.id = t.artist_id WHERE p.profile = ? AND p.started_at >= ? AND p.counted = 1"
+            + out + " GROUP BY ar.id ORDER BY n DESC LIMIT ?",
+            (lib.profile, time.time() - days * 86400, *args, limit)).fetchall()
+        names = [r["name"] for r in rows]
+        if len(names) < limit:
+            out2, args2 = Taste(lib.profile).sql("t.video_id", "t.id")
+            more = conn.execute(
+                "SELECT ar.name, SUM(li.play_count) n FROM library_items li JOIN tracks t ON t.id = li.track_id "
+                "JOIN artists ar ON ar.id = t.artist_id WHERE li.profile = ? AND li.play_count > 0" + out2 +
+                " GROUP BY ar.id ORDER BY n DESC LIMIT ?", (lib.profile, *args2, limit * 2)).fetchall()
+            names += [r["name"] for r in more if r["name"] not in names]
+    return [n for n in names if n and n.casefold() not in ("various artists", "unknown artist")][:limit]

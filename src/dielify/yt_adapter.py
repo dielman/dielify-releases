@@ -505,6 +505,24 @@ class YTMusicAdapter:
         wp = self._call("Loading the artist radio", self._yt.get_watch_playlist, playlistId=radio, limit=limit)
         return _items(wp.get("tracks"))[:limit]
 
+    def artist_page(self, channel_id: str) -> dict:
+        """An artist's YouTube Music page: name, description, picture and their latest
+        albums and singles (newest first, as YouTube shows them; about 10 of each)."""
+        raw = self._call("Loading the artist", self._yt.get_artist, channel_id)
+
+        def releases(key: str, kind: str) -> list[YTItem]:
+            out = []
+            for r in (raw.get(key) or {}).get("results") or []:
+                it = to_item(r)
+                if it is not None and it.type == "album":
+                    it.artists = it.artists or [raw.get("name") or ""]
+                    it.subtitle = r.get("type") or kind
+                    out.append(it)
+            return out
+        return {"name": raw.get("name") or "", "description": raw.get("description") or None,
+                "thumbnail": _best_thumb(raw.get("thumbnails")),
+                "albums": releases("albums", "Album"), "singles": releases("singles", "Single")}
+
     def lyrics(self, video_id: str, lyrics_id: str | None = None) -> dict | None:
         """The song's lyrics: {"lines": [(start_ms, text), ...] or None, "text": str, "source"}.
         Synced (timed) when YouTube Music has them. None: no lyrics. lyrics_id saves a lookup."""
