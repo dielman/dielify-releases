@@ -460,6 +460,12 @@ src/dielify/
   (cancel race), `_YouTube.background` (waits for 3 s without people's calls) for the kids
   Checker; kids.check_soon queues songs a child met for checking first.
 
+- After 0.9.4 (9 Nov, committed, not released): phone Settings scrolls (since 0.9.0 the Keep-on-phone
+  playlist list pushed Update off-screen, so the phone can't self-update until this ships); YouTube
+  empty answers (JSONDecodeError on the home feed, seen 17:43 in Josh's log) retried once, and
+  Discover falls back to the last home feed that loaded. Josh: ship these with 0.9.5 Discovery
+  (not a separate fix release). Meanwhile the phone installs 0.9.4 from the release page.
+
 ## Backlog (Josh, 8 Nov; after Phase 8 item 6)
 
 - **Published v0.8.11 (9 Nov; not yet confirmed by Josh on device): ratings + ban.** `ratings.py` (table
