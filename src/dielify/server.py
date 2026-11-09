@@ -40,6 +40,7 @@ def create_app(queue: DownloadQueue | None = None) -> FastAPI:
     from .custom_api import router as custom_router
     from .custom_api import youtube
     from .desktop_api import router as desktop_router
+    from .pair_api import router as pair_router
     from .playlist_api import router as playlist_router
     from .remote import router as remote_router
     from .discovery import Discovery
@@ -101,6 +102,7 @@ def create_app(queue: DownloadQueue | None = None) -> FastAPI:
     app.include_router(playlist_router)
     app.include_router(remote_router)
     app.include_router(desktop_router)
+    app.include_router(pair_router)
     # The desktop app's screens. They hold no data; everything comes from /api with a key.
     app.mount("/ui", StaticFiles(directory=UI_DIR, html=True), name="ui")
 
@@ -232,8 +234,12 @@ class AddressWatcher:
         self.s, self.app, self.bound = s, app, set(bound)
         self.extra: list[uvicorn.Server] = []
         self._stop = threading.Event()
+        from .announce import Announcer
+        self.announcer = Announcer(s.server_port)  # so the TV app finds this PC (0.9.10)
 
     def start(self) -> None:
+        threading.Thread(target=self.announcer.update, args=(sorted(self.bound),), daemon=True,
+                         name="dielify-announce").start()
         if self.s.server_bind == "auto":
             threading.Thread(target=self._loop, name="dielify-addresses", daemon=True).start()
 
@@ -263,12 +269,14 @@ class AddressWatcher:
     def _loop(self) -> None:
         while not self._stop.wait(ADDRESS_CHECK_S):
             try:
-                self.check()
+                if self.check():
+                    self.announcer.update(sorted(self.bound))
             except Exception:
                 log.exception("Address check failed")
 
     def stop(self) -> None:
         self._stop.set()
+        self.announcer.close()
         for srv in self.extra:
             srv.should_exit = True
 

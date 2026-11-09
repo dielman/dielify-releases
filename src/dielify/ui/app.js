@@ -65,6 +65,7 @@ const ICONS = {
   personAdd: "M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z",
   play: "M8 5v14l11-7z",
   add: "M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z",
+  tv: "M21 3H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h5v2h8v-2h5c1.1 0 1.99-.9 1.99-2L23 5c0-1.1-.9-2-2-2zm0 14H3V5h18v12z",
   radio: "M3.24 6.15C2.51 6.43 2 7.17 2 8v12c0 1.1.89 2 2 2h16c1.11 0 2-.9 2-2V8c0-1.11-.89-2-2-2H8.3l8.26-3.34L15.88 1 3.24 6.15zM7 20c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm13-8h-2v-2h-2v2H4V8h16v4z",
   person: "M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z",
   pause: "M6 19h4V5H6v14zm8-14v14h4V5h-4z",
@@ -1145,7 +1146,8 @@ async function viewSettings() {
           if (!confirm(`Remove the phone login ${u.name}? Its phones are signed out.`)) return;
           await api(`/api/desktop/phone-users/${encodeURIComponent(u.name)}`, { method: "DELETE" }); viewSettings();
         } }, "Remove"))),
-      h("div", { class: "row", style: "margin-top:10px" }, h("button", { onclick: addPhoneUser }, "Add phone login")));
+      h("div", { class: "row", style: "margin-top:10px" }, h("button", { onclick: addPhoneUser }, "Add phone login"),
+        h("button", { onclick: () => addTv() }, icon("tv", "ico lead"), "Add a TV")));
 
     const when = (t) => new Date(t * 1000).toLocaleString();
     const backups = h("div", { class: "panel" }, h("h2", {}, "Backups"),
@@ -1370,6 +1372,33 @@ async function addPhoneUser() {
   if (!name) return;
   try { showPassword(await api("/api/desktop/phone-users", { method: "POST", body: { name: name.trim() } })); }
   catch (e) { toast(e.message, 6000); }
+}
+// A TV shows a code (and a QR code for phones): type it here to sign the TV in (pair_api.py).
+async function addTv(code) {
+  code = code || prompt("The code on the TV (e.g. KDW7-RT3P):");
+  if (!code) return;
+  let info;
+  try { info = await api(`/api/pair/${encodeURIComponent(code.trim())}`); } catch (e) { return toast(e.message, 6000); }
+  const pick = h("select", {}, info.people.map((p) => h("option", { value: p.name, disabled: !p.can_sign_in,
+    selected: p.name === info.suggested }, `${p.name}${p.role === "child" ? " (kids account)" : ""}${p.can_sign_in ? "" : " (no phone login yet)"}`)));
+  show(h("h1", {}, "Sign in a TV"), h("div", { class: "panel" },
+    h("p", {}, "Only allow a TV you can see showing this code."),
+    h("div", { class: "setting" }, h("div", { class: "label" }, "TV"), h("div", { class: "value" }, info.device_name)),
+    h("div", { class: "setting" }, h("div", { class: "label" }, "Its address"), h("div", { class: "value" }, info.address)),
+    h("div", { class: "setting" }, h("div", { class: "label" }, "Code"), h("div", { class: "value" }, info.code)),
+    h("div", { class: "setting" }, h("div", { class: "label" }, "Whose music it plays"), h("div", { class: "value" }, pick)),
+    h("div", { class: "row", style: "margin-top:12px" },
+      h("button", { class: "primary", onclick: async () => {
+        try {
+          const r = await api(`/api/pair/${encodeURIComponent(info.code)}/approve`, { method: "POST", body: { person: pick.value } });
+          toast(`${r.device_name} is signed in for ${r.person}`);
+          viewSettings();
+        } catch (e) { toast(e.message, 6000); }
+      } }, "Allow"),
+      h("button", { onclick: async () => {
+        await api(`/api/pair/${encodeURIComponent(info.code)}/refuse`, { method: "POST" }).catch(() => {});
+        viewSettings();
+      } }, "Don't allow"))));
 }
 function showPassword(login) {
   show(h("h1", {}, "Phone login"), h("div", { class: "panel" },

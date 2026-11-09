@@ -46,6 +46,7 @@ sealed interface Screen {
     data object StatsPage : Screen
     data class PlaylistPage(val id: Long, val name: String) : Screen
     data object JamPage : Screen
+    data class PairTv(val code: String? = null) : Screen  // sign a TV in (0.9.10)
 }
 
 data class PlayerUi(

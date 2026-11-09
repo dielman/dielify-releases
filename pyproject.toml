@@ -22,6 +22,7 @@ dependencies = [
     "pywebview>=6.2,<7",   # desktop window (Windows' built-in WebView2)
     "pystray>=0.19,<1",    # tray icon
     "pycryptodomex>=3.20,<4",  # Ed25519 check of signed updates (also used by yt-dlp)
+    "zeroconf>=0.150,<1",      # announces the PC on the home network so the TV app finds it
 ]
 
 [project.optional-dependencies]

@@ -194,7 +194,7 @@ class Server(private val context: Context, private val accounts: AccountStore) {
             .build()
     }
 
-    /** Sign in with the phone login made in Dielify on the PC (Settings > Phone logins). */
+    /** Sign in with the phone login made in Dielify on the PC (Settings > People & phones). */
     suspend fun signIn(addresses: List<String>, username: String, password: String): Account {
         val target = pick(addresses)
         val body = json.encodeToString(LoginRequest.serializer(),
@@ -349,6 +349,12 @@ class Server(private val context: Context, private val accounts: AccountStore) {
     suspend fun endJam() { send("DELETE", "api/jam") }
     suspend fun setTaste(body: TasteIn): List<TasteItem> = json.decodeFromString(TasteList.serializer(),
         send("PUT", "api/taste", json.encodeToString(TasteIn.serializer(), body))).items
+    // --- 0.9.10: signing a TV in (pair_api.py) ---
+    suspend fun pairInfo(code: String): PairInfo = get("api/pair/" + java.net.URLEncoder.encode(code, "UTF-8"))
+    suspend fun pairApprove(code: String, person: String): PairApproved = json.decodeFromString(PairApproved.serializer(),
+        send("POST", "api/pair/" + java.net.URLEncoder.encode(code, "UTF-8") + "/approve",
+            json.encodeToString(PairApproveIn.serializer(), PairApproveIn(person))))
+    suspend fun pairRefuse(code: String) { send("POST", "api/pair/" + java.net.URLEncoder.encode(code, "UTF-8") + "/refuse") }
     /** Songs to keep on the phone automatically (Settings). */
     suspend fun keepList(liked: Boolean, top: Int, playlists: Set<Long>): List<Track> =
         get<TrackList>("api/keep?liked=$liked&top=$top&playlists=" + playlists.joinToString(",")).tracks

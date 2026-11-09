@@ -210,7 +210,7 @@ def session(request: Request,
     if found is None:
         if creds:
             lockout.failed(client)
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Sign in first (POST /api/auth/login)",
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Sign in first",
                             headers={"WWW-Authenticate": "Bearer"})
     return Session(*found)
 

@@ -36,7 +36,16 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- A TV's sign-in QR code, scanned with the phone's camera app (0.9.10) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="dielify" android:host="pair" />
+            </intent-filter>
         </activity>
+        <!-- Google's code scanner (for TV codes): fetched with the app, so the first scan is quick -->
+        <meta-data android:name="com.google.mlkit.vision.DEPENDENCIES" android:value="barcode_ui" />
 
         <service
             android:name=".playback.PlaybackService"

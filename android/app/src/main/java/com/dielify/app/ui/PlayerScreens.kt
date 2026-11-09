@@ -309,6 +309,7 @@ fun SettingsScreen(vm: AppViewModel) {
                     Link.Unknown -> "Not yet"
                 })
                 Setting("PC addresses", a.addresses.joinToString("\n"))
+                OutlinedButton(onClick = { vm.open(Screen.PairTv()) }) { Text("Sign in a TV") }
             }
             SettingsSection("About") {
                 Setting("App version", BuildConfig.VERSION_NAME)

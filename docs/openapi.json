@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Dielify",
-    "version": "0.9.8"
+    "version": "0.9.9"
   },
   "paths": {
     "/api/auth/login": {
@@ -4555,6 +4555,236 @@
         ]
       }
     },
+    "/api/pair/start": {
+      "post": {
+        "tags": [
+          "pairing"
+        ],
+        "summary": "Pair Start",
+        "description": "The TV asks to be paired (no sign-in needed). Show `link` as a QR code and `code` as text.",
+        "operationId": "pair_start_api_pair_start_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PairStartIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PairStart"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pair/poll": {
+      "post": {
+        "tags": [
+          "pairing"
+        ],
+        "summary": "Pair Poll",
+        "description": "The TV checking (every 2 s or so). When approved the key comes back once.",
+        "operationId": "pair_poll_api_pair_poll_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PollIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PairStatus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pair/{code}": {
+      "get": {
+        "tags": [
+          "pairing"
+        ],
+        "summary": "Pair Info",
+        "description": "What the phone shows before Allow: the TV's name and address, and who it could be for.",
+        "operationId": "pair_info_api_pair__code__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Code"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PairInfo"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pair/{code}/approve": {
+      "post": {
+        "tags": [
+          "pairing"
+        ],
+        "summary": "Pair Approve",
+        "description": "Sign the TV in as `person` (someone in your household).",
+        "operationId": "pair_approve_api_pair__code__approve_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Code"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApproveIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Approved"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pair/{code}/refuse": {
+      "post": {
+        "tags": [
+          "pairing"
+        ],
+        "summary": "Pair Refuse",
+        "operationId": "pair_refuse_api_pair__code__refuse_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Code"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/health": {
       "get": {
         "tags": [
@@ -4780,6 +5010,38 @@
           "approvals"
         ],
         "title": "ApprovalList"
+      },
+      "ApproveIn": {
+        "properties": {
+          "person": {
+            "type": "string",
+            "maxLength": 64,
+            "title": "Person"
+          }
+        },
+        "type": "object",
+        "required": [
+          "person"
+        ],
+        "title": "ApproveIn"
+      },
+      "Approved": {
+        "properties": {
+          "device_name": {
+            "type": "string",
+            "title": "Device Name"
+          },
+          "person": {
+            "type": "string",
+            "title": "Person"
+          }
+        },
+        "type": "object",
+        "required": [
+          "device_name",
+          "person"
+        ],
+        "title": "Approved"
       },
       "ArtColors": {
         "properties": {
@@ -6737,6 +6999,186 @@
         ],
         "title": "OutsideShelf"
       },
+      "PairInfo": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "device_name": {
+            "type": "string",
+            "title": "Device Name"
+          },
+          "address": {
+            "type": "string",
+            "title": "Address"
+          },
+          "expires_in": {
+            "type": "integer",
+            "title": "Expires In"
+          },
+          "people": {
+            "items": {
+              "$ref": "#/components/schemas/PairPerson"
+            },
+            "type": "array",
+            "title": "People"
+          },
+          "suggested": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suggested",
+            "description": "The person to pick first (whoever is approving)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "device_name",
+          "address",
+          "expires_in",
+          "people"
+        ],
+        "title": "PairInfo"
+      },
+      "PairPerson": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role"
+          },
+          "can_sign_in": {
+            "type": "boolean",
+            "title": "Can Sign In",
+            "description": "False when the person has no phone login yet"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "role",
+          "can_sign_in"
+        ],
+        "title": "PairPerson"
+      },
+      "PairStart": {
+        "properties": {
+          "secret": {
+            "type": "string",
+            "title": "Secret",
+            "description": "Only the TV keeps this; it collects its key with it"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code",
+            "description": "Short code shown on the TV, e.g. KDW7-RT3P"
+          },
+          "link": {
+            "type": "string",
+            "title": "Link",
+            "description": "What the QR code holds: dielify://pair/<code>"
+          },
+          "expires_in": {
+            "type": "integer",
+            "title": "Expires In"
+          }
+        },
+        "type": "object",
+        "required": [
+          "secret",
+          "code",
+          "link",
+          "expires_in"
+        ],
+        "title": "PairStart"
+      },
+      "PairStartIn": {
+        "properties": {
+          "device_name": {
+            "type": "string",
+            "maxLength": 60,
+            "title": "Device Name",
+            "description": "Shown to the person approving, e.g. 'Shed TV'",
+            "default": "TV"
+          }
+        },
+        "type": "object",
+        "title": "PairStartIn"
+      },
+      "PairStatus": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "waiting",
+              "approved",
+              "refused",
+              "expired"
+            ],
+            "title": "Status"
+          },
+          "token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token",
+            "description": "The TV's device key, given once when approved"
+          },
+          "device_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Id"
+          },
+          "username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username"
+          },
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "PairStatus"
+      },
       "PersonInfo": {
         "properties": {
           "name": {
@@ -7236,6 +7678,20 @@
           "duplicates"
         ],
         "title": "PlaysRecorded"
+      },
+      "PollIn": {
+        "properties": {
+          "secret": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "Secret"
+          }
+        },
+        "type": "object",
+        "required": [
+          "secret"
+        ],
+        "title": "PollIn"
       },
       "ProfileInfo": {
         "properties": {

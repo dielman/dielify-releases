@@ -40,6 +40,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        openPairLink(intent)
         setContent {
             DielifyTheme {
                 Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -47,6 +48,17 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        openPairLink(intent)
+    }
+
+    /** A TV's QR code scanned with the phone's own camera app: dielify://pair/<code>. */
+    private fun openPairLink(intent: android.content.Intent?) {
+        val uri = intent?.data ?: return
+        if (uri.scheme == "dielify" && uri.host == "pair") vm.open(Screen.PairTv(uri.lastPathSegment))
     }
 }
 
@@ -116,6 +128,7 @@ fun App(vm: AppViewModel) {
             Screen.StatsPage -> StatsScreen(vm)
             is Screen.PlaylistPage -> PlaylistScreen(vm, screen)
             is Screen.JamPage -> JamScreen(vm)
+            is Screen.PairTv -> PairTvScreen(vm, screen.code)
         } }
         }
     } }

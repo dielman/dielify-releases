@@ -17,7 +17,8 @@ count up the last digit: 0.9.1, 0.9.2 ... then 1.0.0.
 | 0.9.7 | Sound + phone extras | equaliser, cast to speakers, home-screen widget (no crossfade: Josh, 9 Nov) |
 | 0.9.8 | Together | shared household playlists, Blend, Jam |
 | 0.9.9 | Beautification | one design, real artwork, new icon; lyrics removed, Discover cached (published 10 Nov) |
-| 0.9.10 | 1.0 hardening | clean-PC install, car test, security review, restore drill, help pages |
+| 0.9.10 | TV | Dielify on the Google TV in the shed: TV screens, QR sign-in approved from a phone, phone as remote, Jam host |
+| 0.9.11 | 1.0 hardening | clean-PC install, car test, security review (incl. TV pairing), restore drill, help pages |
 | 1.0.0 | Release | the last 0.9 build, renamed, once Josh is happy |
 
 Multi-user goes first because every later feature has to know whose library, whose taste
@@ -206,7 +207,39 @@ phone's cover-to-player animation (pages slide instead). Also in 0.9.9 (Josh, 10
 
 Published 10 Nov (v0.9.9).
 
-## 0.9.10: 1.0 hardening
+## 0.9.10: TV (Josh, 10 Nov)
+
+A Google TV in the shed, on the same network as the PC. Decisions (Josh, 10 Nov): TV goes in before
+1.0 (hardening moves to 0.9.11 so its checks cover the TV); signing in = a QR code on the TV that a
+phone approves, and a **parent picks which person** the TV signs in as; the Android TV emulator
+image was OK'd (Google TV, Android 16, x86_64; installed on E:).
+
+- **One app for phone and TV**: the same APK opens TV screens on a TV (Compose for TV, D-pad focus,
+  10-foot text, overscan margins, launcher banner) and shares everything underneath (server client,
+  Media3 playback, song cache, remote control, updater, signing key).
+- **Finding the PC**: the PC announces itself on the home network (mDNS / DNS-SD, `_dielify._tcp`);
+  typing the address is the fallback.
+- **QR sign-in** (the TV/YouTube "device code" pattern):
+  1. TV -> PC `POST /api/pair/start {device_name}` (no sign-in): a long secret only the TV keeps +
+     a short code (e.g. `KDW-7RT`), 10 minutes. Few pending at once, rate-limited.
+  2. The TV shows a QR code holding only the short code (and the code in text).
+  3. A signed-in phone scans it (Google's code scanner, no camera permission), sees "Sign in
+     <TV name> (<address>)", a parent picks the person, Allow -> `POST /api/pair/approve`.
+     The PC app can approve a typed code too (Settings > People & phones > Add a TV).
+  4. The TV polls with its secret and collects its device token once. The TV is then listed with
+     the phones and can be signed out there. The QR alone grants nothing.
+- **TV screens**: Home (mixes, new releases, recently played), Library (cover grids), Search,
+  Settings; full-screen Now playing in the cover's colours with Up next; slow-moving cover display
+  when idle. No "keep on this phone".
+- **Together**: the TV in every "Play on" list (phone as the remote), the TV as Jam host.
+- **Install**: Developer options + Wireless debugging on the TV, then installed from the PC over
+  Wi-Fi (adb). Updates: the same in-app updater as the phone.
+
+Steps: 1 pairing + announcing + PC code entry + phone scanner -> 2 TV app (find PC, sign in, Home /
+Library / Search, playback, Now playing) -> 3 Play on / Jam / idle display -> 4 install on the TV,
+Josh tests in the shed.
+
+## 0.9.11: 1.0 hardening
 
 Also owed from earlier releases: Josh hasn't yet confirmed on his devices most of 0.9.1-0.9.8
 (kids account on his daughter's phone, Jam, Blend, cast, widget, equaliser, new releases).

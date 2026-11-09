@@ -80,4 +80,5 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.coil.okhttp)
     implementation(libs.work)
+    implementation(libs.code.scanner)
 }
