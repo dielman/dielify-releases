@@ -268,7 +268,7 @@ class PlaybackService : MediaLibraryService() {
             }
         })
 
-        val bitmaps = CacheBitmapLoader(
+        bitmaps = CacheBitmapLoader(
             DataSourceBitmapLoader.Builder(this)
                 .setDataSourceFactory(dataSource)
                 .setExecutorService(MoreExecutors.listeningDecorator(Executors.newSingleThreadExecutor()))
@@ -287,13 +287,64 @@ class PlaybackService : MediaLibraryService() {
                 .build()
         }.getOrElse { android.util.Log.w("Dielify", "No casting: $it"); player }
         session = MediaLibrarySession.Builder(this, shown, Callback())
-            .setBitmapLoader(bitmaps)
+            .setBitmapLoader(bitmaps!!)
             .setSessionActivity(open)
             .build()
         setMediaNotificationProvider(
             DefaultMediaNotificationProvider.Builder(this).build().apply { setSmallIcon(R.drawable.ic_notification) }
         )
         followActiveDevice(shown)
+        // the home-screen widget follows whatever the session shows
+        current = this
+        shown.addListener(widgetListener)
+        refreshWidget()
+    }
+
+    // --- the home-screen widget (PlayerWidget) ---------------------------------------------
+
+    private var bitmaps: CacheBitmapLoader? = null
+    private var coverKey: Any? = null
+    private var cover: android.graphics.Bitmap? = null
+    private val widgetListener = object : Player.Listener {
+        override fun onEvents(player: Player, events: Player.Events) {
+            if (events.containsAny(Player.EVENT_MEDIA_METADATA_CHANGED, Player.EVENT_IS_PLAYING_CHANGED,
+                    Player.EVENT_MEDIA_ITEM_TRANSITION, Player.EVENT_PLAYBACK_STATE_CHANGED, Player.EVENT_DEVICE_INFO_CHANGED)) refreshWidget()
+        }
+    }
+
+    /** The player the app, notification and widget control right now (this phone, a speaker or another device). */
+    fun shownPlayer(): Player? = session?.player
+
+    private fun refreshWidget() {
+        val p = session?.player ?: return
+        val meta = p.mediaMetadata
+        val title = meta.title?.toString()
+        val artist = meta.artist?.toString()
+        val subtitle = when {
+            p is RemoteDevicePlayer -> "Playing on ${dielify.remote.elsewhere()?.name ?: "another device"}"
+            p.deviceInfo.playbackType == androidx.media3.common.DeviceInfo.PLAYBACK_TYPE_REMOTE ->
+                listOfNotNull("On a speaker", artist).joinToString(" · ")
+            else -> artist
+        }
+        val key = meta.artworkUri ?: meta.artworkData?.contentHashCode()
+        if (key != coverKey) {
+            coverKey = key
+            cover = null
+            val loader = bitmaps
+            if (key != null && loader != null) {
+                val future = loader.loadBitmapFromMetadata(meta)
+                future?.addListener({
+                    val b = runCatching { future.get() }.getOrNull()
+                    if (b != null && coverKey == key) {
+                        val scale = 256f / maxOf(b.width, b.height)
+                        cover = if (scale < 1f) android.graphics.Bitmap.createScaledBitmap(b, (b.width * scale).toInt(),
+                            (b.height * scale).toInt(), true) else b
+                        refreshWidget()
+                    }
+                }, androidx.core.content.ContextCompat.getMainExecutor(this))
+            }
+        }
+        PlayerWidget.show(this, PlayerWidget.State(title, subtitle.takeIf { title != null }, p.isPlaying, cover, active = true))
     }
 
     /**
@@ -303,7 +354,9 @@ class PlaybackService : MediaLibraryService() {
     private fun followActiveDevice(local: Player) {
         val remote = dielify.remote
         val other = RemoteDevicePlayer(remote)
+        other.addListener(widgetListener)
         fun pick() {
+            refreshWidget()
             val s = session ?: return
             val d = remote.elsewhere()
             if (d != null) {
@@ -338,6 +391,8 @@ class PlaybackService : MediaLibraryService() {
     }
 
     override fun onDestroy() {
+        current = null
+        PlayerWidget.show(this, PlayerWidget.State())
         dielify.levelPrefs.unregisterOnSharedPreferenceChangeListener(eqPrefs)
         soundEq.release()
         watcher?.finish()
@@ -722,7 +777,10 @@ class PlaybackService : MediaLibraryService() {
         }
     }
 
-    private companion object {
+    companion object {
+        /** The running service, for the home-screen widget's buttons (main thread only). */
+        @Volatile var current: PlaybackService? = null
+
         const val ROOT = "root"
         const val RECENT = "recent"
         const val ALBUMS = "albums"

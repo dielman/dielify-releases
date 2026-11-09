@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Dielify",
-    "version": "0.9.6"
+    "version": "0.9.7"
   },
   "paths": {
     "/api/auth/login": {
@@ -1524,6 +1524,33 @@
             }
           }
         }
+      }
+    },
+    "/api/cast/token": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Cast Token",
+        "description": "A short-lived key for a speaker (Chromecast / Nest) to fetch songs from this PC, so\nthe phone never hands its own login to the speaker. Lasts 12 hours.",
+        "operationId": "cast_token_api_cast_token_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CastToken"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/recap/periods": {
@@ -4554,6 +4581,25 @@
           "artists"
         ],
         "title": "ArtistList"
+      },
+      "CastToken": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "title": "Token",
+            "description": "Put on stream / cover links as ?token=...: plays songs and shows covers only"
+          },
+          "expires_at": {
+            "type": "number",
+            "title": "Expires At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "token",
+          "expires_at"
+        ],
+        "title": "CastToken"
       },
       "Charts": {
         "properties": {

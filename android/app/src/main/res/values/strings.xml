@@ -1,4 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Dielify</string>
+    <string name="widget_nothing">Nothing playing</string>
+    <string name="widget_open">Tap to open Dielify</string>
+    <string name="widget_prev">Previous</string>
+    <string name="widget_play">Play or pause</string>
+    <string name="widget_next">Next</string>
+    <string name="widget_description">Now playing, with play, pause and skip</string>
 </resources>
