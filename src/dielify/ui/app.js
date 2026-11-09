@@ -4,6 +4,9 @@
 "use strict";
 
 // --- key + API ---------------------------------------------------------------------
+// "#t=<key>&go=album:12" opens that screen at start (used for screenshots of each screen)
+const GO = (location.hash.match(/[#&]go=([\w:-]+)/) || [])[1] || null;
+const PLAYING = /[#&]playing(&|$)/.test(location.hash);  // screenshots: something in the player bar
 const KEY = (() => {
   const m = location.hash.match(/t=([\w-]+)/);
   if (m) {
@@ -2184,11 +2187,33 @@ $("btn-sleep").addEventListener("click", (e) => {
   setTimeout(() => document.addEventListener("mousedown", menuOutside, true));
 });
 
+// A screen by name: discover, library, library:artists, album:<id>, artist:<id>, playlist:<id>, stats,
+// recap, settings, downloads, jam, nowplaying.
+async function demoPlay() {
+  const { albums } = await api("/api/library/albums");
+  const a = albums.find((x) => x.name === "Afterglow Avenue") || albums[0];
+  if (a) playList((await api(`/api/library/albums/${a.id}`)).tracks, 1);
+}
+function openRoute(r) {
+  if (PLAYING) demoPlay().catch(() => {});
+  const [what, arg] = r.split(":");
+  const id = Number(arg);
+  const inLibrary = () => { view = "library"; document.querySelectorAll("#nav button").forEach((b) => b.classList.toggle("active", b.dataset.view === "library")); };
+  if (what === "album") { inLibrary(); return viewAlbum(id); }
+  if (what === "artist") { inLibrary(); return viewArtist(id); }
+  if (what === "playlist") { inLibrary(); return viewPlaylist(id); }
+  if (what === "library") return go("library", arg || undefined);
+  if (what === "recap") { go("stats"); return viewRecap(); }
+  if (what === "jam") return viewJam();
+  if (what === "nowplaying" && typeof openNowPlaying === "function") { go("discover"); return openNowPlaying(); }
+  return go(["discover", "stats", "settings", "downloads"].includes(what) ? what : "discover");
+}
+
 // --- start ----------------------------------------------------------------------------------------
 if (!KEY) show(h("p", { class: "pad warn" }, "Open Dielify from its desktop app."));
 else {
   // opens on Discover; in offline mode (no YouTube) on your library instead
-  refreshStatus().then(() => go(status.offline ? "library" : "discover")).catch(() => go("library"));
+  refreshStatus().then(() => GO ? openRoute(GO) : go(status.offline ? "library" : "discover")).catch(() => go("library"));
   pollDownloads(); remoteConnect(); refreshRatings();
   $("update-pill").addEventListener("click", () => go("settings"));
   // the app checks in the background shortly after starting; pick up the result
