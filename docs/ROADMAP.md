@@ -13,10 +13,10 @@ count up the last digit: 0.9.1, 0.9.2 ... then 1.0.0.
 | 0.9.3 | Kids accounts | Kids discovery, parent controls (explicit, approvals, search, limits) |
 | 0.9.4 | Fixes from Josh's testing | docs/ISSUES-0.9.3.md: kids Discover speed, remove from library, green bar, open on Discover, Back keeps the search, song + artist radio |
 | 0.9.5 | Discovery | new releases from your artists, artist About pages, time-of-day mix, leave out of my taste |
-| 0.9.6 | Library power | smart playlists, search by lyrics, year in review |
+| 0.9.6 | Library power | smart playlists, search by lyrics (removed in 0.9.9), year in review |
 | 0.9.7 | Sound + phone extras | equaliser, cast to speakers, home-screen widget (no crossfade: Josh, 9 Nov) |
 | 0.9.8 | Together | shared household playlists, Blend, Jam |
-| 0.9.9 | Beautification | make both apps look good: one design, real artwork everywhere, a proper Now playing |
+| 0.9.9 | Beautification | one design, real artwork, new icon; lyrics removed, Discover cached (built, not published) |
 | 0.9.10 | 1.0 hardening | clean-PC install, car test, security review, restore drill, help pages |
 | 1.0.0 | Release | the last 0.9 build, renamed, once Josh is happy |
 
@@ -169,7 +169,7 @@ No crossfade (Josh, 9 Nov: dropped, PC and phone).
 - **Jam**: one shared queue, e.g. in the car. The host plays; others add songs from their
   phones. If a child is in the Jam, every song is filtered for her.
 
-## 0.9.9: Beautification (Josh, 10 Nov: all 27 items)
+## 0.9.9: Beautification (Josh, 10 Nov: all 27 items) - built, not published
 
 Josh picked everything on the list (artwork, colour, PC, phone, motion, brand, words). Built in
 stages; Josh sees PC screenshots after stage 2 before the phone work starts.
@@ -181,7 +181,7 @@ stages; Josh sees PC screenshots after stage 2 before the phone work starts.
    - artist photos from YouTube Music (fetched once, kept on the PC).
 2. **PC app**: design tokens (one accent, type scale, spacing, radii), the chosen font,
    side navigation with your playlists, big page headers with the cover's colour behind them,
-   a full-window Now playing (cover-tinted, lyrics beside it), a calmer player bar (rare
+   a full-window Now playing (cover-tinted, Up next beside it since lyrics went), a calmer player bar (rare
    buttons in one menu), Discover hero, Settings in sections, loading skeletons, page
    transitions, an animated "playing" marker in lists, shorter words.
    -> screenshots of every PC screen, before/after, for Josh.
@@ -193,7 +193,23 @@ stages; Josh sees PC screenshots after stage 2 before the phone work starts.
    screens to match.
 5. **Words pass** on every screen, then publish.
 
+Status (10 Nov): stages 1-5 built and pushed (phase-8), Josh approved the PC look, the phone look
+and picked the **Wave D** icon. Josh's PC runs a dist\ build with it. Not done from the list: the
+phone's cover-to-player animation (pages slide instead). Also in 0.9.9 (Josh, 10 Nov):
+- **Lyrics removed entirely** (server, PC, phone; stored lyrics deleted). Kids "Check words" now
+  checks titles only.
+- **Discover cached**: YouTube's home feed and charts kept 10 minutes, refreshed in the background
+  when older, last copy shown when YouTube fails.
+- **People before background jobs**: background YouTube lookups wait until nobody's call is
+  running or waiting; slow YouTube calls are logged.
+- Inter font fix on the PC (it never loaded before).
+
+Left: publish 0.9.9 (Josh says when).
+
 ## 0.9.10: 1.0 hardening
+
+Also owed from earlier releases: Josh hasn't yet confirmed on his devices most of 0.9.1-0.9.8
+(kids account on his daughter's phone, Jam, Blend, cast, widget, equaliser, new releases).
 
 - **Clean-PC install test** (Windows Sandbox): install, sign in, play offline, no
   terminal. Owed since Phase 4.
@@ -208,7 +224,7 @@ stages; Josh sees PC screenshots after stage 2 before the phone work starts.
 
 ## Not on the road to 1.0
 
-Hi-res audio (YouTube's limit is ~256k), an AI DJ voice, karaoke voice removal, podcasts,
+Lyrics (removed in 0.9.9, Josh). Hi-res audio (YouTube's limit is ~256k), an AI DJ voice, karaoke voice removal, podcasts,
 audiobooks, a second PC / second household.
 
 ## Still to decide
