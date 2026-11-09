@@ -1,5 +1,6 @@
 package com.dielify.app.ui
 
+import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -235,8 +236,9 @@ fun ShelfRow(vm: AppViewModel, title: String, items: List<Item>) {
 @Composable
 fun TrackShelf(vm: AppViewModel, title: String, tracks: List<com.dielify.app.net.Track>) {
     if (tracks.isEmpty()) return
-    Text(title, style = MaterialTheme.typography.titleMedium,
+    if (title.isNotEmpty()) Text(title, style = MaterialTheme.typography.titleMedium,
         modifier = Modifier.padding(start = 16.dp, top = 20.dp, bottom = 8.dp))
+    else Spacer(Modifier.height(8.dp))
     LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         items(tracks.size, key = { tracks[it].id }) { i ->
             val t = tracks[i]
@@ -255,12 +257,32 @@ fun TrackShelf(vm: AppViewModel, title: String, tracks: List<com.dielify.app.net
 /** The time-of-day mix: "Your Monday evening", with a Play button. */
 @Composable
 private fun NowMixShelf(vm: AppViewModel, m: com.dielify.app.net.NowMix) {
-    Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
-            Text(m.title, style = MaterialTheme.typography.titleMedium)
-            Text(m.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    // The banner at the top of Discover (like the PC app): the time-of-day mix, big, in its colours.
+    val c = m.tracks.firstOrNull()?.colors
+    val tint = hexColor(c?.bg, androidx.compose.ui.graphics.Color(0xFF23262C))
+    val hue = hexColor(c?.accent, Accent)
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
+            .clip(androidx.compose.foundation.shape.RoundedCornerShape(20.dp))
+            .background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(androidx.compose.ui.graphics.lerp(tint, hue, 0.55f), tint)))
+            .padding(20.dp),
+    ) {
+        Text("MADE FOR RIGHT NOW", style = MaterialTheme.typography.labelSmall,
+            color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.8f))
+        Text(m.title, style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(top = 6.dp))
+        Text(m.description, style = MaterialTheme.typography.bodyMedium,
+            color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.8f))
+        Row(Modifier.fillMaxWidth().padding(top = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+            BigPlay { vm.play(m.tracks, 0) }
+            Spacer(Modifier.width(12.dp))
+            androidx.compose.material3.FilledTonalIconButton(onClick = { vm.play(m.tracks, shuffle = true) }) {
+                Icon(Icons.Filled.Shuffle, "Shuffle")
+            }
+            Spacer(Modifier.weight(1f))
+            m.tracks.distinctBy { it.album }.take(3).forEachIndexed { i, t ->
+                Cover(vm, t.coverUrl, 52.dp, Modifier.padding(start = if (i == 0) 0.dp else 6.dp), pixels = 150)
+            }
         }
-        IconButton(onClick = { vm.play(m.tracks, 0) }) { Icon(Icons.Filled.PlayArrow, "Play all") }
     }
     TrackShelf(vm, "", m.tracks)
 }
@@ -409,12 +431,9 @@ fun YtCollectionScreen(vm: AppViewModel, name: String, key: String, load: suspen
                 val have = c.tracks.mapNotNull { it.libraryTrackId }
                 LazyColumn(Modifier.fillMaxSize()) {
                     item {
-                        Column(Modifier.fillMaxWidth().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Thumb(c.info.thumbnail, 200.dp)
-                            Spacer(Modifier.height(12.dp))
-                            Text(c.info.title, style = MaterialTheme.typography.titleLarge)
-                            Text(subtitleOf(c.info), style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                            PageHeader(vm, if (c.info.type == "album") "Album" else "Playlist", c.info.title, subtitleOf(c.info), null,
+                                thumbnail = c.info.thumbnail)
                             Text(
                                 "${c.tracks.size} songs · ${have.size} in your library",
                                 style = MaterialTheme.typography.bodySmall,

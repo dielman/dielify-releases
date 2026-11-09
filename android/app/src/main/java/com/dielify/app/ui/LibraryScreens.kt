@@ -1,5 +1,12 @@
 package com.dielify.app.ui
 
+import androidx.compose.ui.layout.layout
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.foundation.background
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -101,14 +108,18 @@ fun Page(
     back: Boolean = true,
     tabs: Boolean = false,
     mini: Boolean = true,
+    topColor: Color? = null,
     actions: @Composable () -> Unit = {},
     content: @Composable (PaddingValues) -> Unit,
 ) {
     Scaffold(
+        containerColor = Bg,
         topBar = {
             Column {
                 TopAppBar(
-                    title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleLarge) },
+                    expandedHeight = 52.dp,
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = topColor ?: Bg, scrolledContainerColor = topColor ?: Bg),
                     navigationIcon = {
                         if (back) IconButton(onClick = { vm.back() }) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
@@ -218,8 +229,13 @@ fun LibraryScreen(vm: AppViewModel) {
                     if (link is Link.Down && savedCount > 0) tab = tabs.lastIndex
                 }
                 me?.notice?.let { Notice(it) }
-                PrimaryScrollableTabRow(selectedTabIndex = tab, edgePadding = 8.dp) {
-                    tabs.forEachIndexed { i, name -> Tab(tab == i, { tab = i }, text = { Text(name) }) }
+                PrimaryScrollableTabRow(selectedTabIndex = tab, edgePadding = 8.dp, containerColor = Bg,
+                    divider = {}) {
+                    tabs.forEachIndexed { i, name ->
+                        Tab(tab == i, { tab = i }, text = { Text(name, style = MaterialTheme.typography.titleSmall) },
+                            selectedContentColor = MaterialTheme.colorScheme.onSurface,
+                            unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
                 when (tab) {
                     0 -> Loaded(vm, "albums", { vm.server.albums() }) { AlbumGrid(vm, it) }
@@ -358,7 +374,14 @@ fun AlbumGrid(vm: AppViewModel, albums: List<Album>, header: (@Composable () -> 
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        if (header != null) item(span = { GridItemSpan(maxLineSpan) }) { header() }
+        // the header runs to the screen's edges (past the grid's own margins), like other pages
+        if (header != null) item(span = { GridItemSpan(maxLineSpan) }) {
+            Box(Modifier.layout { m, c ->
+                val e = 12.dp.roundToPx()
+                val p = m.measure(c.copy(minWidth = c.maxWidth + 2 * e, maxWidth = c.maxWidth + 2 * e))
+                layout(c.maxWidth, (p.height - e).coerceAtLeast(0)) { p.place(-e, -e) }
+            }) { header() }
+        }
         items(albums, key = { it.id }) { a ->
             Column(Modifier.clickable { vm.open(Screen.AlbumPage(a.id, a.name)) }) {
                 Cover(vm, a.coverUrl, null)
@@ -380,22 +403,23 @@ private fun ArtistList(vm: AppViewModel, artists: List<Artist>) {
 
 @Composable
 private fun ArtistRow(vm: AppViewModel, a: Artist) = ListRow(
-    vm, a.coverUrl, a.name,
+    vm, a.imageUrl ?: a.coverUrl, a.name, round = true, subtitle =
     if (a.albumCount == 1) "1 album" else "${a.albumCount} albums",
-) { vm.open(Screen.ArtistPage(a.id, a.name)) }
+    onClick = { vm.open(Screen.ArtistPage(a.id, a.name)) },
+)
 
 @Composable
-private fun AlbumRow(vm: AppViewModel, a: Album) = ListRow(vm, a.coverUrl, a.name, a.artist) {
+private fun AlbumRow(vm: AppViewModel, a: Album) = ListRow(vm, a.coverUrl, a.name, a.artist, onClick = {
     vm.open(Screen.AlbumPage(a.id, a.name))
-}
+})
 
 @Composable
-private fun ListRow(vm: AppViewModel, cover: String?, title: String, subtitle: String, onClick: () -> Unit) {
+private fun ListRow(vm: AppViewModel, cover: String?, title: String, subtitle: String, round: Boolean = false, onClick: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Cover(vm, cover, 52.dp, pixels = 150)
+        Box(if (round) Modifier.clip(androidx.compose.foundation.shape.CircleShape) else Modifier) { Cover(vm, cover, 52.dp, pixels = 150) }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -416,12 +440,17 @@ fun TrackRow(vm: AppViewModel, t: Track, showArtist: Boolean, onClick: () -> Uni
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (showArtist) {
-            Cover(vm, t.coverUrl, 44.dp, pixels = 150)
+            Box(contentAlignment = Alignment.Center) {
+                Cover(vm, t.coverUrl, 44.dp, pixels = 150)
+                if (playing) Box(Modifier.size(44.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(4.dp))
+                    .background(Color.Black.copy(alpha = 0.45f)), Alignment.Center) { PlayingBars(player.isPlaying, color = Color.White) }
+            }
         } else {
-            Text(
-                t.trackNo?.toString() ?: "", Modifier.widthIn(min = 28.dp),
-                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Box(Modifier.widthIn(min = 28.dp), contentAlignment = Alignment.CenterStart) {
+                if (playing) PlayingBars(player.isPlaying)
+                else Text(t.trackNo?.toString() ?: "", style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
@@ -589,45 +618,26 @@ fun formatBytes(bytes: Long): String = when {
 
 @Composable
 fun AlbumScreen(vm: AppViewModel, page: Screen.AlbumPage) {
-    Page(vm, page.name) { pad ->
+    var tint by remember { mutableStateOf<com.dielify.app.net.ArtColors?>(null) }
+    Page(vm, page.name, topColor = tint?.let { hexColor(it.bg) }) { pad ->
         Box(Modifier.padding(pad)) {
             Loaded(vm, page.id, { vm.server.album(page.id) }) { detail ->
                 val a = detail.album
+                LaunchedEffect(a.colors) { tint = a.colors }
                 LazyColumn(Modifier.fillMaxSize()) {
                     item {
-                        Column(
-                            Modifier.fillMaxWidth().padding(16.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                        ) {
-                            Cover(vm, a.coverUrl, 220.dp, pixels = 600)
-                            Spacer(Modifier.height(12.dp))
-                            Text(a.name, style = MaterialTheme.typography.titleLarge)
-                            Text(
-                                a.artist, color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.clickable { vm.open(Screen.ArtistPage(a.artistId, a.artist)) },
-                            )
-                            Text(
-                                listOfNotNull(a.year?.toString(), "${a.songCount} songs",
-                                    formatDuration(a.durationS.toLong())).joinToString(" · "),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Spacer(Modifier.height(12.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                Button(onClick = { vm.play(detail.tracks) }) {
-                                    Icon(Icons.Filled.PlayArrow, null); Text("Play")
-                                }
-                                FilledTonalButton(onClick = { vm.play(detail.tracks, shuffle = true) }) {
-                                    Icon(Icons.Filled.Shuffle, null); Spacer(Modifier.width(4.dp)); Text("Shuffle")
-                                }
-                            }
-                            Spacer(Modifier.height(8.dp))
+                        Column {
                             var confirm by remember { mutableStateOf(false) }
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                SaveButton(vm, detail.tracks)
-                                TextButton(onClick = { confirm = true }) {
-                                    Icon(Icons.Filled.Delete, null); Spacer(Modifier.width(4.dp)); Text("Remove")
-                                }
+                            PageHeader(
+                                vm, "Album", a.name,
+                                listOfNotNull(a.artist, a.year?.toString(), "${a.songCount} songs").joinToString(" \u00b7 "),
+                                a.colors, cover = a.coverUrl,
+                                extra = { Box(Modifier.padding(top = 10.dp)) { SaveButton(vm, detail.tracks) } },
+                            ) {
+                                BigPlay { vm.play(detail.tracks) }
+                                FilledTonalIconButton(onClick = { vm.play(detail.tracks, shuffle = true) }) { Icon(Icons.Filled.Shuffle, "Shuffle") }
+                                FilledTonalIconButton(onClick = { vm.open(Screen.ArtistPage(a.artistId, a.artist)) }) { Icon(Icons.Filled.Person, "The artist") }
+                                FilledTonalIconButton(onClick = { confirm = true }) { Icon(Icons.Filled.Delete, "Remove from your library") }
                             }
                             if (confirm) RemoveDialog("The album \u201c${a.name}\u201d (${detail.tracks.size} songs)",
                                 onDismiss = { confirm = false }) {
@@ -647,22 +657,28 @@ fun AlbumScreen(vm: AppViewModel, page: Screen.AlbumPage) {
 
 @Composable
 fun ArtistScreen(vm: AppViewModel, page: Screen.ArtistPage) {
-    Page(vm, page.name) { pad ->
+    var tint by remember { mutableStateOf<com.dielify.app.net.ArtColors?>(null) }
+    Page(vm, page.name, topColor = tint?.let { hexColor(it.bg) }) { pad ->
         Box(Modifier.padding(pad)) {
             Loaded(vm, page.id, { vm.server.artist(page.id) }) { detail ->
-                Column {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        ArtistThumbs(vm, page.name)
-                        Spacer(Modifier.weight(1f))
-                        FollowButton(vm, page.name)
-                        FilledTonalButton(onClick = { vm.startRadio(com.dielify.app.net.RadioIn(artist = page.name), "${page.name} radio") },
-                            modifier = Modifier.padding(start = 8.dp, end = 16.dp)) {
-                            Icon(Icons.Filled.Radio, null); Spacer(Modifier.width(4.dp)); Text("Radio")
+                LaunchedEffect(detail.artist.colors) { tint = detail.artist.colors }
+                AlbumGrid(vm, detail.albums, header = {
+                    Column {
+                        PageHeader(
+                            vm, "Artist", page.name,
+                            if (detail.albums.size == 1) "1 album in your library" else "${detail.albums.size} albums in your library",
+                            detail.artist.colors, cover = detail.artist.imageUrl ?: detail.artist.coverUrl, round = true,
+                        ) {
+                            BigPlay(icon = Icons.Filled.Radio, label = "Artist radio") {
+                                vm.startRadio(com.dielify.app.net.RadioIn(artist = page.name), "${page.name} radio")
+                            }
+                            FollowButton(vm, page.name)
+                            ArtistThumbs(vm, page.name)
                         }
+                        ArtistAboutSection(vm, page.name)
+                        Text("Albums", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(start = 16.dp, top = 8.dp))
                     }
-                    ArtistAboutSection(vm, page.name)
-                    AlbumGrid(vm, detail.albums)
-                }
+                })
             }
         }
     }

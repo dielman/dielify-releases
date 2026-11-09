@@ -1,5 +1,27 @@
 package com.dielify.app.ui
 
+import kotlin.math.roundToInt
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.draw.clip
+import androidx.compose.material3.Surface
+import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -61,29 +83,53 @@ import kotlinx.coroutines.launch
 
 private fun coverPath(trackId: Long?) = trackId?.let { "/api/library/tracks/$it/cover" }
 
+/** The bar above the tabs: the song in its cover's colour, a progress line, swipe to skip. */
 @Composable
 fun MiniPlayer(vm: AppViewModel) {
     val p by vm.player.collectAsStateWithLifecycle()
     if (!p.hasItem) return
-    Row(
-        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh)
-            .clickable { vm.open(Screen.NowPlaying) }
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Cover(vm, coverPath(p.trackId), 44.dp, pixels = 150)
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            Text(p.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(
-                p.error ?: p.artist, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.bodySmall,
-                color = if (p.error != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+    var progress by remember { mutableFloatStateOf(0f) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            vm.controller?.let { c -> val d = c.duration; progress = if (d > 0) c.currentPosition.toFloat() / d else 0f }
+            delay(500)
         }
-        DevicesButton(vm)
-        PlayPauseIcon(vm, p)
-        IconButton(onClick = { vm.next() }, enabled = p.hasNext) { Icon(Icons.Filled.SkipNext, "Next") }
+    }
+    val tint by animateColorAsState(hexColor(p.colorBg, MaterialTheme.colorScheme.surfaceContainerHigh), tween(500), label = "mini")
+    var dragX by remember { mutableFloatStateOf(0f) }
+    Surface(color = tint, shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
+        Column {
+            Row(
+                Modifier.fillMaxWidth().clickable { vm.open(Screen.NowPlaying) }
+                    .offset { IntOffset(dragX.roundToInt(), 0) }
+                    .pointerInput(p.title) {
+                        detectHorizontalDragGestures(
+                            onDragEnd = { if (dragX < -120) vm.next() else if (dragX > 120) vm.previous(); dragX = 0f },
+                            onDragCancel = { dragX = 0f },
+                        ) { _, d -> dragX += d }
+                    }
+                    .padding(start = 8.dp, end = 4.dp, top = 8.dp, bottom = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Cover(vm, coverPath(p.trackId), 44.dp, pixels = 150)
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(p.title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        p.error ?: p.artist, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (p.error != null) MaterialTheme.colorScheme.error else Color.White.copy(alpha = 0.7f),
+                    )
+                }
+                DevicesButton(vm)
+                PlayPauseIcon(vm, p)
+                IconButton(onClick = { vm.next() }, enabled = p.hasNext) { Icon(Icons.Filled.SkipNext, "Next") }
+            }
+            Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp).height(2.dp).clip(RoundedCornerShape(1.dp)).background(Color.White.copy(alpha = 0.18f))) {
+                Box(Modifier.fillMaxWidth(progress.coerceIn(0f, 1f)).fillMaxHeight().background(Color.White))
+            }
+            Spacer(Modifier.height(6.dp))
+        }
     }
 }
 
@@ -91,13 +137,15 @@ fun MiniPlayer(vm: AppViewModel) {
 private fun PlayPauseIcon(vm: AppViewModel, p: PlayerUi) {
     IconButton(onClick = { vm.togglePlay() }) {
         when {
-            p.buffering -> CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
+            p.buffering -> CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp, color = Color.White)
             p.isPlaying -> Icon(Icons.Filled.Pause, "Pause")
             else -> Icon(Icons.Filled.PlayArrow, "Play")
         }
     }
 }
 
+/** Now playing: the whole screen in the song's colours. Swipe the cover for the next or
+ *  previous song; swipe down (or Back) to close. */
 @Composable
 fun NowPlayingScreen(vm: AppViewModel) {
     val p by vm.player.collectAsStateWithLifecycle()
@@ -114,87 +162,112 @@ fun NowPlayingScreen(vm: AppViewModel) {
             delay(500)
         }
     }
-    // No mini player here, and the cover takes only the room that's left: the controls
-    // always fit on the screen, whatever its height (the green bar sits in the top bar).
-    Page(vm, "Now playing", mini = false, actions = { CastButton(); DevicesButton(vm) }) { pad ->
-        Column(
-            Modifier.padding(pad).fillMaxSize().navigationBarsPadding().padding(horizontal = 24.dp, vertical = 12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
+    val tint by animateColorAsState(hexColor(p.colorBg, Color(0xFF23262C)), tween(600), label = "np-bg")
+    val hue by animateColorAsState(hexColor(p.colorAccent, Accent), tween(600), label = "np-hue")
+    var dragY by remember { mutableFloatStateOf(0f) }
+    Box(
+        Modifier.fillMaxSize().background(Bg)
+            .offset { IntOffset(0, dragY.roundToInt()) }
+            .background(Brush.verticalGradient(listOf(lerp(tint, hue, 0.35f), tint, Bg)))
+            .pointerInput(Unit) {
+                detectVerticalDragGestures(
+                    onDragEnd = { if (dragY > 240) vm.back(); dragY = 0f },
+                    onDragCancel = { dragY = 0f },
+                ) { _, d -> dragY = (dragY + d).coerceAtLeast(0f) }
+            },
+    ) {
+        Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = 24.dp)) {
+            Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = { vm.back() }) { Icon(Icons.Filled.KeyboardArrowDown, "Close", Modifier.size(30.dp)) }
+                Text("NOW PLAYING", Modifier.weight(1f), textAlign = TextAlign.Center, style = MaterialTheme.typography.labelSmall,
+                    color = Color.White.copy(alpha = 0.75f))
+                CastButton()
+                DevicesButton(vm)
+            }
+            PlayingOnStrip(vm)
             if (!p.hasItem) {
-                Text("Nothing playing")
+                Text("Nothing playing", Modifier.padding(top = 40.dp))
                 return@Column
             }
-            BoxWithConstraints(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                Cover(vm, coverPath(p.trackId), minOf(maxWidth, maxHeight), pixels = 900)
+            var dragX by remember { mutableFloatStateOf(0f) }
+            BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().padding(vertical = 16.dp), contentAlignment = Alignment.Center) {
+                val side = minOf(maxWidth, maxHeight)
+                Box(
+                    Modifier.size(side)
+                        .offset { IntOffset(dragX.roundToInt(), 0) }
+                        .graphicsLayer { rotationZ = dragX / 80f; alpha = 1f - (kotlin.math.abs(dragX) / 1200f).coerceAtMost(0.4f) }
+                        .pointerInput(p.title) {
+                            detectHorizontalDragGestures(
+                                onDragEnd = { if (dragX < -160) vm.next() else if (dragX > 160) vm.previous(); dragX = 0f },
+                                onDragCancel = { dragX = 0f },
+                            ) { _, d -> dragX += d }
+                        }
+                        .shadow(32.dp, RoundedCornerShape(16.dp)).clip(RoundedCornerShape(16.dp)),
+                ) { Cover(vm, coverPath(p.trackId), side, pixels = 900) }
             }
-            Spacer(Modifier.height(16.dp))
-            Text(p.title, style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center)
-            Text(p.artist, color = MaterialTheme.colorScheme.primary, textAlign = TextAlign.Center)
-            Text(
-                p.album, style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center,
-            )
             Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(p.title, style = MaterialTheme.typography.headlineSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(listOf(p.artist, p.album).filter { it.isNotBlank() }.joinToString(" · "), maxLines = 1,
+                        overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyLarge, color = Color.White.copy(alpha = 0.72f))
+                }
                 SongThumbs(vm)
-                SleepButton(vm)
-                LyricsButton(vm)
-                IconButton(onClick = { vm.radioFromCurrent() }) { Icon(Icons.Filled.Radio, "Start radio from this song") }
-                UpNextButton(vm)
             }
             p.error?.let {
                 Spacer(Modifier.height(8.dp))
-                Text(it, color = MaterialTheme.colorScheme.error, textAlign = TextAlign.Center)
+                Text(it, color = MaterialTheme.colorScheme.error)
             }
-            Spacer(Modifier.height(16.dp))
-            Slider(
+            Spacer(Modifier.height(12.dp))
+            ThinSeek(
                 value = if (dragging) dragValue else if (duration > 0) position.toFloat() / duration else 0f,
-                onValueChange = { dragging = true; dragValue = it },
-                onValueChangeFinished = {
+                enabled = duration > 0,
+                onChange = { dragging = true; dragValue = it },
+                onDone = {
                     vm.seekTo((dragValue * duration).toLong())
                     position = (dragValue * duration).toLong()
                     dragging = false
                 },
-                enabled = duration > 0,
             )
             Row(Modifier.fillMaxWidth()) {
-                Text(formatDuration(position / 1000), style = MaterialTheme.typography.bodySmall)
+                Text(formatDuration(position / 1000), style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.7f))
                 Spacer(Modifier.weight(1f))
-                Text(formatDuration(duration / 1000), style = MaterialTheme.typography.bodySmall)
+                Text(formatDuration(duration / 1000), style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.7f))
             }
-            Spacer(Modifier.height(8.dp))
             Row(
-                Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly,
+                Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 IconButton(onClick = { vm.toggleShuffle() }) {
-                    Icon(
-                        Icons.Filled.Shuffle, "Shuffle",
-                        tint = if (p.shuffle) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    Icon(Icons.Filled.Shuffle, "Shuffle", tint = if (p.shuffle) hue else Color.White.copy(alpha = 0.7f))
                 }
-                IconButton(onClick = { vm.previous() }) { Icon(Icons.Filled.SkipPrevious, "Previous", Modifier.size(36.dp)) }
-                FilledIconButton(onClick = { vm.togglePlay() }, modifier = Modifier.size(72.dp)) {
+                IconButton(onClick = { vm.previous() }, Modifier.size(56.dp)) { Icon(Icons.Filled.SkipPrevious, "Previous", Modifier.size(40.dp)) }
+                FilledIconButton(
+                    onClick = { vm.togglePlay() }, modifier = Modifier.size(76.dp),
+                    colors = IconButtonDefaults.filledIconButtonColors(containerColor = Color.White, contentColor = Bg),
+                ) {
                     when {
-                        p.buffering -> CircularProgressIndicator(Modifier.size(28.dp), strokeWidth = 3.dp)
-                        p.isPlaying -> Icon(Icons.Filled.Pause, "Pause", Modifier.size(40.dp))
-                        else -> Icon(Icons.Filled.PlayArrow, "Play", Modifier.size(40.dp))
+                        p.buffering -> CircularProgressIndicator(Modifier.size(30.dp), strokeWidth = 3.dp, color = Bg)
+                        p.isPlaying -> Icon(Icons.Filled.Pause, "Pause", Modifier.size(42.dp))
+                        else -> Icon(Icons.Filled.PlayArrow, "Play", Modifier.size(42.dp))
                     }
                 }
-                IconButton(onClick = { vm.next() }, enabled = p.hasNext) {
-                    Icon(Icons.Filled.SkipNext, "Next", Modifier.size(36.dp))
-                }
-                IconButton(onClick = { vm.pickPlaylistForCurrent() }) {
-                    Icon(Icons.AutoMirrored.Filled.PlaylistAdd, "Add to playlist")
+                IconButton(onClick = { vm.next() }, enabled = p.hasNext, modifier = Modifier.size(56.dp)) {
+                    Icon(Icons.Filled.SkipNext, "Next", Modifier.size(40.dp))
                 }
                 IconButton(onClick = { vm.cycleRepeat() }) {
                     Icon(
-                        if (p.repeat == Player.REPEAT_MODE_ONE) Icons.Filled.RepeatOne else Icons.Filled.Repeat,
-                        "Repeat",
-                        tint = if (p.repeat != Player.REPEAT_MODE_OFF) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                        if (p.repeat == Player.REPEAT_MODE_ONE) Icons.Filled.RepeatOne else Icons.Filled.Repeat, "Repeat",
+                        tint = if (p.repeat != Player.REPEAT_MODE_OFF) hue else Color.White.copy(alpha = 0.7f),
                     )
                 }
+            }
+            Row(Modifier.fillMaxWidth().padding(bottom = 8.dp), horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically) {
+                SleepButton(vm)
+                LyricsButton(vm)
+                IconButton(onClick = { vm.radioFromCurrent() }) { Icon(Icons.Filled.Radio, "Start radio from this song") }
+                IconButton(onClick = { vm.pickPlaylistForCurrent() }) { Icon(Icons.AutoMirrored.Filled.PlaylistAdd, "Add to playlist") }
+                UpNextButton(vm)
             }
         }
     }
@@ -208,40 +281,45 @@ fun SettingsScreen(vm: AppViewModel) {
     var signingOut by remember { mutableStateOf(false) }
     Page(vm, "Settings") { pad ->
         // scrolls: the playlist list under "Keep on this phone" pushes the rest (Update) far down
-        Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(22.dp)) {
             val a = account ?: return@Column
-            Setting("Signed in as", "${a.username} (music of ${a.profile})")
-            Setting("PC addresses", a.addresses.joinToString("\n"))
-            Setting("Connected", when (val l = link) {
-                is Link.Up -> "${l.address} " + if (l.viaTailscale) "(Tailscale)" else "(home network)"
-                Link.Down -> "Can't reach the PC right now"
-                Link.Unknown -> "Not yet"
-            })
-            val songs by vm.savedSongs.collectAsStateWithLifecycle()
-            Setting("Saved on this phone", "${songs.size} songs · ${formatBytes(vm.saved.totalBytes())}")
-            if (songs.isNotEmpty()) OutlinedButton(onClick = { vm.saved.removeAll() }) {
-                Text("Remove all songs from this phone")
+            SettingsSection("Playback") {
+                LevelSetting()
+                EqSetting()
+                val cached = androidx.compose.ui.platform.LocalContext.current.dielify.songCache.cache.cacheSpace
+                Setting("Kept from streaming", "${formatBytes(cached)} of 500 MB. The next 5 songs are fetched ahead, " +
+                    "so short drops in reception don't stop the music.")
             }
-            LevelSetting()
-            EqSetting()
-            KeepSettings(vm)
-            BannedList(vm)
-            TasteList(vm)
-            NewReleaseSettings(vm)
-            val cached = androidx.compose.ui.platform.LocalContext.current.dielify.songCache.cache.cacheSpace
-            Setting("Kept from streaming", "${formatBytes(cached)} (up to 500 MB). The next 5 songs " +
-                "of whatever is playing are fetched ahead, so short reception drops don't stop the music.")
-            Setting("App version", BuildConfig.VERSION_NAME)
-            UpdateSection(vm)
-            OutlinedButton(
-                onClick = { signingOut = true; scope.launch { vm.signOut() } },
-                enabled = !signingOut,
-            ) { Text("Sign out of this phone") }
-            Text(
-                "Signing out removes this phone's access on the PC. To sign in again you need the " +
-                    "phone login's password (Dielify on the PC: Settings > Phone logins).",
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            SettingsSection("On this phone") {
+                val songs by vm.savedSongs.collectAsStateWithLifecycle()
+                Setting("Saved", "${songs.size} songs \u00b7 ${formatBytes(vm.saved.totalBytes())}")
+                if (songs.isNotEmpty()) OutlinedButton(onClick = { vm.saved.removeAll() }) { Text("Remove all songs from this phone") }
+                KeepSettings(vm)
+            }
+            SettingsSection("Your taste") {
+                BannedList(vm)
+                TasteList(vm)
+                NewReleaseSettings(vm)
+            }
+            SettingsSection("Your PC") {
+                Setting("Signed in as", "${a.username} (music of ${a.profile})")
+                Setting("Connected", when (val l = link) {
+                    is Link.Up -> "${l.address} " + if (l.viaTailscale) "(Tailscale)" else "(home network)"
+                    Link.Down -> "Can't reach the PC right now"
+                    Link.Unknown -> "Not yet"
+                })
+                Setting("PC addresses", a.addresses.joinToString("\n"))
+            }
+            SettingsSection("About") {
+                Setting("App version", BuildConfig.VERSION_NAME)
+                UpdateSection(vm)
+                OutlinedButton(onClick = { signingOut = true; scope.launch { vm.signOut() } }, enabled = !signingOut) {
+                    Text("Sign out of this phone")
+                }
+                Text("Signing in again needs this phone login's password (on the PC: Settings > People & phones).",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
     }
 }

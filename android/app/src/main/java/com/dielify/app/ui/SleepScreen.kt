@@ -103,11 +103,12 @@ fun EqSetting() {
         @Composable
         fun slider(label: String, value: Float, key: String, set: (Float) -> Unit) = Row(verticalAlignment = Alignment.CenterVertically) {
             Text(label, Modifier.width(64.dp))
-            androidx.compose.material3.Slider(value = value, onValueChange = { v ->
-                    val db = v.roundToInt()
+            Box(Modifier.weight(1f)) {
+                ThinSeek(value = (value + 12f) / 24f, enabled = true, onChange = { v ->
+                    val db = (v * 24f - 12f).roundToInt()
                     if (db.toFloat() != value) { set(db.toFloat()); prefs.edit().putInt(key, db).apply() }  // heard at once
-                },
-                valueRange = -12f..12f, steps = 23, modifier = Modifier.weight(1f))
+                }, onDone = {})
+            }
             Text("${if (value > 0) "+" else ""}${value.roundToInt()} dB", Modifier.width(56.dp),
                 style = MaterialTheme.typography.bodySmall)
         }

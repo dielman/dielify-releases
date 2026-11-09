@@ -62,6 +62,8 @@ data class PlayerUi(
     val shuffle: Boolean = false,
     val repeat: Int = Player.REPEAT_MODE_OFF,
     val error: String? = null,
+    val colorBg: String? = null,      // the cover's colours, when the PC knows them
+    val colorAccent: String? = null,
 )
 
 /** A song in Up next: [index] is its place in the player's list. */
@@ -178,6 +180,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             shuffle = c.shuffleModeEnabled,
             repeat = c.repeatMode,
             error = c.playerError?.let { "Can't play this song: ${it.errorCodeName}" },
+            colorBg = m.extras?.getString(MediaItems.COLOR_BG),
+            colorAccent = m.extras?.getString(MediaItems.COLOR_ACCENT),
         )
     }
 

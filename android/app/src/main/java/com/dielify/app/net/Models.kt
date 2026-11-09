@@ -28,7 +28,13 @@ data class Artist(
     @SerialName("album_count") val albumCount: Int = 0,
     @SerialName("cover_url") val coverUrl: String? = null,
     val starred: Boolean = false,
+    @SerialName("image_url") val imageUrl: String? = null,
+    val colors: ArtColors? = null,
 )
+
+/** Colours from the artwork (dielify/artwork.py): bg dark, accent lively, fg text on bg. */
+@Serializable
+data class ArtColors(val bg: String, val accent: String, val fg: String = "#ffffff")
 
 @Serializable
 data class Album(
@@ -41,6 +47,7 @@ data class Album(
     @SerialName("duration_s") val durationS: Int = 0,
     @SerialName("cover_url") val coverUrl: String? = null,
     val starred: Boolean = false,
+    val colors: ArtColors? = null,
 )
 
 @Serializable
@@ -60,6 +67,7 @@ data class Track(
     @SerialName("stream_url") val streamUrl: String,
     @SerialName("cover_url") val coverUrl: String? = null,
     @SerialName("gain_db") val gainDb: Double? = null,
+    val colors: ArtColors? = null,
 )
 
 @Serializable data class TrackList(val tracks: List<Track>)
@@ -240,6 +248,8 @@ data class PlaylistSummary(
     val shared: Boolean = false,
     val owner: String? = null,
     val mine: Boolean = true,
+    @SerialName("cover_url") val coverUrl: String? = null,
+    val colors: ArtColors? = null,
 )
 
 @Serializable data class PlaylistList(val playlists: List<PlaylistSummary>)

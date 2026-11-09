@@ -1,5 +1,6 @@
 package com.dielify.app.ui
 
+import androidx.compose.material3.FilledTonalIconButton
 import kotlinx.coroutines.launch
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.runtime.rememberCoroutineScope
@@ -154,7 +155,7 @@ private fun PlaylistRow(vm: AppViewModel, p: PlaylistSummary) {
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Thumb(p.thumbnail, 52.dp)
+        if (p.coverUrl != null) Cover(vm, p.coverUrl, 52.dp, pixels = 150) else Thumb(p.thumbnail, 52.dp)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(p.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -178,7 +179,7 @@ fun MixShelf(vm: AppViewModel, mixes: List<PlaylistSummary>) {
     ) {
         items(mixes, key = { it.id }) { p ->
             Column(Modifier.width(150.dp).clickable { vm.open(Screen.PlaylistPage(p.id, p.name)) }) {
-                Thumb(p.thumbnail, 150.dp)
+                if (p.coverUrl != null) Cover(vm, p.coverUrl, 150.dp, pixels = 400) else Thumb(p.thumbnail, 150.dp)
                 Spacer(Modifier.height(6.dp))
                 Text(p.name, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Medium,
                     style = MaterialTheme.typography.bodyMedium)
@@ -198,7 +199,7 @@ fun PlaylistScreen(vm: AppViewModel, page: Screen.PlaylistPage) {
     var removing by remember { mutableStateOf<PlaylistEntry?>(null) }
     var current by remember { mutableStateOf<PlaylistSummary?>(null) }
     val scope = rememberCoroutineScope()
-    Page(vm, current?.name ?: page.name, actions = {
+    Page(vm, current?.name ?: page.name, topColor = current?.colors?.let { hexColor(it.bg) }, actions = {
         Box {
             IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "More") }
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
@@ -230,31 +231,21 @@ fun PlaylistScreen(vm: AppViewModel, page: Screen.PlaylistPage) {
                 val have = songs.mapNotNull { it.libraryTrackId }
                 LazyColumn(Modifier.fillMaxSize()) {
                     item {
-                        Column(Modifier.fillMaxWidth().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Thumb(p.thumbnail, 180.dp)
-                            Spacer(Modifier.height(12.dp))
-                            Text(p.name, style = MaterialTheme.typography.titleLarge)
-                            Text(describe(p), style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        PageHeader(
+                            vm, when (p.kind) { "mix" -> "Dielify mix"; "blend" -> "Blend"; "smart" -> "Smart playlist"; else -> "Playlist" },
+                            p.name, describe(p), p.colors, cover = p.coverUrl, thumbnail = p.thumbnail,
+                        ) {
+                            BigPlay(enabled = songs.isNotEmpty()) { vm.openItem(songs.first(), songs) }
+                            FilledTonalIconButton(enabled = songs.isNotEmpty(), onClick = {
+                                val s = songs.shuffled()
+                                vm.openItem(s.first(), s)
+                            }) { Icon(Icons.Filled.Shuffle, "Shuffle") }
+                            if (p.ytId != null) FilledTonalIconButton(onClick = { vm.syncPlaylist(p) }) { Icon(Icons.Filled.Sync, "Sync now") }
+                        }
+                        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                             p.syncError?.let {
                                 Text("Couldn't reach YouTube: $it", style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.error)
-                            }
-                            Spacer(Modifier.height(12.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                Button(enabled = songs.isNotEmpty(), onClick = { vm.openItem(songs.first(), songs) }) {
-                                    Icon(Icons.Filled.PlayArrow, null); Text("Play")
-                                }
-                                FilledTonalButton(enabled = songs.isNotEmpty(), onClick = {
-                                    val s = songs.shuffled()
-                                    vm.openItem(s.first(), s)
-                                }) { Icon(Icons.Filled.Shuffle, null); Spacer(Modifier.width(4.dp)); Text("Shuffle") }
-                            }
-                            Spacer(Modifier.height(8.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                if (p.ytId != null) OutlinedButton(onClick = { vm.syncPlaylist(p) }) {
-                                    Icon(Icons.Filled.Sync, null); Spacer(Modifier.width(4.dp)); Text("Sync now")
-                                }
                             }
                             KeepPlaylistSwitch(vm, p.id, Modifier.fillMaxWidth().padding(top = 8.dp))
                             if (have.size < songs.size) Text(

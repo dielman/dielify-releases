@@ -1,5 +1,13 @@
 package com.dielify.app.ui
 
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.slideInVertically
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -81,8 +89,22 @@ fun App(vm: AppViewModel) {
     UpNextSheet(vm)
     LyricsSheet(vm)
     CompositionLocalProvider(LocalSnackbar provides snackbar) { Box(Modifier.fillMaxSize()) {
-        val screen = stack.last()
-        saved.SaveableStateProvider("${stack.size}:$screen") { when (screen) {
+        androidx.compose.animation.AnimatedContent(
+            targetState = stack.size to stack.last(),
+            transitionSpec = {
+                val (from, fromScreen) = initialState
+                val (to, toScreen) = targetState
+                when {
+                    toScreen == Screen.NowPlaying -> (slideInVertically { it } + fadeIn()) togetherWith fadeOut(tween(220))
+                    fromScreen == Screen.NowPlaying -> fadeIn(tween(220)) togetherWith (slideOutVertically { it } + fadeOut())
+                    to > from -> (slideInHorizontally { it / 5 } + fadeIn(tween(220))) togetherWith fadeOut(tween(160))
+                    to < from -> fadeIn(tween(220)) togetherWith (slideOutHorizontally { it / 5 } + fadeOut(tween(160)))
+                    else -> fadeIn(tween(180)) togetherWith fadeOut(tween(120))
+                }
+            },
+            label = "screens",
+        ) { (size, screen) ->
+        saved.SaveableStateProvider("$size:$screen") { when (screen) {
             Screen.Library -> RootScreen(vm)
             is Screen.AlbumPage -> AlbumScreen(vm, screen)
             is Screen.ArtistPage -> ArtistScreen(vm, screen)
@@ -96,5 +118,6 @@ fun App(vm: AppViewModel) {
             is Screen.PlaylistPage -> PlaylistScreen(vm, screen)
             is Screen.JamPage -> JamScreen(vm)
         } }
+        }
     } }
 }

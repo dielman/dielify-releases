@@ -60,6 +60,8 @@ object MediaItems {
     private const val YT_PREFIX = "yt-"
     const val VIDEO_ID = "video_id"
     const val GAIN_DB = "gain_db"
+    const val COLOR_BG = "color_bg"         // the cover's colours (Now playing, mini player)
+    const val COLOR_ACCENT = "color_accent"
 
     /** Volume levelling (leveller.py on the PC): dB to add, if the song has been measured. */
     fun gainDb(item: MediaItem?): Double? =
@@ -107,6 +109,7 @@ object MediaItems {
                 .setExtras(android.os.Bundle().apply {
                     t.videoId?.let { putString(VIDEO_ID, it) }
                     t.gainDb?.let { putDouble(GAIN_DB, it) }
+                    t.colors?.let { putString(COLOR_BG, it.bg); putString(COLOR_ACCENT, it.accent) }
                 })
                 .setTrackNumber(t.trackNo)
                 .setReleaseYear(t.year)
