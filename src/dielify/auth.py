@@ -189,6 +189,39 @@ def revoke_all_tokens(username: str) -> int:
         return conn.execute("DELETE FROM device_tokens WHERE username = ?", (username,)).rowcount
 
 
+# --- cast links: speakers (Chromecast / Nest) play songs with these --------------------
+# A speaker fetches the song itself, so the link must carry its own key. It never gets the
+# phone's real login: a cast key only plays songs and shows covers, and stops working after
+# CAST_TTL_S. Revoking the phone (or its person) ends its cast keys too.
+
+CAST_PREFIX = "dielify_cast_"
+CAST_TTL_S = 12 * 3600
+
+
+def create_cast_token(user: ServerUser, device_id: int) -> tuple[str, float]:
+    from .library import connect
+    token = CAST_PREFIX + secrets.token_urlsafe(24)
+    expires = time.time() + CAST_TTL_S
+    with connect() as conn:
+        conn.execute("DELETE FROM cast_tokens WHERE expires_at < ?", (time.time(),))
+        conn.execute("INSERT INTO cast_tokens (token_hash, username, device_id, expires_at) VALUES (?,?,?,?)",
+                     (_token_hash(token), user.name, device_id, expires))
+    return token, expires
+
+
+def check_cast_token(token: str) -> tuple[ServerUser, int] | None:
+    """A valid cast key -> (user, device id), only while that phone is still signed in."""
+    from .library import connect
+    if not token or not token.startswith(CAST_PREFIX):
+        return None
+    with connect() as conn:
+        row = conn.execute("SELECT c.username, c.device_id FROM cast_tokens c JOIN device_tokens d "
+                           "ON d.id = c.device_id AND d.username = c.username "
+                           "WHERE c.token_hash = ? AND c.expires_at > ?", (_token_hash(token), time.time())).fetchone()
+    user = get_user(row["username"]) if row else None
+    return (user, row["device_id"]) if user else None
+
+
 # --- the desktop app's own key ------------------------------------------------------
 # The desktop window gets a random key, made fresh each time the app starts and kept
 # only in memory. It's handed to the window directly (never stored, never sent over

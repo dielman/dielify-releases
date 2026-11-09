@@ -278,21 +278,29 @@ class PlaybackService : MediaLibraryService() {
             this, 0, Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
-        session = MediaLibrarySession.Builder(this, player, Callback())
+        // Cast to speakers: the session's player moves the queue to a Chromecast / Nest and back
+        // (Media3 Cast); songs reach the speaker through short-lived cast links (CastLinks).
+        val shown: Player = runCatching {
+            androidx.media3.cast.CastPlayer.Builder(this).setLocalPlayer(player)
+                .setRemotePlayer(androidx.media3.cast.RemoteCastPlayer.Builder(this)
+                    .setMediaItemConverter(CastLinks(server, scope)).build())
+                .build()
+        }.getOrElse { android.util.Log.w("Dielify", "No casting: $it"); player }
+        session = MediaLibrarySession.Builder(this, shown, Callback())
             .setBitmapLoader(bitmaps)
             .setSessionActivity(open)
             .build()
         setMediaNotificationProvider(
             DefaultMediaNotificationProvider.Builder(this).build().apply { setSmallIcon(R.drawable.ic_notification) }
         )
-        followActiveDevice(player)
+        followActiveDevice(shown)
     }
 
     /**
      * Spotify Connect: while another device is the active one, the session (and so the app,
      * notification, lock screen and headphone buttons) controls that device instead.
      */
-    private fun followActiveDevice(local: ExoPlayer) {
+    private fun followActiveDevice(local: Player) {
         val remote = dielify.remote
         val other = RemoteDevicePlayer(remote)
         fun pick() {

@@ -322,6 +322,8 @@ class Server(private val context: Context, private val accounts: AccountStore) {
     suspend fun follow(body: FollowIn): List<Follow> = json.decodeFromString(FollowList.serializer(),
         send("PUT", "api/follows", json.encodeToString(FollowIn.serializer(), body))).follows
     suspend fun taste(): List<TasteItem> = get<TasteList>("api/taste").items
+    /** A 12-hour "play only" key for a speaker (Chromecast / Nest). */
+    suspend fun castToken(): CastToken = json.decodeFromString(CastToken.serializer(), send("POST", "api/cast/token"))
     /** Library songs whose lyrics have these words. */
     suspend fun lyricsSearch(q: String): List<LyricsHit> =
         get<LyricsSearch>("api/library/lyrics-search?q=" + java.net.URLEncoder.encode(q, "UTF-8")).results

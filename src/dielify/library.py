@@ -303,6 +303,14 @@ CREATE TABLE IF NOT EXISTS prefs (
     PRIMARY KEY (profile, key)
 );
 
+-- Cast links (0.9.7, auth.py): short-lived "play only" tokens for speakers. Hash only.
+CREATE TABLE IF NOT EXISTS cast_tokens (
+    token_hash TEXT PRIMARY KEY,
+    username   TEXT NOT NULL,
+    device_id  INTEGER NOT NULL,
+    expires_at REAL NOT NULL
+);
+
 -- Logins for our own API (auth.py): only a hash of each token is kept.
 CREATE TABLE IF NOT EXISTS device_tokens (
     id           INTEGER PRIMARY KEY,

@@ -220,6 +220,12 @@ def media_session(request: Request,
     tags can't send headers. (Request logs never include query strings.)"""
     if creds is None and request.query_params.get("token"):
         creds = HTTPAuthorizationCredentials(scheme="Bearer", credentials=request.query_params["token"])
+    if creds is not None and creds.credentials.startswith(auth.CAST_PREFIX):  # a speaker: play only
+        found = auth.check_cast_token(creds.credentials)
+        if found is None:
+            lockout.failed(_client(request))
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "This cast link has run out: cast again from the phone")
+        return Session(*found)
     return session(request, creds)
 
 
@@ -936,6 +942,23 @@ def get_stats(period: Literal["week", "month", "year", "all"] = "month",
     return Stats(**{k: st[k] for k in ("period", "since", "history_starts", "plays", "minutes", "songs",
                                          "artists", "skips", "by_hour")},
                  top_songs=songs, top_artists=artists, top_albums=albums)
+
+
+# --- 0.9.7: casting to speakers ---------------------------------------------------------
+
+class CastToken(BaseModel):
+    token: str = Field(description="Put on stream / cover links as ?token=...: plays songs and shows covers only")
+    expires_at: float
+
+
+@router.post("/cast/token", response_model=CastToken, tags=["auth"])
+def cast_token(s: Session = Depends(session)) -> CastToken:
+    """A short-lived key for a speaker (Chromecast / Nest) to fetch songs from this PC, so
+    the phone never hands its own login to the speaker. Lasts 12 hours."""
+    if s.desktop:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Cast from a phone")
+    token, expires = auth.create_cast_token(s.user, s.device_id)
+    return CastToken(token=token, expires_at=expires)
 
 
 # --- 0.9.6: recap (year in review / any month) and search by lyrics ---------------------

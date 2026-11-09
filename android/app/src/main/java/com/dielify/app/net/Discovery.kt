@@ -52,6 +52,9 @@ data class TasteIn(val kind: String, val key: String, val name: String, val out:
 @Serializable
 data class TasteList(val items: List<TasteItem>)
 
+@Serializable
+data class CastToken(val token: String, @SerialName("expires_at") val expiresAt: Double)
+
 // 0.9.6 Library power: search by lyrics, recaps.
 
 @Serializable

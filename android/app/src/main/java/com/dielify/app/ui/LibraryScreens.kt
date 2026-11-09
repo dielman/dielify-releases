@@ -163,6 +163,7 @@ private fun TabBar(vm: AppViewModel) {
 @Composable
 fun TopActions(vm: AppViewModel) {
     LinkLabel(vm)
+    CastButton()
     IconButton(onClick = { vm.open(Screen.StatsPage) }) { Icon(Icons.Filled.Insights, "Your stats") }
     IconButton(onClick = { vm.open(Screen.Settings) }) { Icon(Icons.Filled.Settings, "Settings") }
 }
@@ -663,4 +664,15 @@ fun ArtistScreen(vm: AppViewModel, page: Screen.ArtistPage) {
             }
         }
     }
+}
+
+
+/** Google Cast: pick a speaker (Chromecast / Nest) on the home network. Hidden when none is found. */
+@Composable
+fun CastButton() {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val ok = remember {
+        runCatching { androidx.media3.cast.Cast.getSingletonInstance(ctx).castContextLoadFailure == null }.getOrDefault(false)
+    }
+    if (ok) androidx.media3.cast.MediaRouteButton()
 }

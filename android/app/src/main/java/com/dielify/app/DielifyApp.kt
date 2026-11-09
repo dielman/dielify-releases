@@ -49,6 +49,8 @@ class DielifyApp : Application(), SingletonImageLoader.Factory {
         updater = AppUpdater(this)
         plays = PlayReporter(this, server)
         if (keep.enabled) keep.schedule()
+        // Google Cast (speakers): needs Google Play services; without it there's just no cast button
+        runCatching { androidx.media3.cast.Cast.getSingletonInstance(this).initialize() }
     }
 
     // Cover art goes through the server's HTTP client, which adds the sign-in token

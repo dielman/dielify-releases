@@ -133,3 +133,27 @@ def test_recap():
         assert [p["period"] for p in recap.periods(lib, date(2025, 11, 20))] == ["2025-11", "2025-10"]
         assert [p["period"] for p in recap.periods(lib, date(2025, 12, 1))][0] == "2025"
         assert [p["period"] for p in c.get("/api/recap/periods", headers=h).json()["periods"]][0] == "2025"
+
+
+def test_cast_links_play_only_and_run_out(monkeypatch):
+    from dielify import auth
+    with make_client() as c:
+        h = login(c)
+        one = download(c, h, "s1")
+        cast = c.post("/api/cast/token", headers=h).json()
+        tok = cast["token"]
+        assert tok.startswith("dielify_cast_") and cast["expires_at"] > time.time() + 11 * 3600
+        assert c.get(f"/api/library/tracks/{one['track_id']}/stream", params={"token": tok}).status_code == 200
+        # play only: nothing else accepts it
+        assert c.get("/api/library/albums", headers={"Authorization": f"Bearer {tok}"}).status_code == 401
+        assert c.get("/api/library/albums", params={"token": tok}).status_code == 401
+        # it runs out
+        with monkeypatch.context() as m:
+            m.setattr(auth.time, "time", lambda: cast["expires_at"] + 1)
+            assert c.get(f"/api/library/tracks/{one['track_id']}/stream", params={"token": tok}).status_code == 401
+        # signing the phone out ends its cast links
+        tok2 = c.post("/api/cast/token", headers=h).json()["token"]
+        dev = c.get("/api/auth/devices", headers=h).json()
+        did = (dev["devices"] if isinstance(dev, dict) else dev)[0]["id"]
+        c.delete(f"/api/auth/device-token/{did}", headers=h)
+        assert c.get(f"/api/library/tracks/{one['track_id']}/stream", params={"token": tok2}).status_code == 401

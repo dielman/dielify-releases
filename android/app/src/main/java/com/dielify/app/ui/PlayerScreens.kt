@@ -116,7 +116,7 @@ fun NowPlayingScreen(vm: AppViewModel) {
     }
     // No mini player here, and the cover takes only the room that's left: the controls
     // always fit on the screen, whatever its height (the green bar sits in the top bar).
-    Page(vm, "Now playing", mini = false, actions = { DevicesButton(vm) }) { pad ->
+    Page(vm, "Now playing", mini = false, actions = { CastButton(); DevicesButton(vm) }) { pad ->
         Column(
             Modifier.padding(pad).fillMaxSize().navigationBarsPadding().padding(horizontal = 24.dp, vertical = 12.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
