@@ -568,6 +568,16 @@ src/dielify/
     photos via artists.photo_url (one artist search each, youtube.background, retried monthly). Subsonic
     getCoverArt ar- uses the photo. Apps don't use the new fields yet (stages 2 and 3).
 
+  - Stage 2 built (PC, not released): index.html + app.css rewritten (tokens, Inter in ui/fonts (OFL), side bar
+    with nav icons + your playlists (paintSide), floating search, cover-tinted .hero headers via tintStyle(colors),
+    Now playing overlay (openNowPlaying: song colours + embedded lyrics), player bar in 3 zones with a More menu
+    (add to playlist / sleep / equaliser / Now playing), Discover banner (discoverHero), Settings sections,
+    skeleton(), fade-in only on page change (show: shownKey, "still"), playing bars on the song row, moreButton()
+    for rare page actions). Start-up link #t=..&go=<route>[&playing] opens any screen (openRoute). Screenshots:
+    build/dev_design.py (test library on :4796) + build/shots.py <label> (headless Chrome; Edge doesn't work
+    from Claude's shell) -> docs/design/<label>/, side by side in docs/design/compare/. Keep no other browser tab
+    on the test copy while shooting (an old key locks 127.0.0.1 out). Waiting for Josh's OK before stage 3.
+
 ## Backlog (Josh, 8 Nov; after Phase 8 item 6)
 
 - **Published v0.8.11 (9 Nov; not yet confirmed by Josh on device): ratings + ban.** `ratings.py` (table
