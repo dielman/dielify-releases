@@ -200,6 +200,8 @@ async function viewLibrary(tab = libTab) {
       const [{ playlists: all }, yt, mixStatus] = await Promise.all([api("/api/playlists"),
         api("/api/yt/my-playlists").catch(() => ({ items: [] })), api("/api/mixes").catch(() => null)]);
       const playlists = all.filter((p) => p.kind !== "mix");
+      const blendBox = h("div", {});
+      fillBlend(blendBox);
       const mixList = all.filter((p) => p.kind === "mix");
       const synced = new Set(playlists.map((p) => p.yt_id).filter(Boolean));
       const notSynced = yt.items.filter((i) => !synced.has(i.id));
@@ -209,6 +211,7 @@ async function viewLibrary(tab = libTab) {
           : h("p", { class: "muted small" }, mixStatus && mixStatus.artists && mixStatus.looked_up < mixStatus.artists
             ? `Dielify is learning your genres (${mixStatus.looked_up} of ${mixStatus.artists} artists looked up). Your genre, decade and vibe mixes appear when it's done.`
             : "Your genre, decade and vibe mixes appear here once your library has enough songs."),
+        blendBox,
         h("div", { class: "row" }, h("h2", { style: "flex:1" }, "Your playlists"),
           h("button", { onclick: () => smartEditor() }, icon("add", "ico lead"), "Smart playlist"),
           h("button", { class: "primary", onclick: () => newPlaylist([]) }, "New playlist")),
@@ -607,6 +610,8 @@ async function renderDownloads(active) {
 function describePlaylist(p) {
   if (p.kind === "mix") return `${p.count} songs · ${p.description || "Dielify mix"} · new every week`;
   if (p.kind === "smart") return `${p.count} songs · smart: ${p.description || ""}`;
+  if (p.kind === "blend") return `${p.count} songs · Blend · new every week`;
+  if (p.shared) return `${p.count} songs · ${p.mine ? "shared with the household" : `shared by ${p.owner}`}`;
   return [`${p.count} songs`, p.read_only ? "from YouTube Music (one way)" : p.yt_id ? "synced with YouTube Music" : "only in Dielify",
     p.pending ? `${p.pending} change${p.pending === 1 ? "" : "s"} waiting` : null].filter(Boolean).join(" · ");
 }
@@ -617,6 +622,122 @@ const songIn = (i) => ({ id: i.id, type: i.type === "video" ? "video" : "song", 
 
 async function playlistAction(fn, done) {
   try { const r = await fn(); if (done) toast(done); return r; } catch (e) { toast(e.message, 6000); return null; }
+}
+
+// --- Blend: a weekly playlist with someone in the household (blend.py) --------------------------
+async function fillBlend(box) {
+  let b;
+  try { b = await api("/api/blend"); } catch { return; }
+  if (!b.partners.length && !b.waiting_for.length) return;  // nobody else in the household
+  const toggle = async () => {
+    try { await api("/api/blend", { method: "PUT", body: { on: !b.on } }); viewLibrary("playlists"); } catch (e) { toast(e.message, 6000); }
+  };
+  box.replaceChildren(h("div", { class: "row" }, h("h2", { style: "flex:1" }, "Blend"),
+    b.allowed ? h("button", { class: b.on ? "" : "primary", onclick: toggle }, b.on ? "Turn Blend off" : "Turn Blend on") : null),
+  h("p", { class: "muted small" }, !b.allowed ? "A parent needs to allow Blend for this account first."
+    : !b.on ? `A weekly playlist with each person in your household who turns it on too: songs you both play, and each other's favourites.`
+      : b.partners.length ? `You have a Blend with ${b.partners.join(", ")}. New every week.`
+        : `Waiting for ${b.waiting_for.join(", ")} to turn Blend on.`),
+  b.playlists.length ? h("div", { class: "grid" }, b.playlists.map((x) => playlistCard({ ...x, kind: "blend", count: "", thumbnail: null }))) : null);
+}
+
+// --- Jam: one shared queue for the household (jam.py) ------------------------------------------
+// Every few seconds the app looks for a Jam. The host's player plays the Jam's songs and picks up
+// new ones as people add them; guests see the queue and add songs.
+const jamState = { jam: null, version: -1, busy: false };
+async function pollJam() {
+  if (jamState.busy) return;
+  jamState.busy = true;
+  try {
+    const j = await api("/api/jam");
+    const changed = (j ? j.version : -1) !== jamState.version || !!j !== !!jamState.jam;
+    jamState.jam = j; jamState.version = j ? j.version : -1;
+    paintJamNav();
+    if (j && j.you_host && changed) hostJamSync(j);
+    if (changed && view === "jam") viewJam();
+  } catch { /* the server is busy or gone: try again shortly */ }
+  jamState.busy = false;
+}
+setInterval(pollJam, 5000);
+setTimeout(pollJam, 1500);
+function paintJamNav() {
+  let b = document.querySelector('#nav button[data-view="jam"]');
+  if (!b) {
+    b = h("button", { "data-view": "jam", onclick: () => { document.querySelectorAll("#nav button").forEach((x) => x.classList.toggle("active", x === b)); viewJam(); } });
+    $("nav").append(b);
+  }
+  const j = jamState.jam;
+  b.textContent = j ? `Jam · ${j.members.length}` : "Jam";
+  b.classList.toggle("jam-on", !!j);
+}
+const jamTrack = (s) => ({ ...ytAsTrack(s.item), jamId: s.id });
+// The host: the player's list is the Jam's songs, kept on the song that's playing.
+function hostJamSync(j) {
+  const tracks = j.songs.map(jamTrack);
+  if (!tracks.length) return;
+  const cur = player.current && player.current.jamId;
+  const at = cur ? tracks.findIndex((t) => t.jamId === cur) : -1;
+  if (at >= 0) { player.list = tracks; player.index = at; player.endless = false; upnext.sig = ""; renderUpnext(); return; }
+  if (!player.current || audio.paused || !player.jamHost) {  // start playing the Jam
+    player.jamHost = true;
+    player.list = tracks; player.endless = false; player.radio = null;
+    playAt(Math.max(0, j.index));
+  }
+}
+function reportJamPlaying(i) {
+  const j = jamState.jam;
+  if (!j || !j.you_host || !player.jamHost) return;
+  api("/api/jam/playing", { method: "POST", body: { index: i } }).catch(() => {});
+}
+async function addToJam(tracks) {
+  const songs = tracks.filter((t) => t.video_id).map((t) => ({ type: "song", id: t.video_id, title: t.title,
+    artists: t.artist ? splitArtists(t.artist) : [], album: t.album || null }));
+  if (!songs.length) return toast("Only songs with a YouTube id can go in a Jam");
+  try {
+    const j = await api("/api/jam/songs", { method: "POST", body: { songs } });
+    toast(j.left_out.length ? `Added, but not: ${j.left_out.join("; ")}` : `Added to ${j.host}'s Jam`, j.left_out.length ? 7000 : 3000);
+    pollJam();
+  } catch (e) { toast(e.message, 6000); }
+}
+async function viewJam() {
+  view = "jam";
+  enter("jam", "Jam", viewJam);
+  const j = jamState.jam;
+  if (!j) {
+    return show(h("h1", {}, "Jam"),
+      h("p", { class: "muted" }, "One queue for everyone at home or in the car. This PC plays the music; everyone in your household can add songs from their phone or here."),
+      h("button", { class: "primary", onclick: async () => {
+        try {
+          const keep = player.current && player.current.video_id ? [{ type: "song", id: player.current.video_id, title: player.current.title,
+            artists: splitArtists(player.current.artist), album: player.current.album || null }] : [];
+          jamState.jam = await api("/api/jam", { method: "POST", body: { device: (remote.devices.find((d) => d.device === remote.you) || {}).name || "the PC", songs: keep } });
+          jamState.version = -1; player.jamHost = true; pollJam(); viewJam();
+        } catch (e) { toast(e.message, 6000); }
+      } }, "Start a Jam on this PC"));
+  }
+  const now = j.songs[j.index];
+  const leave = async () => {
+    try { await api(j.you_host ? "/api/jam" : "/api/jam/leave", { method: j.you_host ? "DELETE" : "POST" }); } catch (e) { toast(e.message, 6000); }
+    player.jamHost = false; jamState.jam = null; jamState.version = -1; paintJamNav(); viewJam();
+  };
+  show(h("h1", {}, j.you_host ? "Your Jam" : `${j.host}'s Jam`),
+    h("p", { class: "muted" }, `Playing on ${j.device} · ${j.members.join(", ")}`),
+    h("div", { class: "row" },
+      !j.you_host && !j.members.includes(status.active_profile) ? h("button", { class: "primary", onclick: async () => {
+        try { const r = await api("/api/jam/join", { method: "POST" }); if (r.left_out.length) toast(`Taken out for the kids: ${r.left_out.join("; ")}`, 7000); pollJam(); } catch (e) { toast(e.message, 6000); }
+      } }, "Join") : null,
+      h("button", { onclick: leave }, j.you_host ? "End the Jam" : "Leave")),
+    h("p", { class: "muted small" }, "Add songs from any song's queue menu (Add to Jam), on the PC or a phone."),
+    now ? [h("h2", {}, "Playing now"), h("p", {}, h("b", {}, now.item.title), " · ", now.item.artists.join(", "), h("span", { class: "muted small" }, ` · added by ${now.added_by}`))] : null,
+    h("h2", {}, "Up next"),
+    h("table", { class: "tracks" }, h("tbody", {}, j.songs.slice(j.index + 1).map((x, i) => h("tr", {},
+      h("td", { class: "n" }, i + 1),
+      h("td", { class: "title" }, x.item.title, h("div", { class: "muted small" }, x.item.artists.join(", "), ` · added by ${x.added_by}`)),
+      h("td", { class: "d" }, dur(x.item.duration_s)),
+      h("td", { class: "a" }, j.you_host || x.added_by === status.active_profile ? ib("remove", "Take it out", async () => {
+        try { await api(`/api/jam/songs/${x.id}`, { method: "DELETE" }); pollJam(); } catch (e) { toast(e.message, 6000); }
+      }) : null))))),
+    j.songs.length <= j.index + 1 ? h("p", { class: "muted" }, "Nothing queued yet.") : null);
 }
 
 // --- smart playlists (smart.py): the rule builder ---------------------------------------------
@@ -753,16 +874,21 @@ async function viewPlaylist(id) {
             ibtn("queueAdd", "Add to queue", { disabled: !songs.length, onclick: () => addToQueue(songs.map(ytAsTrack), false) }),
             p.yt_id ? ibtn("sync", "Sync now", { onclick: async () => { if (await playlistAction(() => api(`/api/playlists/${id}/sync`, { method: "POST" }), "Synced")) viewPlaylist(id); } }) : null,
             p.kind === "smart" ? ibtn("edit", "Edit rules", { onclick: () => smartEditor(p.id) }) : null,
-            p.read_only ? null : ibtn("edit", "Rename", { onclick: rename }),
+            p.read_only || !p.mine ? null : ibtn("edit", "Rename", { onclick: rename }),
+            p.mine && p.kind === "user" && !p.yt_id ? ibtn("person", p.shared ? "Stop sharing" : "Share with household", {
+              title: "Everyone in the household sees it and can add and remove songs (a kids account only sees songs her controls allow)",
+              onclick: async () => { if (await playlistAction(() => api(`/api/playlists/${id}/share`, { method: "PUT", body: { shared: !p.shared } }),
+                p.shared ? "Not shared any more" : "Shared with the household")) viewPlaylist(id); } }) : null,
             p.kind === "mix" ? null : ibtn("noTaste", isLeftOut("playlist", p.id) ? "Count in my taste" : "Leave out of my taste", {
               title: "Its songs still play; they just don't shape For you, mixes and new releases",
               onclick: async () => { await setTaste("playlist", p.id, p.name, !isLeftOut("playlist", p.id)); viewPlaylist(id); } }),
-            p.kind === "mix" ? null : ibtn("remove", "Delete", { onclick: del })),
+            p.kind === "mix" || p.kind === "blend" || !p.mine ? null : ibtn("remove", "Delete", { onclick: del })),
           isLeftOut("playlist", p.id) ? h("div", { class: "muted small", style: "margin-top:6px" }, "Left out of your taste") : null)),
       h("table", { class: "tracks" }, h("tbody", {}, entries.map((e, i) => h("tr", {},
         h("td", { class: "n" }, i + 1),
         h("td", { class: "title", onclick: () => songActions(e.item, songs) }, e.item.title,
-          h("div", { class: "muted small" }, e.item.artists.join(", "), e.item.album ? ` · ${e.item.album}` : "")),
+          h("div", { class: "muted small" }, e.item.artists.join(", "), e.item.album ? ` · ${e.item.album}` : "",
+            p.shared && e.added_by ? ` · added by ${e.added_by}` : "")),
         h("td", { class: "d" }, dur(e.item.duration_s)),
         h("td", { class: "a" }, queueBtn(() => [ytAsTrack(e.item)]), e.item.library_track_id ? h("span", { class: "ib in-lib", title: "In your library" }, icon("check")) : null,
           p.read_only ? null : ib("remove", "Remove from this playlist", () => remove(e))))))));
@@ -1088,6 +1214,8 @@ async function viewKidControls(name) {
   const when = h("div", { class: "panel" }, h("h2", {}, "Listening"),
     check("quiet_hours", "Quiet hours", "No music in her account at these times (songs saved on her phone still play)"),
     c.quiet_hours ? row("From", null, time("quiet_from"), h("span", { class: "muted" }, " to "), time("quiet_to")) : null,
+    check("blend", "Blend", "She may make a weekly Blend playlist with someone in the household (filtered for her)"),
+    check("jam", "Jams", "She may join a Jam (every song in it then has to pass her controls)"),
     check("parent_sees_stats", "You can see her stats", "Her top songs and listening time, on this PC"),
     c.parent_sees_stats ? h("div", { class: "row" }, h("button", { onclick: () => viewStats("month", name) }, `See ${name}'s stats`)) : null);
 
@@ -1333,6 +1461,7 @@ function playAt(i) {
   // AbortError = another song was started before this one began (e.g. a double click, or
   // Next pressed quickly): the newer one plays, so it's not an error worth showing.
   audio.play().catch((e) => { if (e.name !== "AbortError") toast(`Can't play: ${e.message}`); });
+  if (t.jamId) reportJamPlaying(i); else player.jamHost = false;  // something else started: not the Jam any more
   paintBar();
   topUpEndless();
 }
@@ -1812,6 +1941,8 @@ function queueMenu(btn, tracks) {
     tracks.length === 1 && tracks[0].video_id
       ? h("button", { onclick: () => { closeMenu(); startRadio({ video_id: tracks[0].video_id }, `Radio: ${tracks[0].title}`, tracks[0]); } },
         icon("radio", "ico lead"), "Start radio") : null,
+    jamState.jam ? h("button", { onclick: () => { closeMenu(); addToJam(tracks); } }, icon("queueAdd", "ico lead"),
+      `Add to ${jamState.jam.you_host ? "your" : jamState.jam.host + "'s"} Jam`) : null,
     tracks.length === 1 && songTasteKey(tracks[0]) ? tasteMenuItem(tracks[0]) : null);
   document.body.append(m);
   if (r.bottom + 4 + m.offsetHeight > innerHeight - 90) m.style.top = `${r.top - m.offsetHeight - 4}px`;

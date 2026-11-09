@@ -243,3 +243,6 @@ img.mini, .mini.ph { width: 44px; height: 44px; border-radius: 4px; object-fit: 
 .recap-list li { display: flex; align-items: center; gap: 12px; padding: 6px 0; counter-increment: r; }
 .recap-list li::before { content: counter(r); width: 22px; text-align: right; color: var(--muted, #999); }
 .recap-moments { line-height: 1.8; }
+
+/* 0.9.8 */
+#nav button.jam-on { color: var(--accent, #e5484d); font-weight: 600; }
