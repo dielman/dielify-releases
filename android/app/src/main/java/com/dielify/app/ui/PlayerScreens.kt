@@ -207,7 +207,8 @@ fun SettingsScreen(vm: AppViewModel) {
     val scope = rememberCoroutineScope()
     var signingOut by remember { mutableStateOf(false) }
     Page(vm, "Settings") { pad ->
-        Column(Modifier.padding(pad).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        // scrolls: the playlist list under "Keep on this phone" pushes the rest (Update) far down
+        Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             val a = account ?: return@Column
             Setting("Signed in as", "${a.username} (music of ${a.profile})")
             Setting("PC addresses", a.addresses.joinToString("\n"))
