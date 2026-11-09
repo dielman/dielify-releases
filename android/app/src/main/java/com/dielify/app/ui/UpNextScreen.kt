@@ -1,5 +1,7 @@
 package com.dielify.app.ui
 
+import com.dielify.app.dielify
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -57,7 +59,8 @@ fun UpNextButton(vm: AppViewModel) {
 
 /** Play next / Add to queue (and Start radio), for a song's ⋮ menu. */
 @Composable
-fun QueueMenuItems(close: () -> Unit, radio: (() -> Unit)? = null, add: (next: Boolean) -> Unit) {
+fun QueueMenuItems(close: () -> Unit, radio: (() -> Unit)? = null, taste: TasteTarget? = null, vm: AppViewModel? = null,
+                   add: (next: Boolean) -> Unit) {
     DropdownMenuItem(text = { Text("Play next") }, leadingIcon = { Icon(Icons.AutoMirrored.Filled.PlaylistPlay, null) },
         onClick = { close(); add(true) })
     DropdownMenuItem(text = { Text("Add to queue") }, leadingIcon = { Icon(Icons.AutoMirrored.Filled.QueueMusic, null) },
@@ -65,6 +68,23 @@ fun QueueMenuItems(close: () -> Unit, radio: (() -> Unit)? = null, add: (next: B
     if (radio != null) DropdownMenuItem(text = { Text("Start radio") },
         leadingIcon = { Icon(Icons.Filled.Radio, null) },
         onClick = { close(); radio() })
+    if (taste != null && vm != null) TasteMenuItem(vm, close, taste)
+}
+
+/** A song for "Leave out of my taste": its key (video id or tr-<id>) and a name to show. */
+data class TasteTarget(val key: String, val name: String)
+
+@Composable
+fun TasteMenuItem(vm: AppViewModel, close: () -> Unit, target: TasteTarget, kind: String = "song") {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val store = ctx.dielify.taste
+    val all by store.all.collectAsStateWithLifecycle()
+    val out = all.any { it.kind == kind && it.key == target.key }
+    DropdownMenuItem(
+        text = { Text(if (out) "Count in my taste again" else "Leave out of my taste") },
+        leadingIcon = { Icon(androidx.compose.material.icons.Icons.Filled.VisibilityOff, null) },
+        onClick = { close(); vm.setTaste(kind, target.key, target.name, !out) },
+    )
 }
 
 /** Up next: the song playing now and the ones coming up. Tap one to play it. */

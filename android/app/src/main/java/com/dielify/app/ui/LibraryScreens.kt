@@ -437,6 +437,7 @@ fun TrackRow(vm: AppViewModel, t: Track, showArtist: Boolean, onClick: () -> Uni
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                 QueueMenuItems({ menu = false },
                     radio = t.videoId?.let { v -> { vm.songRadio(v, t.title, com.dielify.app.playback.MediaItems.fromTrack(t)) } },
+                    taste = TasteTarget(com.dielify.app.net.Taste.songKey(t.videoId, t.id)!!, "${t.title} - ${t.artist}"), vm = vm,
                 ) { next -> vm.queueTracks(listOf(t), next) }
                 DropdownMenuItem(text = { Text("Remove from my library") }, leadingIcon = { Icon(Icons.Filled.Delete, null) },
                     onClick = { menu = false; confirm = true })
@@ -637,11 +638,13 @@ fun ArtistScreen(vm: AppViewModel, page: Screen.ArtistPage) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         ArtistThumbs(vm, page.name)
                         Spacer(Modifier.weight(1f))
+                        FollowButton(vm, page.name)
                         FilledTonalButton(onClick = { vm.startRadio(com.dielify.app.net.RadioIn(artist = page.name), "${page.name} radio") },
-                            modifier = Modifier.padding(end = 16.dp)) {
-                            Icon(Icons.Filled.Radio, null); Spacer(Modifier.width(4.dp)); Text("Artist radio")
+                            modifier = Modifier.padding(start = 8.dp, end = 16.dp)) {
+                            Icon(Icons.Filled.Radio, null); Spacer(Modifier.width(4.dp)); Text("Radio")
                         }
                     }
+                    ArtistAboutSection(vm, page.name)
                     AlbumGrid(vm, detail.albums)
                 }
             }

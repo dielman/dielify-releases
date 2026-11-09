@@ -312,6 +312,18 @@ class Server(private val context: Context, private val accounts: AccountStore) {
     suspend fun endless(body: EndlessIn): List<Item> =
         json.decodeFromString(ItemList.serializer(), send("POST", "api/discover/endless", json.encodeToString(EndlessIn.serializer(), body))).items
     suspend fun forYou(): ForYou = get("api/discover/for-you")
+    /** New for you: releases from the artists you follow and play most. */
+    suspend fun newReleases(): NewReleases = get("api/discover/new")
+    suspend fun setNewReleases(autoDownload: Boolean): NewReleases = json.decodeFromString(NewReleases.serializer(),
+        send("PUT", "api/discover/new/settings", json.encodeToString(NewReleaseSettings.serializer(), NewReleaseSettings(autoDownload))))
+    suspend fun artistAbout(name: String): ArtistAbout =
+        get("api/artists/about?name=" + java.net.URLEncoder.encode(name, "UTF-8"))
+    suspend fun follows(): List<Follow> = get<FollowList>("api/follows").follows
+    suspend fun follow(body: FollowIn): List<Follow> = json.decodeFromString(FollowList.serializer(),
+        send("PUT", "api/follows", json.encodeToString(FollowIn.serializer(), body))).follows
+    suspend fun taste(): List<TasteItem> = get<TasteList>("api/taste").items
+    suspend fun setTaste(body: TasteIn): List<TasteItem> = json.decodeFromString(TasteList.serializer(),
+        send("PUT", "api/taste", json.encodeToString(TasteIn.serializer(), body))).items
     suspend fun lyrics(query: String): Lyrics = get("api/lyrics?$query")
     /** Songs to keep on the phone automatically (Settings). */
     suspend fun keepList(liked: Boolean, top: Int, playlists: Set<Long>): List<Track> =

@@ -197,6 +197,7 @@ fun PlaylistScreen(vm: AppViewModel, page: Screen.PlaylistPage) {
                 val p = current
                 if (p != null && !p.readOnly) DropdownMenuItem(text = { Text("Rename") },
                     leadingIcon = { Icon(Icons.Filled.Edit, null) }, onClick = { menu = false; renaming = true })
+                if (p != null && p.kind != "mix") TasteMenuItem(vm, { menu = false }, TasteTarget(p.id.toString(), p.name), kind = "playlist")
                 if (p != null && p.kind != "mix") DropdownMenuItem(text = { Text("Delete playlist") },
                     leadingIcon = { Icon(Icons.Filled.Delete, null) }, onClick = { menu = false; deleting = true })
             }

@@ -130,6 +130,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     init {
         app.dielify.plays.flush()
         viewModelScope.launch { app.dielify.ratings.refresh() }
+        viewModelScope.launch { app.dielify.taste.refresh() }
         viewModelScope.launch {
             updater.check()
             val s = updater.state.value
@@ -243,6 +244,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val m = controller?.currentMediaItem ?: return
         val vid = MediaItems.videoId(m) ?: return run { messages.tryEmit("No radio for this song (it isn't from YouTube Music)") }
         songRadio(vid, m.mediaMetadata.title?.toString() ?: "this song", m)
+    }
+
+    /** Leave a song or playlist out of your taste (or count it again). */
+    fun setTaste(kind: String, key: String, name: String, out: Boolean) = viewModelScope.launch {
+        try {
+            getApplication<Application>().dielify.taste.set(kind, key, name, out)
+            messages.tryEmit(if (out) "\u201c$name\u201d won't shape your recommendations" else "\u201c$name\u201d counts in your taste again")
+        } catch (e: ApiError) {
+            messages.tryEmit(e.message ?: "Couldn't change that")
+        }
     }
 
     fun songRadio(videoId: String, title: String, first: MediaItem? = null) =

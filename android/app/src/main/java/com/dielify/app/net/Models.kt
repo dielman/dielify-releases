@@ -219,6 +219,7 @@ data class ForYou(
     @SerialName("on_repeat") val onRepeat: List<Track>,
     val forgotten: List<Track>,
     @SerialName("more_like") val moreLike: List<Item>,
+    @SerialName("now_mix") val nowMix: NowMix? = null,
 )
 
 // --- playlists (synced with YouTube Music) ---------------------------------------------

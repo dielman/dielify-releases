@@ -225,6 +225,8 @@ fun SettingsScreen(vm: AppViewModel) {
             LevelSetting()
             KeepSettings(vm)
             BannedList(vm)
+            TasteList(vm)
+            NewReleaseSettings(vm)
             val cached = androidx.compose.ui.platform.LocalContext.current.dielify.songCache.cache.cacheSpace
             Setting("Kept from streaming", "${formatBytes(cached)} (up to 500 MB). The next 5 songs " +
                 "of whatever is playing are fetched ahead, so short reception drops don't stop the music.")

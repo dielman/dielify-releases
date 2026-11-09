@@ -161,6 +161,7 @@ fun ItemRow(vm: AppViewModel, item: Item, queue: List<Item> = listOf(item),
                     text = { Text("Play") }, onClick = { menu = false; vm.openItem(item, queue) })
                 if (item.isSong) QueueMenuItems({ menu = false },
                     radio = { vm.songRadio(item.id, item.title, com.dielify.app.playback.MediaItems.fromItem(item)) },
+                    taste = TasteTarget(item.id, "${item.title} - ${item.artists.joinToString(", ")}"), vm = vm,
                 ) { next -> vm.queueItems(listOf(item), next) }
                 if (item.type == "artist") DropdownMenuItem(
                     text = { Text("Artist radio") },
@@ -250,6 +251,19 @@ fun TrackShelf(vm: AppViewModel, title: String, tracks: List<com.dielify.app.net
     }
 }
 
+/** The time-of-day mix: "Your Monday evening", with a Play button. */
+@Composable
+private fun NowMixShelf(vm: AppViewModel, m: com.dielify.app.net.NowMix) {
+    Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(m.title, style = MaterialTheme.typography.titleMedium)
+            Text(m.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        IconButton(onClick = { vm.play(m.tracks, 0) }) { Icon(Icons.Filled.PlayArrow, "Play all") }
+    }
+    TrackShelf(vm, "", m.tracks)
+}
+
 // --- Discover ---------------------------------------------------------------------------------
 
 /** A message across the top of a screen (e.g. quiet hours in a kids account). */
@@ -270,6 +284,7 @@ private data class DiscoverData(
     val forYou: com.dielify.app.net.ForYou?,
     val mixes: List<com.dielify.app.net.PlaylistSummary>,
     val me: com.dielify.app.net.Me? = null,
+    val fresh: com.dielify.app.net.NewReleases? = null,
 )
 
 @Composable
@@ -282,8 +297,9 @@ fun DiscoverScreen(vm: AppViewModel) {
                 val forYou = runCatching { vm.server.forYou() }.getOrNull()
                 val mixes = runCatching { vm.server.mixes().mixes }.getOrDefault(emptyList())
                 val me = runCatching { vm.server.me() }.getOrNull()
-                DiscoverData(home, charts, forYou, mixes, me)
-            }) { (home, charts, forYou, mixes, me) ->
+                val fresh = runCatching { vm.server.newReleases() }.getOrNull()
+                DiscoverData(home, charts, forYou, mixes, me, fresh)
+            }) { (home, charts, forYou, mixes, me, fresh) ->
                 LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) {
                     me?.notice?.let { notice ->  // e.g. quiet hours a parent set
                         item(key = "notice") { Notice(notice) }
@@ -294,6 +310,14 @@ fun DiscoverScreen(vm: AppViewModel) {
                             Icon(Icons.Filled.Explore, null)
                             Text("  Never-ending discovery")
                         }
+                    }
+                    forYou?.nowMix?.takeIf { it.tracks.isNotEmpty() }?.let { m ->  // what you usually play now
+                        item(key = "now-mix") { NowMixShelf(vm, m) }
+                    }
+                    if (fresh != null && fresh.items.isNotEmpty()) item(key = "new") {
+                        ShelfRow(vm, "New for you", fresh.items.map { r ->
+                            r.copy(artists = listOf((r.artists + listOfNotNull(r.subtitle, r.year)).joinToString(" \u00b7 ")))
+                        })
                     }
                     item(key = "mixes") { MixShelf(vm, mixes) }
                     if (forYou != null) {
