@@ -1,5 +1,7 @@
 package com.dielify.app.ui
 
+import kotlin.math.roundToInt
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -75,6 +77,43 @@ fun LevelSetting() {
             Switch(checked = on, onCheckedChange = { on = it; prefs.edit().putBoolean("level", it).apply() })
         }
         Text("Loud songs are turned down to match the rest (from the next song on). Works for songs in your library.",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+
+/** Settings: the equaliser on this phone (preset + bass + treble; same presets as the PC). */
+@Composable
+fun EqSetting() {
+    val prefs = LocalContext.current.dielify.levelPrefs
+    val presets = com.dielify.app.playback.SoundEq.PRESETS
+    var preset by remember { mutableStateOf(prefs.getString(com.dielify.app.playback.SoundEq.KEY_PRESET, "flat") ?: "flat") }
+    var bass by remember { mutableStateOf(prefs.getInt(com.dielify.app.playback.SoundEq.KEY_BASS, 0).toFloat()) }
+    var treble by remember { mutableStateOf(prefs.getInt(com.dielify.app.playback.SoundEq.KEY_TREBLE, 0).toFloat()) }
+    Column {
+        Text("Equaliser", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        androidx.compose.foundation.layout.FlowRow(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp)) {
+            presets.forEach { (key, v) ->
+                androidx.compose.material3.FilterChip(selected = preset == key, onClick = {
+                    preset = key
+                    prefs.edit().putString(com.dielify.app.playback.SoundEq.KEY_PRESET, key).apply()
+                }, label = { Text(v.first) })
+            }
+        }
+        @Composable
+        fun slider(label: String, value: Float, key: String, set: (Float) -> Unit) = Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(label, Modifier.width(64.dp))
+            androidx.compose.material3.Slider(value = value, onValueChange = { v ->
+                    val db = v.roundToInt()
+                    if (db.toFloat() != value) { set(db.toFloat()); prefs.edit().putInt(key, db).apply() }  // heard at once
+                },
+                valueRange = -12f..12f, steps = 23, modifier = Modifier.weight(1f))
+            Text("${if (value > 0) "+" else ""}${value.roundToInt()} dB", Modifier.width(56.dp),
+                style = MaterialTheme.typography.bodySmall)
+        }
+        slider("Bass", bass, com.dielify.app.playback.SoundEq.KEY_BASS) { bass = it }
+        slider("Treble", treble, com.dielify.app.playback.SoundEq.KEY_TREBLE) { treble = it }
+        Text("On this phone only. Changes are heard straight away.",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

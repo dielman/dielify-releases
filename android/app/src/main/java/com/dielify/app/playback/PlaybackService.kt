@@ -1,5 +1,6 @@
 package com.dielify.app.playback
 
+import android.content.SharedPreferences
 import android.app.PendingIntent
 import android.content.Intent
 import android.net.Uri
@@ -240,6 +241,12 @@ class PlaybackService : MediaLibraryService() {
             .build()
         watcher = Watcher(player, server)
         player.addListener(watcher!!)
+        // the equaliser (Settings), on this player's audio
+        soundEq.attach(player.audioSessionId)
+        dielify.levelPrefs.registerOnSharedPreferenceChangeListener(eqPrefs)
+        player.addListener(object : Player.Listener {
+            override fun onAudioSessionIdChanged(audioSessionId: Int) = soundEq.attach(audioSessionId)
+        })
         prefetcher = Prefetcher(player, songs, songs.forPrefetch(network), saved, scope)
         player.addListener(prefetcher!!)
         startRemote(player)
@@ -317,7 +324,14 @@ class PlaybackService : MediaLibraryService() {
         if (player == null || !player.playWhenReady || player.mediaItemCount == 0) stopSelf()
     }
 
+    private val soundEq by lazy { SoundEq(dielify.levelPrefs) }
+    private val eqPrefs = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        if (key != null && key.startsWith("eq_")) soundEq.apply()
+    }
+
     override fun onDestroy() {
+        dielify.levelPrefs.unregisterOnSharedPreferenceChangeListener(eqPrefs)
+        soundEq.release()
         watcher?.finish()
         prefetcher?.stop()
         dielify.remote.stop()

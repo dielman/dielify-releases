@@ -223,6 +223,7 @@ fun SettingsScreen(vm: AppViewModel) {
                 Text("Remove all songs from this phone")
             }
             LevelSetting()
+            EqSetting()
             KeepSettings(vm)
             BannedList(vm)
             TasteList(vm)
