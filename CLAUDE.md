@@ -576,7 +576,15 @@ src/dielify/
     for rare page actions). Start-up link #t=..&go=<route>[&playing] opens any screen (openRoute). Screenshots:
     build/dev_design.py (test library on :4796) + build/shots.py <label> (headless Chrome; Edge doesn't work
     from Claude's shell) -> docs/design/<label>/, side by side in docs/design/compare/. Keep no other browser tab
-    on the test copy while shooting (an old key locks 127.0.0.1 out). Waiting for Josh's OK before stage 3.
+    on the test copy while shooting (an old key locks 127.0.0.1 out). Josh: "Looks good, go".
+  - Stage 3 built (phone, bb15347, not released): Theme.kt (same tokens as app.css, Inter TTFs in res/font),
+    Design.kt (PageHeader on the cover's colours, BigPlay, PlayingBars, SettingsSection, ThinSeek = thin
+    white seek bar instead of M3's chunky slider), Now playing + mini player tinted with the song's colours
+    (MediaItem extras COLOR_BG/COLOR_ACCENT -> PlayerUi.colorBg/colorAccent; swipe the cover / mini player
+    for next/previous), album/artist/playlist/YouTube collection headers, playlist covers + artist photos in
+    lists, Discover banner (NowMixShelf), Settings in sections, AnimatedContent page transitions, widget
+    restyled. Checked on the emulator (AVD Medium_Phone_API_37.0, headless, signed in to 10.0.2.2:4796);
+    screenshots in docs/design/phone/. Waiting for Josh's OK; stage 4 = icon/splash options.
 
 ## Backlog (Josh, 8 Nov; after Phase 8 item 6)
 
