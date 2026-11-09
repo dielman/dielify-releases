@@ -132,7 +132,7 @@ src/dielify/
 | 6 | Android app | Find, request and listen on the road | **Done** 2026-11-08 — closed by Josh before the car test ("assume it works"); Android Auto untested |
 | 7 | Polish (scope set by Josh 8 Nov) | Backups to E:, signed phone release with in-app updates, download-next, playlists, music-video fix | **Done** 2026-11-08 — 0.6.0 published; phone self-update to be confirmed with the first Phase 8 release (Josh) |
 | 8 | Listening features (Josh, 8 Nov) | 1 instant play + download, 2 play history + stats, 4 two-way playlist sync, 3 Dielify-made genre/vibe playlists, 5 outside discovery, 6 remote control between devices | In progress (branch `phase-8`) |
-| 9 | Road to 1.0 (Josh, 9 Nov) | Releases 0.9.1-0.9.9 in `docs/ROADMAP.md`: household + kids accounts first, then discovery, library, sound, phone, together, hardening | In progress: 0.9.1 published |
+| 9 | Road to 1.0 (Josh, 9 Nov) | Releases 0.9.1-0.9.9 in `docs/ROADMAP.md`: household + kids accounts first, then discovery, library, sound, phone, together, hardening | In progress: 0.9.3 published (incl. 0.9.2) |
 
 ## Current status
 
@@ -435,7 +435,7 @@ src/dielify/
   store. tests/test_kids_accounts.py. Also fixed the test_lyrics race (lyrics saved just
   after "done"). Filters + Kids discovery are 0.9.3: don't hand the phone over before that.
 
-- 0.9.3 built (kids accounts' controls + Kids discovery), 157 tests, phone builds, **not
+- **Published v0.9.3** (9 Nov; includes 0.9.2; not yet confirmed by Josh). Kids controls + Kids discovery, 157 tests. Was
   published** (0.9.2 wasn't either: Josh chose to go straight on). `kids.py`: Controls
   (table kid_controls, JSON; defaults explicit block, clean versions, word check, auto
   downloads, 50/day, search on, discovery play on, quiet hours off, stats private, picks),
