@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 from . import __version__, auth, credstore, winint
 from . import settings as settings_mod
 from .custom_api import Session, desktop_session, youtube
-from .library import Library
+from .library import library_for
 from .paths import app_data_dir, safe_name
 
 router = APIRouter(prefix="/api/desktop", tags=["desktop"])
@@ -131,7 +131,7 @@ def _status() -> DesktopStatus:
     s = settings_mod.load()
     profiles = []
     for name in _profiles(s):
-        lib = Library(name, s.profile_library(name))
+        lib = library_for(name, s)
         profiles.append(ProfileInfo(name=name, youtube_signed_in=_signed_in(name),
                                     library_path=str(lib.root), tracks=lib.stats()["tracks"]))
     users = [PhoneUser(name=u.name, profile=u.profile,
@@ -193,7 +193,7 @@ def change(body: DesktopChange, s: Session = Depends(desktop_session)) -> Deskto
         backup.scheduler.run_once()  # first backup straight away
     if "library_root" in changes or "active_profile" in changes:
         cfg = settings_mod.load()
-        Library(cfg.active_profile, cfg.profile_library()).scan()
+        library_for(cfg.active_profile, cfg).scan()
     return _status()
 
 

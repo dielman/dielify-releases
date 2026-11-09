@@ -30,6 +30,8 @@ def add_library(profile="josh"):
                     "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (profile, f"{artist}/{i}.opus", al, ar, f"{artist} song {i}", artist, year, i + 1, 200,
                      "opus", 1000, now, f"vid{n:08d}", now, i % 4))
+        conn.execute("INSERT OR IGNORE INTO library_items (profile, track_id, added_at, play_count) "
+                     "SELECT profile, id, created_at, play_count FROM tracks")  # each song in its owner's library
 
 
 def test_mixes_are_built_from_genres_decades_and_vibes():

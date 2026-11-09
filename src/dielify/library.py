@@ -204,6 +204,36 @@ CREATE TABLE IF NOT EXISTS explore_songs (
     PRIMARY KEY (profile, video_id)
 );
 
+-- People (0.9.1). Files live in a household's music store: tracks.profile is the store's
+-- owner (that profile's folder). Each person's library is their own list of songs in the
+-- store (library_items), with their own play counts and stars. role: parent | child.
+CREATE TABLE IF NOT EXISTS people (
+    profile    TEXT PRIMARY KEY COLLATE NOCASE,   -- "Josh" and "josh" are one person
+    role       TEXT NOT NULL DEFAULT 'parent',
+    store      TEXT NOT NULL,
+    created_at REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS library_items (
+    profile     TEXT NOT NULL,
+    track_id    INTEGER NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
+    added_at    REAL NOT NULL,
+    added_by    TEXT,                 -- how it got there: scan | download | <who>
+    play_count  INTEGER NOT NULL DEFAULT 0,
+    last_played REAL,
+    starred_at  REAL,
+    pinned      INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (profile, track_id)
+);
+CREATE INDEX IF NOT EXISTS library_items_track ON library_items(track_id);
+-- Starred albums and artists, per person (tracks: library_items.starred_at).
+CREATE TABLE IF NOT EXISTS stars (
+    profile    TEXT NOT NULL,
+    kind       TEXT NOT NULL,         -- album | artist
+    item_id    INTEGER NOT NULL,
+    starred_at REAL NOT NULL,
+    PRIMARY KEY (profile, kind, item_id)
+);
+
 -- Logins for our own API (auth.py): only a hash of each token is kept.
 CREATE TABLE IF NOT EXISTS device_tokens (
     id           INTEGER PRIMARY KEY,
@@ -247,6 +277,34 @@ def _migrate(conn: sqlite3.Connection) -> None:
     tcols = {r[1] for r in conn.execute("PRAGMA table_info(tracks)")}
     if "loudness" not in tcols:  # 0.9: volume levelling (leveller.py); NULL = not measured yet
         conn.execute("ALTER TABLE tracks ADD COLUMN loudness REAL")
+    if conn.execute("PRAGMA user_version").fetchone()[0] < 1:
+        _to_households(conn)
+
+
+def _to_households(conn: sqlite3.Connection) -> None:
+    """0.9.1: every song moves into its owner's library (library_items), with its play
+    count, last play, star and pin; album/artist stars move to `stars`; every profile that
+    has songs becomes a parent with its own store. The old tracks/albums/artists columns
+    are left as they were (no longer read). A copy of the database is taken first."""
+    if conn.execute("SELECT 1 FROM tracks LIMIT 1").fetchone():
+        copy = db_path().with_name("dielify-before-0.9.1.db")
+        if not copy.exists():
+            conn.commit()
+            try:
+                conn.execute("VACUUM INTO ?", (str(copy),))
+                log.info("Database copied to %s before moving to per-person libraries", copy)
+            except sqlite3.Error as e:  # another thread got there first; the move itself keeps all data
+                log.warning("Database copy before 0.9.1 not made: %s", e)
+    conn.execute("INSERT OR IGNORE INTO library_items (profile, track_id, added_at, added_by, "
+                 "play_count, last_played, starred_at, pinned) SELECT profile, id, created_at, 'scan', "
+                 "play_count, last_played, starred_at, pinned FROM tracks")
+    for kind, table in (("album", "albums"), ("artist", "artists")):
+        conn.execute(f"INSERT OR IGNORE INTO stars (profile, kind, item_id, starred_at) "
+                     f"SELECT profile, '{kind}', id, starred_at FROM {table} WHERE starred_at IS NOT NULL")
+    conn.execute("INSERT OR IGNORE INTO people (profile, role, store, created_at) "
+                 "SELECT DISTINCT profile, 'parent', profile, ? FROM tracks", (time.time(),))
+    conn.execute("PRAGMA user_version = 1")
+    conn.commit()
 
 
 @contextmanager
@@ -279,17 +337,66 @@ def _year(text) -> int | None:
     return int(text[:4]) if text[:4].isdigit() else None
 
 
-class Library:
-    """One profile's music: `root` is that profile's folder (Artist/Album/Track)."""
+# --- people -----------------------------------------------------------------------
 
-    def __init__(self, profile: str, root: Path):
+ROLES = ("parent", "child")
+
+
+def person(profile: str) -> dict:
+    """A profile's role and music store. A profile not seen before is a parent with its
+    own store (its own folder), which is how every profile worked before 0.9.1."""
+    with connect() as conn:
+        row = conn.execute("SELECT profile, role, store FROM people WHERE profile = ?", (profile,)).fetchone()
+        if row is None:
+            conn.execute("INSERT OR IGNORE INTO people (profile, role, store, created_at) "
+                         "VALUES (?, 'parent', ?, ?)", (profile, profile, time.time()))
+            row = conn.execute("SELECT profile, role, store FROM people WHERE profile = ?", (profile,)).fetchone()
+    return dict(row)
+
+
+def set_person(profile: str, role: str = "parent", store: str | None = None) -> dict:
+    """Add or change a person: a child (or a second parent) can share another's store."""
+    if role not in ROLES:
+        raise ValueError(f"role must be one of {ROLES}")
+    store = person(store)["profile"] if store else None
+    p = person(profile)
+    with connect() as conn:
+        conn.execute("UPDATE people SET role = ?, store = ? WHERE profile = ?",
+                     (role, store or p["store"], p["profile"]))
+    return person(profile)
+
+
+def profiles() -> list[str]:
+    """Everyone who has songs in their library (for the background jobs: mixes, discovery)."""
+    with connect() as conn:
+        return [r[0] for r in conn.execute("SELECT DISTINCT profile FROM library_items ORDER BY profile")]
+
+
+def library_for(profile: str, settings=None) -> "Library":
+    """The Library of this person: their own song list, over their household's store."""
+    from . import settings as settings_mod
+    p = person(profile)
+    s = settings or settings_mod.load()
+    return Library(p["profile"], s.profile_library(p["store"]), store=p["store"], role=p["role"])
+
+
+class Library:
+    """One person's music. The files live in a store: `root` is the store owner's folder
+    (Artist/Album/Track), and tracks.profile is that owner. The person's library is their
+    own list of songs in it (library_items), with their own play counts and stars, so two
+    people can share one copy of a file and still have separate libraries.
+    Before 0.9.1 (and still, for one person) store = profile."""
+
+    def __init__(self, profile: str, root: Path, store: str | None = None, role: str = "parent"):
         self.profile = profile
+        self.store = store or profile
+        self.role = role
         self.root = Path(root)
 
     def path_of(self, track: sqlite3.Row) -> Path:
         return self.root / Path(track["relpath"])
 
-    # --- indexing -------------------------------------------------------------
+    # --- indexing (the store's files) ------------------------------------------------
 
     def _audio_files(self):
         if not self.root.exists():
@@ -302,11 +409,13 @@ class Library:
             yield path
 
     def scan(self) -> ScanResult:
+        """Bring the index in line with the store's folder. New files found this way join
+        the store owner's library (whoever copied them in there)."""
         res = ScanResult()
         with connect() as conn:
             known = {r["relpath"]: r for r in conn.execute(
                 "SELECT id, relpath, size, mtime, video_id FROM tracks WHERE profile = ?",
-                (self.profile,))}
+                (self.store,))}
             seen: set[str] = set()
             new_files = []
             for path in self._audio_files():
@@ -331,32 +440,42 @@ class Library:
                 if row is None and tags.get("video_id") in gone_by_video:
                     row = gone_by_video.pop(tags["video_id"])
                     gone.pop(row["relpath"], None)
-                self._upsert(conn, path, rel, tags, row["id"] if row else None)
+                self._upsert(conn, path, rel, tags, row["id"] if row else None, owner=self.store, how="scan")
                 if row:
                     res.updated += 1
                 else:
                     res.added += 1
-            for row in gone.values():
+            for row in gone.values():  # the file is gone, so it's gone from every library
                 conn.execute("DELETE FROM tracks WHERE id = ?", (row["id"],))
                 res.removed += 1
             self._prune(conn)
         return res
 
-    def index_file(self, path: Path) -> int:
-        """Add or refresh one file (called right after a download)."""
+    def index_file(self, path: Path, added_by: str = "download") -> int:
+        """Add or refresh one file (called right after a download) and put it in this
+        person's library."""
         rel = Path(path).relative_to(self.root).as_posix()
         tags = read_tags(Path(path))
         with connect() as conn:
             row = conn.execute("SELECT id FROM tracks WHERE profile = ? AND relpath = ?",
-                               (self.profile, rel)).fetchone()
+                               (self.store, rel)).fetchone()
             if row is None and tags.get("video_id"):
                 row = conn.execute("SELECT id FROM tracks WHERE profile = ? AND video_id = ?",
-                                   (self.profile, tags["video_id"])).fetchone()
-            track_id = self._upsert(conn, Path(path), rel, tags, row["id"] if row else None)
+                                   (self.store, tags["video_id"])).fetchone()
+            track_id = self._upsert(conn, Path(path), rel, tags, row["id"] if row else None,
+                                    owner=self.profile, how=added_by)
+            self._join(conn, track_id, added_by)
             self._prune(conn)
         return track_id
 
-    def _upsert(self, conn, path: Path, rel: str, tags: dict, track_id: int | None) -> int:
+    def _join(self, conn, track_id: int, added_by: str) -> bool:
+        return conn.execute(
+            "INSERT OR IGNORE INTO library_items (profile, track_id, added_at, added_by) "
+            "SELECT ?, id, ?, ? FROM tracks WHERE id = ? AND profile = ?",
+            (self.profile, time.time(), added_by, track_id, self.store)).rowcount > 0
+
+    def _upsert(self, conn, path: Path, rel: str, tags: dict, track_id: int | None,
+                owner: str | None = None, how: str = "scan") -> int:
         parts = Path(rel).parts
         folder_artist = parts[0] if len(parts) >= 3 else None
         folder_album = parts[1] if len(parts) >= 3 else None
@@ -366,16 +485,16 @@ class Library:
         now = time.time()
 
         conn.execute("INSERT OR IGNORE INTO artists (profile, name) VALUES (?, ?)",
-                     (self.profile, album_artist))
+                     (self.store, album_artist))
         artist_id = conn.execute("SELECT id FROM artists WHERE profile = ? AND name = ?",
-                                 (self.profile, album_artist)).fetchone()["id"]
+                                 (self.store, album_artist)).fetchone()["id"]
         conn.execute("INSERT OR IGNORE INTO albums (profile, artist_id, name, created_at) "
-                     "VALUES (?, ?, ?, ?)", (self.profile, artist_id, album, now))
+                     "VALUES (?, ?, ?, ?)", (self.store, artist_id, album, now))
         album_id = conn.execute("SELECT id FROM albums WHERE artist_id = ? AND name = ?",
                                 (artist_id, album)).fetchone()["id"]
 
         st = path.stat()
-        values = dict(profile=self.profile, relpath=rel, album_id=album_id, artist_id=artist_id,
+        values = dict(profile=self.store, relpath=rel, album_id=album_id, artist_id=artist_id,
                       title=tags.get("title") or path.stem, artist=artist,
                       year=_year(tags.get("year")), track_no=tags.get("track"),
                       duration_s=round(tags["length_s"]) if tags.get("length_s") else None,
@@ -386,8 +505,11 @@ class Library:
             values["created_at"] = now
             cols = ", ".join(values)
             marks = ", ".join("?" * len(values))
-            return conn.execute(f"INSERT INTO tracks ({cols}) VALUES ({marks})",
-                                tuple(values.values())).lastrowid
+            track_id = conn.execute(f"INSERT INTO tracks ({cols}) VALUES ({marks})",
+                                    tuple(values.values())).lastrowid
+            conn.execute("INSERT OR IGNORE INTO library_items (profile, track_id, added_at, added_by) "
+                         "VALUES (?, ?, ?, ?)", (owner or self.store, track_id, now, how))
+            return track_id
         sets = ", ".join(f"{k} = ?" for k in values)
         # the file changed: measure its loudness again (leveller.py)
         conn.execute("UPDATE tracks SET loudness = NULL WHERE id = ? AND (mtime != ? OR size != ?)",
@@ -398,33 +520,59 @@ class Library:
     def _prune(self, conn) -> None:
         conn.execute("DELETE FROM albums WHERE profile = ? AND id NOT IN "
                      "(SELECT DISTINCT album_id FROM tracks WHERE profile = ?)",
-                     (self.profile, self.profile))
+                     (self.store, self.store))
         conn.execute("DELETE FROM artists WHERE profile = ? AND id NOT IN "
                      "(SELECT DISTINCT artist_id FROM albums WHERE profile = ?)",
-                     (self.profile, self.profile))
+                     (self.store, self.store))
 
-    # --- queries (all scoped to this profile) -----------------------------------
+    # --- this person's library -----------------------------------------------------
 
+    def add(self, track_id: int, added_by: str = "added") -> bool:
+        """Put a song that's already in the store into this library (no download).
+        False if it isn't in the store."""
+        with connect() as conn:
+            self._join(conn, track_id, added_by)
+            return conn.execute("SELECT 1 FROM library_items WHERE profile = ? AND track_id = ?",
+                                (self.profile, track_id)).fetchone() is not None
+
+    def store_video_ids(self) -> dict[str, int]:
+        """video id -> track id for every song in the store, in this library or not."""
+        with connect() as conn:
+            return {r[0]: r[1] for r in conn.execute(
+                "SELECT video_id, id FROM tracks WHERE profile = ? AND video_id IS NOT NULL", (self.store,))}
+
+    # --- queries (all scoped to this person's library) ---------------------------------
+
+    # Per-person columns come from library_items (li); created_at = when it joined this library.
     _TRACK_SELECT = """
-        SELECT t.*, al.name AS album, ar.name AS album_artist
-        FROM tracks t JOIN albums al ON al.id = t.album_id JOIN artists ar ON ar.id = t.artist_id
-        WHERE t.profile = :p"""
+        SELECT t.id, t.profile AS store, t.relpath, t.album_id, t.artist_id, t.title, t.artist,
+               t.year, t.track_no, t.duration_s, t.bitrate_kbps, t.suffix, t.size, t.mtime,
+               t.video_id, t.has_cover, t.loudness, li.added_at AS created_at, li.play_count,
+               li.last_played, li.starred_at, li.pinned, al.name AS album, ar.name AS album_artist
+        FROM library_items li JOIN tracks t ON t.id = li.track_id
+        JOIN albums al ON al.id = t.album_id JOIN artists ar ON ar.id = t.artist_id
+        WHERE li.profile = :p"""
 
     _ALBUM_SELECT = """
-        SELECT al.*, ar.name AS artist,
+        SELECT al.id, al.profile, al.artist_id, al.name, MIN(li.added_at) AS created_at,
+               sa.starred_at AS starred_at, ar.name AS artist,
                COUNT(t.id) AS song_count, COALESCE(SUM(t.duration_s), 0) AS duration,
-               MAX(t.year) AS year, COALESCE(SUM(t.play_count), 0) AS play_count,
-               MAX(t.last_played) AS last_played,
-               (SELECT id FROM tracks c WHERE c.album_id = al.id AND c.has_cover = 1
-                ORDER BY c.track_no LIMIT 1) AS cover_track_id
-        FROM albums al JOIN artists ar ON ar.id = al.artist_id
-        LEFT JOIN tracks t ON t.album_id = al.id
-        WHERE al.profile = :p"""
+               MAX(t.year) AS year, COALESCE(SUM(li.play_count), 0) AS play_count,
+               MAX(li.last_played) AS last_played,
+               (SELECT c.id FROM tracks c JOIN library_items cl ON cl.track_id = c.id AND cl.profile = :p
+                WHERE c.album_id = al.id AND c.has_cover = 1 ORDER BY c.track_no LIMIT 1) AS cover_track_id
+        FROM library_items li JOIN tracks t ON t.id = li.track_id
+        JOIN albums al ON al.id = t.album_id JOIN artists ar ON ar.id = al.artist_id
+        LEFT JOIN stars sa ON sa.profile = :p AND sa.kind = 'album' AND sa.item_id = al.id
+        WHERE li.profile = :p"""
 
     _ARTIST_SELECT = """
-        SELECT ar.*, COUNT(al.id) AS album_count, MIN(al.id) AS first_album_id
-        FROM artists ar LEFT JOIN albums al ON al.artist_id = ar.id
-        WHERE ar.profile = :p"""
+        SELECT ar.id, ar.profile, ar.name, sr.starred_at AS starred_at,
+               COUNT(DISTINCT al.id) AS album_count, MIN(al.id) AS first_album_id
+        FROM library_items li JOIN tracks t ON t.id = li.track_id
+        JOIN albums al ON al.id = t.album_id JOIN artists ar ON ar.id = al.artist_id
+        LEFT JOIN stars sr ON sr.profile = :p AND sr.kind = 'artist' AND sr.item_id = ar.id
+        WHERE li.profile = :p"""
 
     def _q(self, sql: str, **params) -> list[sqlite3.Row]:
         with connect() as conn:
@@ -439,7 +587,7 @@ class Library:
 
     def albums_by_artist(self, artist_id: int) -> list[sqlite3.Row]:
         return self._q(self._ALBUM_SELECT + " AND al.artist_id = :id GROUP BY al.id "
-                       "ORDER BY year, fold(al.name)", id=artist_id)
+                       "ORDER BY MAX(t.year), fold(al.name)", id=artist_id)
 
     def album(self, album_id: int) -> sqlite3.Row | None:
         rows = self._q(self._ALBUM_SELECT + " AND al.id = :id GROUP BY al.id", id=album_id)
@@ -456,26 +604,26 @@ class Library:
     def album_list(self, kind: str, size: int = 10, offset: int = 0,
                    from_year: int | None = None, to_year: int | None = None) -> list[sqlite3.Row]:
         where, order = "", {
-            "newest": "al.created_at DESC",
+            "newest": "MIN(li.added_at) DESC",
             "alphabeticalByName": "fold(al.name)",
-            "alphabeticalByArtist": "fold(ar.name), year, fold(al.name)",
-            "frequent": "play_count DESC",
-            "highest": "play_count DESC",
-            "recent": "last_played DESC",
+            "alphabeticalByArtist": "fold(ar.name), MAX(t.year), fold(al.name)",
+            "frequent": "SUM(li.play_count) DESC",
+            "highest": "SUM(li.play_count) DESC",
+            "recent": "MAX(li.last_played) DESC",
             "starred": "fold(al.name)",
             "random": "RANDOM()",
         }.get(kind)
         if kind == "byYear":
             lo, hi = from_year or 0, to_year or 9999
-            order = "year DESC" if lo > hi else "year"
+            order = "MAX(t.year) DESC" if lo > hi else "MAX(t.year)"
             lo, hi = min(lo, hi), max(lo, hi)
-            where = f" HAVING year BETWEEN {int(lo)} AND {int(hi)}"
+            where = f" HAVING MAX(t.year) BETWEEN {int(lo)} AND {int(hi)}"
         elif kind == "starred":
-            where = " HAVING al.starred_at IS NOT NULL"
+            where = " HAVING MAX(sa.starred_at) IS NOT NULL"
         elif kind in ("frequent", "highest"):
-            where = " HAVING play_count > 0"
+            where = " HAVING SUM(li.play_count) > 0"
         elif kind == "recent":
-            where = " HAVING last_played IS NOT NULL"
+            where = " HAVING MAX(li.last_played) IS NOT NULL"
         if order is None:  # byGenre and anything unknown: no genres yet
             return []
         return self._q(self._ALBUM_SELECT + f" GROUP BY al.id{where} ORDER BY {order} "
@@ -503,38 +651,61 @@ class Library:
         return rows[0] if rows else None
 
     def video_ids(self) -> dict[str, int]:
-        """video id -> track id, for marking discovery results already downloaded."""
+        """video id -> track id of the songs in this library (for marking discovery
+        results "in your library")."""
         return {r["video_id"]: r["id"] for r in self._q(
-            "SELECT video_id, id FROM tracks WHERE profile = :p AND video_id IS NOT NULL")}
+            "SELECT t.video_id, t.id FROM library_items li JOIN tracks t ON t.id = li.track_id "
+            "WHERE li.profile = :p AND t.video_id IS NOT NULL")}
 
     def random_tracks(self, size: int) -> list[sqlite3.Row]:
         rows = self._q(self._TRACK_SELECT)
         return random.sample(rows, min(size, len(rows)))
 
     def starred(self) -> tuple[list, list, list]:
-        return (self._q(self._ARTIST_SELECT + " AND ar.starred_at IS NOT NULL GROUP BY ar.id"),
-                self._q(self._ALBUM_SELECT + " AND al.starred_at IS NOT NULL GROUP BY al.id"),
-                self._q(self._TRACK_SELECT + " AND t.starred_at IS NOT NULL"))
+        return (self._q(self._ARTIST_SELECT + " AND sr.starred_at IS NOT NULL GROUP BY ar.id"),
+                self._q(self._ALBUM_SELECT + " AND sa.starred_at IS NOT NULL GROUP BY al.id"),
+                self._q(self._TRACK_SELECT + " AND li.starred_at IS NOT NULL"))
 
     def set_starred(self, table: str, item_id: int, starred: bool) -> None:
         assert table in ("tracks", "albums", "artists")
         with connect() as conn:
-            conn.execute(f"UPDATE {table} SET starred_at = ? WHERE id = ? AND profile = ?",
-                         (time.time() if starred else None, item_id, self.profile))
+            if table == "tracks":
+                conn.execute("UPDATE library_items SET starred_at = ? WHERE profile = ? AND track_id = ?",
+                             (time.time() if starred else None, self.profile, item_id))
+                return
+        kind = "album" if table == "albums" else "artist"
+        if starred and (self.album(item_id) if kind == "album" else self.artist(item_id)) is None:
+            return  # not in this library
+        with connect() as conn:
+            if starred:
+                conn.execute("INSERT OR IGNORE INTO stars (profile, kind, item_id, starred_at) "
+                             "VALUES (?, ?, ?, ?)", (self.profile, kind, item_id, time.time()))
+            else:
+                conn.execute("DELETE FROM stars WHERE profile = ? AND kind = ? AND item_id = ?",
+                             (self.profile, kind, item_id))
 
     def remove_track(self, track_id: int) -> bool:
-        """Delete a song's file and take it out of the index (empty album/artist folders
-        go too). Returns whether there was such a song."""
+        """Take a song out of this library. Its file is deleted (and empty album/artist
+        folders with it) only when no other library has the song, and never by a child.
+        Returns whether the song was in this library."""
         t = self.track(track_id)
         if t is None:
             return False
+        with connect() as conn:
+            shared = conn.execute("SELECT COUNT(*) FROM library_items WHERE track_id = ? AND profile != ?",
+                                  (track_id, self.profile)).fetchone()[0]
+        if shared or self.role == "child":
+            with connect() as conn:
+                conn.execute("DELETE FROM library_items WHERE profile = ? AND track_id = ?",
+                             (self.profile, track_id))
+            return True
         path = self.path_of(t)
         try:
             path.unlink(missing_ok=True)
         except OSError as e:
             raise OSError(f"Couldn't delete {path.name}: {e}") from e
         with connect() as conn:
-            conn.execute("DELETE FROM tracks WHERE id = ? AND profile = ?", (track_id, self.profile))
+            conn.execute("DELETE FROM tracks WHERE id = ? AND profile = ?", (track_id, self.store))
             self._prune(conn)
         folder = path.parent
         root = self.root.resolve()
@@ -548,13 +719,14 @@ class Library:
 
     def record_play(self, track_id: int, when: float | None = None) -> None:
         with connect() as conn:
-            conn.execute("UPDATE tracks SET play_count = play_count + 1, last_played = ? "
-                         "WHERE id = ? AND profile = ?", (when or time.time(), track_id, self.profile))
+            conn.execute("UPDATE library_items SET play_count = play_count + 1, last_played = ? "
+                         "WHERE profile = ? AND track_id = ?", (when or time.time(), self.profile, track_id))
 
     def stats(self) -> dict:
         with connect() as conn:
             row = conn.execute(
-                "SELECT COUNT(*) AS tracks, COALESCE(SUM(size), 0) AS bytes, "
-                "COUNT(DISTINCT album_id) AS albums, COUNT(DISTINCT artist_id) AS artists "
-                "FROM tracks WHERE profile = ?", (self.profile,)).fetchone()
+                "SELECT COUNT(*) AS tracks, COALESCE(SUM(t.size), 0) AS bytes, "
+                "COUNT(DISTINCT t.album_id) AS albums, COUNT(DISTINCT t.artist_id) AS artists "
+                "FROM library_items li JOIN tracks t ON t.id = li.track_id WHERE li.profile = ?",
+                (self.profile,)).fetchone()
         return dict(row)

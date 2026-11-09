@@ -1198,7 +1198,7 @@ function artistThumbs(name) {
       ib("thumbDown", v === DOWN ? "Thumbed down (click to clear)" : "Less of this artist (hold to ban)",
         async () => { if (!heldA) { await rate("artist", { name }, v === DOWN ? 0 : DOWN); paint(); } }, { class: `ib${v === DOWN ? " on" : ""}` }),
       v === BAN ? h("span", { class: "muted small" }, " Banned · ",
-        h("button", { class: "link", onclick: async () => { await rate("artist", { name }, 0, `Unbanned ${name}`); paint(); } }, "unban")) : null);
+        h("button", { class: "link", onclick: async () => { await rate("artist", { name }, 0, `Unbanned ${name}`); paint(); } }, "unban")) : "");
     const down = box.children[1];
     let t = null, heldA = false;
     down.addEventListener("pointerdown", () => { heldA = false; t = setTimeout(async () => { heldA = true; await rate("artist", { name }, BAN, `Banned ${name}`); paint(); }, 700); });

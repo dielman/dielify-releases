@@ -21,7 +21,7 @@ from . import auth
 from . import settings as settings_mod
 from .downloads import DownloadQueue
 from .leveller import gain_db
-from .library import CONTENT_TYPES, Library, connect
+from .library import CONTENT_TYPES, Library, connect, library_for
 from .yt_adapter import NotSignedIn, Offline, YouTubeError, YTItem, YTMusicAdapter
 
 router = APIRouter(prefix="/api")
@@ -181,7 +181,7 @@ class Track(BaseModel):
 class Session:
     def __init__(self, user: auth.ServerUser, device_id: int, desktop: bool = False):
         self.user, self.device_id, self.desktop = user, device_id, desktop
-        self.lib = Library(user.profile, settings_mod.load().profile_library(user.profile))
+        self.lib = library_for(user.profile)
 
 
 def _client(request: Request) -> str:

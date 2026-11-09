@@ -116,7 +116,8 @@ def on_repeat(lib: Library, days: int = 14, limit: int = 25) -> list[int]:
     """Library tracks you've played most lately."""
     with connect() as conn:
         rows = conn.execute(
-            "SELECT p.track_id, COUNT(*) n FROM plays p JOIN tracks t ON t.id = p.track_id "
+            "SELECT p.track_id, COUNT(*) n FROM plays p JOIN library_items li ON li.track_id = p.track_id "
+            "AND li.profile = p.profile "
             "WHERE p.profile = ? AND p.started_at >= ? AND p.counted = 1 "
             "GROUP BY p.track_id HAVING n >= 2 ORDER BY n DESC LIMIT ?",
             (lib.profile, time.time() - days * 86400, limit)).fetchall()
@@ -128,7 +129,7 @@ def forgotten(lib: Library, days: int = 60, limit: int = 25) -> list[int]:
     this history existed too)."""
     with connect() as conn:
         rows = conn.execute(
-            "SELECT id FROM tracks WHERE profile = ? AND play_count >= 3 AND last_played IS NOT NULL "
+            "SELECT track_id AS id FROM library_items WHERE profile = ? AND play_count >= 3 AND last_played IS NOT NULL "
             "AND last_played < ? ORDER BY play_count DESC, last_played LIMIT ?",
             (lib.profile, time.time() - days * 86400, limit)).fetchall()
     return [r["id"] for r in rows]
@@ -144,7 +145,8 @@ def seeds(lib: Library, days: int = 30, limit: int = 4) -> list[str]:
         ids = [r["video_id"] for r in rows]
         if len(ids) < limit:  # not much history yet: fall back to all-time play counts
             more = conn.execute(
-                "SELECT video_id FROM tracks WHERE profile = ? AND video_id IS NOT NULL AND play_count > 0 "
-                "ORDER BY play_count DESC, last_played DESC LIMIT ?", (lib.profile, limit * 2)).fetchall()
+                "SELECT t.video_id FROM library_items li JOIN tracks t ON t.id = li.track_id WHERE li.profile = ? "
+                "AND t.video_id IS NOT NULL AND li.play_count > 0 "
+                "ORDER BY li.play_count DESC, li.last_played DESC LIMIT ?", (lib.profile, limit * 2)).fetchall()
             ids += [r["video_id"] for r in more if r["video_id"] not in ids]
     return ids[:limit]

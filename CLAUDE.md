@@ -132,6 +132,7 @@ src/dielify/
 | 6 | Android app | Find, request and listen on the road | **Done** 2026-11-08 — closed by Josh before the car test ("assume it works"); Android Auto untested |
 | 7 | Polish (scope set by Josh 8 Nov) | Backups to E:, signed phone release with in-app updates, download-next, playlists, music-video fix | **Done** 2026-11-08 — 0.6.0 published; phone self-update to be confirmed with the first Phase 8 release (Josh) |
 | 8 | Listening features (Josh, 8 Nov) | 1 instant play + download, 2 play history + stats, 4 two-way playlist sync, 3 Dielify-made genre/vibe playlists, 5 outside discovery, 6 remote control between devices | In progress (branch `phase-8`) |
+| 9 | Road to 1.0 (Josh, 9 Nov) | Releases 0.9.1-0.9.9 in `docs/ROADMAP.md`: household + kids accounts first, then discovery, library, sound, phone, together, hardening | In progress: 0.9.1 built, not published |
 
 ## Current status
 
@@ -405,6 +406,20 @@ src/dielify/
   read the YouTube sign-in of josh: DPAPI decrypt failed (Windows error 13)" from
   desktop_api, several times an hour. Not investigated yet.
 
+**Phase 9 — in progress** (started 9 Nov 2026, branch `phase-8` for now; plan in docs/ROADMAP.md):
+- 0.9.1 built (household foundations, no visible change), 146 tests pass, **not published**:
+  tables `people` (profile COLLATE NOCASE, role parent|child, store), `library_items` (per-person
+  song list: added_at/by, play_count, last_played, starred_at, pinned) and `stars` (album/artist).
+  tracks.profile = the store's owner (folder); old per-person columns on tracks/albums/artists
+  are no longer read. Migration = PRAGMA user_version 1 (`_to_households`), copies the db to
+  `dielify-before-0.9.1.db` first (VACUUM INTO). `library_for(profile)` gives a person's
+  Library over their store; every caller uses it. remove_track only deletes the file when no
+  other library has the song, never for a child. Queue: a song already in the store joins the
+  library with no download; people take turns (`_next_job`, ROW_NUMBER per profile + `_served`).
+  Trial on a copy of Josh's real db (build/migrate_trial.py, real db read-only): 2,494 songs,
+  1,968 albums, 1,253 artists, plays all matched; move 0.04 s. Josh's real db has one profile,
+  "Josh". Also fixed: artist page showed "null" after the thumbs (since 0.8.11). Phone app unchanged.
+
 ## Backlog (Josh, 8 Nov; after Phase 8 item 6)
 
 - **Published v0.8.11 (9 Nov; not yet confirmed by Josh on device): ratings + ban.** `ratings.py` (table
@@ -480,7 +495,8 @@ src/dielify/
   Premium)
 - Auto-download while streaming, or on demand only
 - Default cache size limit and eviction behaviour (setting exists, not enforced yet)
-- Daughter's install: shared library or fully separate
+- Where the daughter uses Dielify (her phone / the family PC / her own computer), and
+  the kids-controls defaults (docs/ROADMAP.md, 0.9.3)
 - Wake-on-LAN wanted?
 
 ## Decisions log
@@ -559,6 +575,15 @@ src/dielify/
   reachable; the phone while playing, for a while after pausing, and optionally via a
   "Stay reachable" setting (notification + Unrestricted battery). Verify Android 17
   Doze behaviour on Josh's Pixel before promising times. Volume = Dielify's own.
+- 2026-11-09 (Josh): **road to 1.0** = `docs/ROADMAP.md` (all 11 competitor features +
+  Blend / Jam / shared playlists + multi-user). **Household model:** one shared music
+  store (Josh's folder), separate per-person libraries (membership list), parent and child
+  profiles. **Child accounts (under 16) are "Dielified":** they use the parent's YouTube
+  sign-in behind the scenes but never see anything from his YouTube account (no YouTube
+  home feed, charts or his playlists); they get Kids discovery built from Dielify's own
+  data, and the parent sets kids controls (explicit / profanity, approvals, search,
+  limits...). Child playlists never sync to YouTube. Files are deleted only when no
+  library uses them, never by a child.
 - 2026-11-08: **Version numbers** (Josh): we're far from 1.0, so releases now count up the
   last number (0.8.1, 0.8.2, ...) instead of the middle one. 0.9.0 was built but never
   published; it went out as 0.8.1.

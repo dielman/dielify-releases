@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Callable
 
-from . import tags
+from . import library, tags
 from .library import connect
 from .yt_adapter import YTItem
 
@@ -53,9 +53,10 @@ class Mix:
 def _tracks(profile: str) -> list[dict]:
     with connect() as conn:
         rows = conn.execute(
-            "SELECT t.id, t.video_id, t.title, t.artist, t.year, t.duration_s, t.play_count, al.name AS album, "
-            "ar.name AS album_artist FROM tracks t JOIN albums al ON al.id = t.album_id "
-            "JOIN artists ar ON ar.id = t.artist_id WHERE t.profile = ? AND t.video_id IS NOT NULL", (profile,)).fetchall()
+            "SELECT t.id, t.video_id, t.title, t.artist, t.year, t.duration_s, li.play_count, al.name AS album, "
+            "ar.name AS album_artist FROM library_items li JOIN tracks t ON t.id = li.track_id "
+            "JOIN albums al ON al.id = t.album_id "
+            "JOIN artists ar ON ar.id = t.artist_id WHERE li.profile = ? AND t.video_id IS NOT NULL", (profile,)).fetchall()
     from .ratings import Ratings
     r = Ratings(profile)
     out = []
@@ -150,7 +151,8 @@ def rebuild(profile: str, similar: Callable[[str], list[YTItem]] | None = None) 
     """Build this week's mixes for one profile. Returns how many there are."""
     week = _week()
     with connect() as conn:
-        have = {r[0] for r in conn.execute("SELECT video_id FROM tracks WHERE profile = ? AND video_id IS NOT NULL",
+        have = {r[0] for r in conn.execute("SELECT t.video_id FROM library_items li JOIN tracks t ON t.id = li.track_id "
+                                           "WHERE li.profile = ? AND t.video_id IS NOT NULL",
                                            (profile,))}
     mixes = plan(profile, week)
     now = time.time()
@@ -227,8 +229,7 @@ class MixMaker:
                 tags.tag_some(self.mb, self._stop)
             st = tags.status()
             ready = st["artists"] and st["looked_up"] >= 0.8 * st["artists"]
-            with connect() as conn:
-                profiles = [r[0] for r in conn.execute("SELECT DISTINCT profile FROM tracks")]
+            profiles = library.profiles()
             for p in profiles:
                 built = last_built(p)
                 if force or (ready and (built is None or time.time() - built > REBUILD_EVERY_S)):

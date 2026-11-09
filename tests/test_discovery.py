@@ -75,6 +75,8 @@ def add_library():
                          (name + ".opus", al, ar, name + " song", name, now, "v" + name[:5], now, plays))
             conn.execute("INSERT INTO artist_tags (name_key, name, mbid, tags, fetched_at) VALUES (?,?,?,?,?)",
                          (tags.norm(name), name, "mbid-" + name, json.dumps([["rock", 1]]), now))
+        conn.execute("INSERT OR IGNORE INTO library_items (profile, track_id, added_at, play_count) "
+                     "SELECT profile, id, created_at, play_count FROM tracks")  # each song in its owner's library
 
 
 def test_radio_chart_counts_a_week_of_plays():

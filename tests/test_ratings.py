@@ -65,6 +65,8 @@ def test_mixes_skip_banned_and_favour_liked():
             conn.execute("INSERT INTO tracks (profile, relpath, album_id, artist_id, title, artist, suffix, size, mtime, "
                          "video_id, created_at, play_count) VALUES ('josh',?,?,?,?,?,'opus',1,?,?,?,0)",
                          (f"{i}.opus", al, ar, f"T{i}", artist, now, f"v{i}", now))
+        conn.execute("INSERT OR IGNORE INTO library_items (profile, track_id, added_at, play_count) "
+                     "SELECT profile, id, created_at, play_count FROM tracks")  # each song in its owner's library
     ratings.set_rating("josh", "artist", "bad", "Bad", ratings.BAN)
     ratings.set_rating("josh", "artist", "liked", "Liked", ratings.UP)
     tracks = mixes._tracks("josh")

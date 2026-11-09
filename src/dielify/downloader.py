@@ -55,7 +55,9 @@ def download_track(adapter: YTMusicAdapter, video_id: str, settings: Settings,
                    profile: str | None = None, progress: ProgressFn | None = None,
                    overwrite: bool = False) -> DownloadResult:
     info = adapter.get_track(video_id)
-    library = settings.profile_library(profile)
+    from .library import library_for
+    lib = library_for(profile or settings.active_profile, settings)
+    library = lib.root  # the household's music store
     base = library / library_relpath(info)
 
     existing = find_existing(base)
@@ -78,8 +80,7 @@ def download_track(adapter: YTMusicAdapter, video_id: str, settings: Settings,
         shutil.move(str(audio), final)
     log.info("Saved %s", final)
     try:
-        from .library import Library
-        Library(profile or settings.active_profile, library).index_file(final)
+        lib.index_file(final)
     except Exception as e:  # the file is safe on disk; a later scan picks it up
         log.warning("Saved but not indexed (run `dielify library scan`): %s", e)
     return DownloadResult(final, info)

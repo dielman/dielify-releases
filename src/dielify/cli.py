@@ -231,9 +231,8 @@ def cmd_inspect(args) -> int:
 
 
 def _library(args):
-    from .library import Library
-    s = settings_mod.load()
-    return Library(_profile(args), s.profile_library(_profile(args)))
+    from .library import library_for
+    return library_for(_profile(args))
 
 
 def cmd_library_scan(args) -> int:
@@ -368,8 +367,8 @@ def _log_to_file() -> None:
 
 
 def _library_for(profile: str):
-    from .library import Library
-    return Library(profile, settings_mod.load().profile_library(profile))
+    from .library import library_for
+    return library_for(profile)
 
 
 # --- parser -----------------------------------------------------------------

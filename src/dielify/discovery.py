@@ -21,7 +21,7 @@ from collections import Counter
 from datetime import datetime, timedelta, timezone
 from typing import Callable
 
-from . import __version__, tags
+from . import __version__, library, tags
 from .httpclient import retrying_session
 from .library import connect
 from .yt_adapter import YTItem
@@ -162,8 +162,9 @@ def _top_artists(profile: str, n: int = 3) -> list[tuple[str, str]]:
     """(name, MusicBrainz id) of your most-played album artists that MusicBrainz knows."""
     with connect() as conn:
         rows = conn.execute(
-            "SELECT ar.name, SUM(t.play_count) plays FROM tracks t JOIN artists ar ON ar.id = t.artist_id "
-            "WHERE t.profile = ? GROUP BY ar.name ORDER BY plays DESC, COUNT(*) DESC LIMIT 25", (profile,)).fetchall()
+            "SELECT ar.name, SUM(li.play_count) plays FROM library_items li JOIN tracks t ON t.id = li.track_id "
+            "JOIN artists ar ON ar.id = t.artist_id "
+            "WHERE li.profile = ? GROUP BY ar.name ORDER BY plays DESC, COUNT(*) DESC LIMIT 25", (profile,)).fetchall()
         out = []
         for r in rows:
             m = conn.execute("SELECT mbid FROM artist_tags WHERE name_key = ?", (tags.norm(r["name"]),)).fetchone()
@@ -217,7 +218,9 @@ def rebuild(profile: str, call: Caller, http=None, stop: threading.Event | None 
         log.info("No ListenBrainz trending: %s", e)
 
     with connect() as conn:
-        have_artists = {tags.norm(r[0]) for r in conn.execute("SELECT name FROM artists WHERE profile = ?", (profile,))}
+        have_artists = {tags.norm(r[0]) for r in conn.execute(
+            "SELECT DISTINCT ar.name FROM library_items li JOIN tracks t ON t.id = li.track_id "
+            "JOIN artists ar ON ar.id = t.artist_id WHERE li.profile = ?", (profile,))}
     for name, mbid in _top_artists(profile):
         if stop.is_set():
             break
@@ -262,8 +265,7 @@ class Discovery:
         if settings_mod.load().offline or not self._busy.acquire(blocking=False):
             return
         try:
-            with connect() as conn:
-                profiles = [r[0] for r in conn.execute("SELECT DISTINCT profile FROM tracks")]
+            profiles = library.profiles()
             for p in profiles:
                 with connect() as conn:
                     last = conn.execute("SELECT MAX(updated_at) FROM discovery_lists WHERE profile = ?", (p,)).fetchone()[0]

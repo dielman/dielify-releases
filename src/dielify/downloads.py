@@ -17,7 +17,7 @@ from typing import Callable
 from . import credstore
 from . import settings as settings_mod
 from .downloader import download_track
-from .library import Library, connect
+from .library import connect, library_for
 from .yt_adapter import NotSignedIn, Offline, YTItem, YTMusicAdapter
 
 log = logging.getLogger(__name__)
@@ -53,6 +53,7 @@ class DownloadQueue:
         self._cancel: set[int] = set()
         self._signin_ok: dict[str, float] = {}  # profile -> when the sign-in was last confirmed
         self._paused: dict[str, tuple[float, str]] = {}  # profile or "*" -> (until, reason)
+        self._served: dict[str, float] = {}  # profile -> when its last download started (turns)
         self._lock = threading.Lock()
         self._thread: threading.Thread | None = None
 
@@ -79,7 +80,7 @@ class DownloadQueue:
                          "WHERE status IN ('downloading', 'processing')", (time.time(),))
         s = settings_mod.load()
         for r in rows:  # half-finished temp folders from the interrupted downloads
-            for tmp in s.profile_library(r["profile"]).glob(".dielify-dl-*"):
+            for tmp in library_for(r["profile"], s).root.glob(".dielify-dl-*"):
                 shutil.rmtree(tmp, ignore_errors=True)
 
     def signin_changed(self, profile: str) -> None:
@@ -103,8 +104,12 @@ class DownloadQueue:
         # priority = when it was marked "next" (ms); 0 = normal. "Next" ones go first, in
         # the order they were marked.
         priority = int(time.time() * 1000) if next_up else 0
-        lib = Library(profile, settings_mod.load().profile_library(profile))
+        lib = library_for(profile)
         in_library = lib.video_ids()
+        in_store = lib.store_video_ids()  # already on the PC for someone else: no download
+        for item in items:
+            if item.id in in_store and item.id not in in_library and lib.add(in_store[item.id], "download"):
+                in_library[item.id] = in_store[item.id]
         request_id = uuid.uuid4().hex[:12]
         now = time.time()
         # while the queue is paused (dead sign-in, offline), new requests wait with it
@@ -219,12 +224,22 @@ class DownloadQueue:
         """The next job that's due, and how long until the next one becomes due."""
         now = time.time()
         with connect() as conn:
-            row = conn.execute("SELECT * FROM downloads WHERE status = 'queued' AND not_before <= ? "
-                               f"ORDER BY {NEXT_ORDER} LIMIT 1", (now,)).fetchone()
+            # Each person's next song (in their own order); then people take turns, so one
+            # person's 200-song playlist doesn't hold up everyone else's songs.
+            rows = conn.execute(
+                "SELECT * FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY profile "
+                f"ORDER BY {NEXT_ORDER}) AS turn FROM downloads WHERE status = 'queued' "
+                "AND not_before <= ?) WHERE turn = 1", (now,)).fetchall()
             later = conn.execute("SELECT MIN(not_before) FROM downloads WHERE status = 'queued'"
                                  ).fetchone()[0]
         wait = max(1.0, (later or now + 60) - now)
-        return (dict(row) if row else None), min(wait, 60.0)
+        if not rows:
+            return None, min(wait, 60.0)
+        row = min(rows, key=lambda r: (self._served.get(r["profile"], 0.0), r["id"]))
+        self._served[row["profile"]] = time.monotonic()
+        job = dict(row)
+        job.pop("turn", None)
+        return job, min(wait, 60.0)
 
     def _run(self) -> None:
         while not self._stop.is_set():
@@ -309,7 +324,7 @@ class DownloadQueue:
         log.info("Downloading %s (%s), attempt %d", job["video_id"], job["title"], attempt)
         try:
             s = settings_mod.load()
-            lib = Library(profile, s.profile_library(profile))
+            lib = library_for(profile, s)
             res = download_track(adapter, job["video_id"], s, profile, self._progress_hook(job_id))
             track = lib.track_by_video(job["video_id"])
             track_id = track["id"] if track else lib.index_file(res.path)

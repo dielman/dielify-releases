@@ -26,7 +26,7 @@ from starlette.concurrency import run_in_threadpool
 
 from . import __version__, auth, playlists
 from . import settings as settings_mod
-from .library import CONTENT_TYPES, Library
+from .library import CONTENT_TYPES, Library, library_for
 from .tagging import read_cover
 
 log = logging.getLogger(__name__)
@@ -515,7 +515,7 @@ def _run(handler: Handler, method: str, params: Params, client: str):
     if method not in PUBLIC:
         user = _authenticate(params, client)
         s = settings_mod.load()
-        lib = Library(user.profile, s.profile_library(user.profile))
+        lib = library_for(user.profile, s)
     return handler(Ctx(params, user, lib))
 
 

@@ -20,7 +20,7 @@ import threading
 import time
 from typing import Callable
 
-from .library import Library, connect
+from .library import connect, library_for
 from .yt_adapter import YTItem
 
 log = logging.getLogger(__name__)
@@ -104,7 +104,7 @@ class Playlists:
         if self.queue is None or not items:
             return
         from . import settings as settings_mod
-        have = Library(profile, settings_mod.load().profile_library(profile)).video_ids()
+        have = library_for(profile).video_ids()
         missing, seen = [], set()
         for it in items:
             if it.id not in have and it.id not in seen:
