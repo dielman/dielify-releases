@@ -52,8 +52,10 @@ fun StatsScreen(vm: AppViewModel) {
                 periods.forEach { (p, label) ->
                     FilterChip(selected = period == p, onClick = { period = p }, label = { Text(label) })
                 }
+                FilterChip(selected = period == "recap", onClick = { period = "recap" }, label = { Text("Recaps") })
             }
-            Loaded(vm, period, { vm.server.stats(period) }) { st -> StatsBody(vm, st) }
+            if (period == "recap") RecapScreenBody(vm)
+            else Loaded(vm, period, { vm.server.stats(period) }) { st -> StatsBody(vm, st) }
         }
     }
 }
@@ -115,6 +117,87 @@ private fun StatsBody(vm: AppViewModel, st: Stats) {
                 Modifier.padding(16.dp), style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+    }
+}
+
+/** Recaps: year in review (from 1 December) and any month, from your play history. */
+@Composable
+private fun RecapScreenBody(vm: AppViewModel) {
+    var chosen by rememberSaveable { mutableStateOf<String?>(null) }
+    Loaded(vm, "recap-periods", { vm.server.recapPeriods() }) { periods ->
+        if (periods.isEmpty()) {
+            Text("Play some music first: recaps come from your play history.", Modifier.padding(24.dp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            return@Loaded
+        }
+        val period = chosen ?: periods.first().period
+        Column {
+            Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                periods.forEach { p -> FilterChip(selected = p.period == period, onClick = { chosen = p.period }, label = { Text(p.title) }) }
+            }
+            Loaded(vm, "recap-$period", { vm.server.recap(period) }) { r -> RecapBody(vm, r) }
+        }
+    }
+}
+
+@Composable
+private fun RecapBody(vm: AppViewModel, r: com.dielify.app.net.Recap) {
+    val clock = { h: Int -> "${if (h % 12 == 0) 12 else h % 12}${if (h < 12) "am" else "pm"}" }
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
+        item {
+            Text(r.title, Modifier.padding(start = 16.dp, top = 12.dp), style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold)
+        }
+        item {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Big(Modifier.weight(1f), hours(r.minutes), "of music")
+                    Big(Modifier.weight(1f), r.plays.toString(), "plays")
+                    Big(Modifier.weight(1f), r.songs.toString(), "songs")
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Big(Modifier.weight(1f), r.artists.toString(), "artists")
+                    Big(Modifier.weight(1f), r.daysListened.toString(), "days with music")
+                    Big(Modifier.weight(1f), r.longestStreakDays.toString(), "days in a row")
+                }
+            }
+        }
+        if (r.topSongs.isNotEmpty()) item { Heading("Your top songs") }
+        itemsIndexed(r.topSongs, key = { i, s -> "rs$i" + s.title }) { i, s ->
+            StatRow(vm, i + 1, s.coverUrl, s.thumbnail, s.title, s.artist ?: "", "${s.plays}×") {
+                s.trackId?.let { vm.playLibrary(r.topSongs.mapNotNull { it.trackId }, r.topSongs.take(i).count { it.trackId != null }) }
+            }
+        }
+        if (r.topArtists.isNotEmpty()) item { Heading("Your top artists") }
+        itemsIndexed(r.topArtists, key = { i, a -> "ra$i" + a.name }) { i, a ->
+            StatRow(vm, i + 1, a.coverUrl, null, a.name, "${a.minutes} min", "${a.plays}×") {
+                a.artistId?.let { vm.open(Screen.ArtistPage(it, a.name)) }
+            }
+        }
+        if (r.topGenres.isNotEmpty()) item {
+            Heading("Your genres")
+            Text(r.topGenres.joinToString(" · ") { it.name }, Modifier.padding(horizontal = 16.dp))
+        }
+        if (r.topAlbums.isNotEmpty()) item { Heading("Albums on repeat") }
+        itemsIndexed(r.topAlbums, key = { i, a -> "rl$i" + a.name }) { i, a ->
+            StatRow(vm, i + 1, a.coverUrl, null, a.name, a.artist ?: "", "${a.plays}×") {
+                a.albumId?.let { vm.open(Screen.AlbumPage(it, a.name)) }
+            }
+        }
+        item {
+            Heading("Moments")
+            Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                r.firstSong?.let {
+                    Text("First song: ${it.title}${it.artist?.let { a -> " by $a" } ?: ""}, " +
+                        DateFormat.getDateInstance().format(Date((it.startedAt * 1000).toLong())))
+                }
+                r.busiestDay?.let { Text("Biggest day: ${it.date}, ${it.minutes} minutes") }
+                r.favouriteHour?.let { Text("Favourite time: around ${clock(it)}") }
+                if (r.newArtists > 0) Text("${r.newArtists} new artist${if (r.newArtists == 1) "" else "s"}" +
+                    if (r.topNewArtists.isNotEmpty()) ", most of all " + r.topNewArtists.take(3).joinToString(", ") { it.name } else "")
+            }
         }
     }
 }

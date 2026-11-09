@@ -304,8 +304,12 @@ private fun HouseholdTab(vm: AppViewModel) {
 private fun SearchResults(vm: AppViewModel, query: String) {
     var debounced by rememberSaveable { mutableStateOf(query) }
     LaunchedEffect(query) { delay(300); debounced = query }
-    Loaded(vm, debounced, { vm.server.search(debounced) }) { r ->
-        if (r.artists.isEmpty() && r.albums.isEmpty() && r.tracks.isEmpty()) {
+    Loaded(vm, debounced, {
+        val found = vm.server.search(debounced)
+        val lyrics = if (debounced.length >= 2) runCatching { vm.server.lyricsSearch(debounced) }.getOrDefault(emptyList()) else emptyList()
+        found to lyrics.filter { h -> found.tracks.none { it.id == h.track.id } }
+    }) { (r, lyrics) ->
+        if (r.artists.isEmpty() && r.albums.isEmpty() && r.tracks.isEmpty() && lyrics.isEmpty()) {
             Box(Modifier.fillMaxSize(), Alignment.Center) { Text("Nothing in your library matches \"$debounced\"") }
             return@Loaded
         }
@@ -317,6 +321,15 @@ private fun SearchResults(vm: AppViewModel, query: String) {
             if (r.tracks.isNotEmpty()) item { Heading("Songs") }
             itemsIndexed(r.tracks, key = { _, t -> "tr${t.id}" }) { i, t ->
                 TrackRow(vm, t, showArtist = true) { vm.play(r.tracks, i) }
+            }
+            if (lyrics.isNotEmpty()) item { Heading("In the lyrics") }
+            itemsIndexed(lyrics, key = { _, h -> "ly${h.track.id}" }) { i, h ->
+                Column {
+                    TrackRow(vm, h.track, showArtist = true) { vm.play(lyrics.map { it.track }, i) }
+                    Text("\u201c${h.line}\u201d", Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic, maxLines = 2)
+                }
             }
         }
     }

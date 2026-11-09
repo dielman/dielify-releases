@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Dielify",
-    "version": "0.9.5"
+    "version": "0.9.6"
   },
   "paths": {
     "/api/auth/login": {
@@ -1526,6 +1526,145 @@
         }
       }
     },
+    "/api/recap/periods": {
+      "get": {
+        "tags": [
+          "stats"
+        ],
+        "summary": "Recap Periods",
+        "operationId": "recap_periods_api_recap_periods_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecapPeriods"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/recap": {
+      "get": {
+        "tags": [
+          "stats"
+        ],
+        "summary": "Get Recap",
+        "description": "Your recap: top songs, artists, albums and genres, minutes, streaks, firsts. Only\never your own (a kids account's recap is hers only).",
+        "operationId": "get_recap_api_recap_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "period",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 4,
+              "maxLength": 7,
+              "pattern": "^\\d{4}(-\\d{2})?$",
+              "title": "Period"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Recap"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/library/lyrics-search": {
+      "get": {
+        "tags": [
+          "library"
+        ],
+        "summary": "Lyrics Search",
+        "description": "Songs in your library whose lyrics have all these words (\"quoted words\" = that\nphrase). Only songs whose lyrics Dielify has kept (older songs fill in over time).",
+        "operationId": "lyrics_search_api_library_lyrics_search_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 2,
+              "maxLength": 200,
+              "title": "Q"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LyricsSearch"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/ratings": {
       "get": {
         "tags": [
@@ -2730,6 +2869,155 @@
             "HTTPBearer": []
           }
         ]
+      }
+    },
+    "/api/playlists/smart": {
+      "post": {
+        "tags": [
+          "playlists"
+        ],
+        "summary": "Create Smart",
+        "description": "A smart playlist: songs from your library picked by rules, kept up to date.",
+        "operationId": "create_smart_api_playlists_smart_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SmartPlaylistIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaylistDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/playlists/{playlist_id}/rules": {
+      "get": {
+        "tags": [
+          "playlists"
+        ],
+        "summary": "Smart Rules",
+        "operationId": "smart_rules_api_playlists__playlist_id__rules_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "playlist_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Playlist Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SmartPlaylistIn"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "playlists"
+        ],
+        "summary": "Set Smart Rules",
+        "operationId": "set_smart_rules_api_playlists__playlist_id__rules_put",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "playlist_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Playlist Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SmartPlaylistIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaylistDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/playlists/{playlist_id}": {
@@ -5043,7 +5331,7 @@
             },
             "type": "array",
             "title": "More Like",
-            "description": "New to you: like your most-played songs (from YouTube Music)"
+            "description": "Playlists: YouTube Music's mix of each of your most-played songs (open with /yt/playlist/{id})"
           },
           "now_mix": {
             "anyOf": [
@@ -5522,6 +5810,40 @@
           "text"
         ],
         "title": "Lyrics"
+      },
+      "LyricsHit": {
+        "properties": {
+          "track": {
+            "$ref": "#/components/schemas/Track"
+          },
+          "line": {
+            "type": "string",
+            "title": "Line",
+            "description": "The line of the lyrics that matched best"
+          }
+        },
+        "type": "object",
+        "required": [
+          "track",
+          "line"
+        ],
+        "title": "LyricsHit"
+      },
+      "LyricsSearch": {
+        "properties": {
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/LyricsHit"
+            },
+            "type": "array",
+            "title": "Results"
+          }
+        },
+        "type": "object",
+        "required": [
+          "results"
+        ],
+        "title": "LyricsSearch"
       },
       "Me": {
         "properties": {
@@ -6190,7 +6512,7 @@
           "kind": {
             "type": "string",
             "title": "Kind",
-            "description": "user = your playlist, mix = made by Dielify weekly",
+            "description": "user = your playlist, mix = made by Dielify weekly, smart = picked by rules (GET/PUT /playlists/{id}/rules)",
             "default": "user"
           },
           "description": {
@@ -6496,6 +6818,283 @@
         ],
         "title": "RatingList"
       },
+      "Recap": {
+        "properties": {
+          "period": {
+            "type": "string",
+            "title": "Period",
+            "description": "2026 (the year) or 2026-11 (a month)"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "description": "\"Your 2026\" or \"November 2026\""
+          },
+          "since": {
+            "type": "number",
+            "title": "Since"
+          },
+          "until": {
+            "type": "number",
+            "title": "Until"
+          },
+          "minutes": {
+            "type": "integer",
+            "title": "Minutes"
+          },
+          "plays": {
+            "type": "integer",
+            "title": "Plays"
+          },
+          "songs": {
+            "type": "integer",
+            "title": "Songs"
+          },
+          "artists": {
+            "type": "integer",
+            "title": "Artists"
+          },
+          "days_listened": {
+            "type": "integer",
+            "title": "Days Listened"
+          },
+          "longest_streak_days": {
+            "type": "integer",
+            "title": "Longest Streak Days",
+            "description": "Most days in a row with music"
+          },
+          "busiest_day": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecapDay"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "favourite_hour": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Favourite Hour",
+            "description": "0-23, local time"
+          },
+          "top_songs": {
+            "items": {
+              "$ref": "#/components/schemas/StatSong"
+            },
+            "type": "array",
+            "title": "Top Songs"
+          },
+          "top_artists": {
+            "items": {
+              "$ref": "#/components/schemas/StatArtist"
+            },
+            "type": "array",
+            "title": "Top Artists"
+          },
+          "top_albums": {
+            "items": {
+              "$ref": "#/components/schemas/StatAlbum"
+            },
+            "type": "array",
+            "title": "Top Albums"
+          },
+          "top_genres": {
+            "items": {
+              "$ref": "#/components/schemas/RecapGenre"
+            },
+            "type": "array",
+            "title": "Top Genres"
+          },
+          "first_song": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecapFirst"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The first song you played in the period"
+          },
+          "new_artists": {
+            "type": "integer",
+            "title": "New Artists",
+            "description": "Artists you heard for the first time"
+          },
+          "top_new_artists": {
+            "items": {
+              "$ref": "#/components/schemas/StatArtist"
+            },
+            "type": "array",
+            "title": "Top New Artists"
+          }
+        },
+        "type": "object",
+        "required": [
+          "period",
+          "title",
+          "since",
+          "until",
+          "minutes",
+          "plays",
+          "songs",
+          "artists",
+          "days_listened",
+          "longest_streak_days",
+          "busiest_day",
+          "favourite_hour",
+          "top_songs",
+          "top_artists",
+          "top_albums",
+          "top_genres",
+          "first_song",
+          "new_artists",
+          "top_new_artists"
+        ],
+        "title": "Recap"
+      },
+      "RecapDay": {
+        "properties": {
+          "date": {
+            "type": "string",
+            "title": "Date"
+          },
+          "minutes": {
+            "type": "integer",
+            "title": "Minutes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "date",
+          "minutes"
+        ],
+        "title": "RecapDay"
+      },
+      "RecapFirst": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "artist": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artist"
+          },
+          "track_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Track Id"
+          },
+          "cover_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cover Url"
+          },
+          "started_at": {
+            "type": "number",
+            "title": "Started At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "artist",
+          "track_id",
+          "cover_url",
+          "started_at"
+        ],
+        "title": "RecapFirst"
+      },
+      "RecapGenre": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "plays": {
+            "type": "integer",
+            "title": "Plays"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "plays"
+        ],
+        "title": "RecapGenre"
+      },
+      "RecapPeriod": {
+        "properties": {
+          "period": {
+            "type": "string",
+            "title": "Period"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "year",
+              "month"
+            ],
+            "title": "Kind"
+          }
+        },
+        "type": "object",
+        "required": [
+          "period",
+          "title",
+          "kind"
+        ],
+        "title": "RecapPeriod"
+      },
+      "RecapPeriods": {
+        "properties": {
+          "periods": {
+            "items": {
+              "$ref": "#/components/schemas/RecapPeriod"
+            },
+            "type": "array",
+            "title": "Periods",
+            "description": "Newest first. A year shows from 1 December (or once it's over)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "periods"
+        ],
+        "title": "RecapPeriods"
+      },
       "Removed": {
         "properties": {
           "removed": {
@@ -6670,6 +7269,95 @@
           "items"
         ],
         "title": "Shelf"
+      },
+      "SmartPlaylistIn": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 150,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "rules": {
+            "$ref": "#/components/schemas/SmartRules"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "rules"
+        ],
+        "title": "SmartPlaylistIn"
+      },
+      "SmartRule": {
+        "properties": {
+          "field": {
+            "type": "string",
+            "title": "Field",
+            "description": "artist | album | title | genre | plays | year | length_s | last_played | added | rating"
+          },
+          "op": {
+            "type": "string",
+            "title": "Op",
+            "description": "text: is, is_not, contains, not_contains; numbers: gt, lt, eq; last_played/added: within, not_within (days); rating: is"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "title": "Value",
+            "description": "text, a number (days for last_played/added), or up/down/none for rating"
+          }
+        },
+        "type": "object",
+        "required": [
+          "field",
+          "op",
+          "value"
+        ],
+        "title": "SmartRule"
+      },
+      "SmartRules": {
+        "properties": {
+          "match": {
+            "type": "string",
+            "title": "Match",
+            "description": "all = every rule, any = at least one",
+            "default": "all"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/SmartRule"
+            },
+            "type": "array",
+            "maxItems": 20,
+            "minItems": 1,
+            "title": "Rules"
+          },
+          "sort": {
+            "type": "string",
+            "title": "Sort",
+            "description": "random (new order daily) | most_played | least_played | recently_added | recently_played | title | artist | year",
+            "default": "random"
+          },
+          "limit": {
+            "type": "integer",
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "default": 100
+          }
+        },
+        "type": "object",
+        "required": [
+          "rules"
+        ],
+        "title": "SmartRules"
       },
       "SongIn": {
         "properties": {

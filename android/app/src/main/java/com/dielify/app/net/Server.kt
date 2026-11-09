@@ -322,6 +322,11 @@ class Server(private val context: Context, private val accounts: AccountStore) {
     suspend fun follow(body: FollowIn): List<Follow> = json.decodeFromString(FollowList.serializer(),
         send("PUT", "api/follows", json.encodeToString(FollowIn.serializer(), body))).follows
     suspend fun taste(): List<TasteItem> = get<TasteList>("api/taste").items
+    /** Library songs whose lyrics have these words. */
+    suspend fun lyricsSearch(q: String): List<LyricsHit> =
+        get<LyricsSearch>("api/library/lyrics-search?q=" + java.net.URLEncoder.encode(q, "UTF-8")).results
+    suspend fun recapPeriods(): List<RecapPeriod> = get<RecapPeriods>("api/recap/periods").periods
+    suspend fun recap(period: String): Recap = get("api/recap?period=$period")
     suspend fun setTaste(body: TasteIn): List<TasteItem> = json.decodeFromString(TasteList.serializer(),
         send("PUT", "api/taste", json.encodeToString(TasteIn.serializer(), body))).items
     suspend fun lyrics(query: String): Lyrics = get("api/lyrics?$query")

@@ -52,6 +52,56 @@ data class TasteIn(val kind: String, val key: String, val name: String, val out:
 @Serializable
 data class TasteList(val items: List<TasteItem>)
 
+// 0.9.6 Library power: search by lyrics, recaps.
+
+@Serializable
+data class LyricsHit(val track: Track, val line: String)
+
+@Serializable
+data class LyricsSearch(val results: List<LyricsHit>)
+
+@Serializable
+data class RecapGenre(val name: String, val plays: Int)
+
+@Serializable
+data class RecapDay(val date: String, val minutes: Int)
+
+@Serializable
+data class RecapFirst(
+    val title: String,
+    val artist: String? = null,
+    @SerialName("track_id") val trackId: Long? = null,
+    @SerialName("cover_url") val coverUrl: String? = null,
+    @SerialName("started_at") val startedAt: Double,
+)
+
+@Serializable
+data class Recap(
+    val period: String,
+    val title: String,
+    val minutes: Int,
+    val plays: Int,
+    val songs: Int,
+    val artists: Int,
+    @SerialName("days_listened") val daysListened: Int,
+    @SerialName("longest_streak_days") val longestStreakDays: Int,
+    @SerialName("busiest_day") val busiestDay: RecapDay? = null,
+    @SerialName("favourite_hour") val favouriteHour: Int? = null,
+    @SerialName("top_songs") val topSongs: List<StatSong>,
+    @SerialName("top_artists") val topArtists: List<StatArtist>,
+    @SerialName("top_albums") val topAlbums: List<StatAlbum>,
+    @SerialName("top_genres") val topGenres: List<RecapGenre>,
+    @SerialName("first_song") val firstSong: RecapFirst? = null,
+    @SerialName("new_artists") val newArtists: Int,
+    @SerialName("top_new_artists") val topNewArtists: List<StatArtist>,
+)
+
+@Serializable
+data class RecapPeriod(val period: String, val title: String, val kind: String)
+
+@Serializable
+data class RecapPeriods(val periods: List<RecapPeriod>)
+
 /**
  * Songs and playlists left out of your taste (see dielify/taste.py): they still play, but
  * don't shape For you, mixes, the time-of-day mix or new releases. Fetched when the app

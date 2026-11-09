@@ -121,7 +121,7 @@ def test_recap():
         lib = library.library_for("josh")
         r = c.get("/api/recap", headers=h, params={"period": "2025-11"}).json()
         assert r["title"] == "November 2025" and r["plays"] == 11 and r["songs"] == 2
-        assert [s["title"] for s in r["top_songs"]] == ["T s1", "T s3"]
+        assert [s["title"] for s in r["top_songs"]] == ["Song One", "Other Song"]  # library titles
         assert r["days_listened"] == 4 and r["longest_streak_days"] == 3 and r["favourite_hour"] == 8
         assert r["new_artists"] == 1 and r["top_new_artists"][0]["name"] == "Someone"
         assert r["first_song"]["title"] == "T s1"

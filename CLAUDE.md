@@ -132,7 +132,7 @@ src/dielify/
 | 6 | Android app | Find, request and listen on the road | **Done** 2026-11-08 — closed by Josh before the car test ("assume it works"); Android Auto untested |
 | 7 | Polish (scope set by Josh 8 Nov) | Backups to E:, signed phone release with in-app updates, download-next, playlists, music-video fix | **Done** 2026-11-08 — 0.6.0 published; phone self-update to be confirmed with the first Phase 8 release (Josh) |
 | 8 | Listening features (Josh, 8 Nov) | 1 instant play + download, 2 play history + stats, 4 two-way playlist sync, 3 Dielify-made genre/vibe playlists, 5 outside discovery, 6 remote control between devices | In progress (branch `phase-8`) |
-| 9 | Road to 1.0 (Josh, 9 Nov) | Releases 0.9.1-0.9.9 in `docs/ROADMAP.md`: household + kids accounts first, then discovery, library, sound, phone, together, hardening | In progress: 0.9.5 published |
+| 9 | Road to 1.0 (Josh, 9 Nov) | Releases 0.9.1-0.9.9 in `docs/ROADMAP.md`: household + kids accounts first, then discovery, library, sound, phone, together, hardening | In progress: 0.9.5 published, 0.9.6 built |
 
 ## Current status
 
@@ -504,6 +504,21 @@ src/dielify/
   yt_adapter.playlist loads them via song_mix = get_watch_playlist radio; checked live: 100 songs). Josh:
   **never shelves of single songs** in discovery. These fixes and the freeze fix ship WITH 0.9.6 Library
   power (feature release numbers are never used for fix-only releases).
+
+- 0.9.6 Library power built (9 Nov; version 0.9.6, 174 tests, PC checked in the browser on a dev copy, phone
+  compiles, **not published**, nothing tried on Josh's devices). Includes every fix since 0.9.5 (above).
+  - Smart playlists: `smart.py`, playlists.kind='smart' + playlists.rules (JSON; migration adds the column),
+    read-only, songs worked out again when read and older than 5 min (playlists.all_playlists / get call
+    smart.refresh_stale). Rules: artist/album/title/genre (text ops), plays/year/length_s (gt/lt/eq),
+    last_played/added (within/not_within days), rating (up/down/none); match all/any; sort; limit <= 1000.
+    Only songs with a video id. POST /api/playlists/smart, GET/PUT /api/playlists/{id}/rules. PC: rule builder
+    (Library > Playlists > Smart playlist, Edit rules on its page); phone shows them (rules edited on the PC).
+  - Search by lyrics: FTS5 table lyrics_fts (lyrics.store keeps it; older lyrics indexed on first search),
+    GET /api/library/lyrics-search. lyrics.Backfill thread (youtube.background, wait_s 600, one song every
+    5 s, first run 10 min after start) fetches lyrics for older songs. PC + phone library search show
+    "In the lyrics" with the matching line.
+  - Recaps: `recap.py`, GET /api/recap?period=2026|2026-11, GET /api/recap/periods (a year from 1 Dec or once
+    over). Only your own. PC: Stats > Recaps; phone: Stats > Recaps chip.
 
 ## Backlog (Josh, 8 Nov; after Phase 8 item 6)
 

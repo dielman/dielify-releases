@@ -54,7 +54,8 @@ import com.dielify.app.net.PlaylistEntry
 import com.dielify.app.net.PlaylistSummary
 import com.dielify.app.net.SongIn
 
-private fun describe(p: PlaylistSummary): String = if (p.kind == "mix") "${p.count} songs · ${p.description ?: "Dielify mix"} · new every week" else listOfNotNull(
+private fun describe(p: PlaylistSummary): String = if (p.kind == "mix") "${p.count} songs · ${p.description ?: "Dielify mix"} · new every week"
+else if (p.kind == "smart") "${p.count} songs · smart: ${p.description ?: ""} (change the rules on the PC)" else listOfNotNull(
     "${p.count} songs",
     when {
         p.readOnly -> "from YouTube Music (one way)"

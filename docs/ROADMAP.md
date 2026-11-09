@@ -140,7 +140,7 @@ Built only from Dielify's own data, filtered by the parent's controls:
 - **Time-of-day mix**: changes through the day, from what you play at each hour.
 - **Leave out of my taste**: mark a playlist or song so it doesn't shape your recommendations.
 
-## 0.9.6: Library power
+## 0.9.6: Library power (built 9 Nov, not published)
 
 - **Smart playlists**: rule-based lists that keep themselves up to date. Rules can use
   genre, artist, decade, play count, last played, rating, added date and length. The PC
