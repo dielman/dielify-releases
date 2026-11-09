@@ -463,11 +463,19 @@ class YTMusicAdapter:
     # --- discovery (Phase 3) -------------------------------------------------------
 
     def _call(self, what: str, fn, *args, **kwargs):
-        self._pace()
-        try:
-            return fn(*args, **kwargs)
-        except Exception as e:
-            raise YouTubeError(f"{what} failed: {_short_error(e)}") from e
+        for attempt in (1, 2):
+            self._pace()
+            try:
+                return fn(*args, **kwargs)
+            except json.JSONDecodeError as e:
+                # YouTube sometimes answers with an empty page for a minute or so (seen 9 Nov
+                # 2026 on the home feed and watch playlists); one more try usually works
+                if attempt == 1:
+                    time.sleep(3)
+                    continue
+                raise YouTubeError(f"{what} failed: YouTube sent an empty answer, try again in a minute") from e
+            except Exception as e:
+                raise YouTubeError(f"{what} failed: {_short_error(e)}") from e
 
     def home(self, shelves: int = 6) -> list[Shelf]:
         """The personalised home feed: mixes, playlists, new releases..."""

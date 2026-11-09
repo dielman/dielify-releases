@@ -9,6 +9,7 @@ for that device; send it as "Authorization: Bearer <token>" on every other call.
 
 from __future__ import annotations
 
+import logging
 import threading
 import time
 from typing import Literal
@@ -24,6 +25,8 @@ from .downloads import DownloadQueue
 from .leveller import gain_db
 from .library import CONTENT_TYPES, Library, connect, library_for, signin_of
 from .yt_adapter import NotSignedIn, Offline, YouTubeError, YTItem, YTMusicAdapter
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api")
 lockout = auth.Lockout()
@@ -354,6 +357,9 @@ def revoke_device(device_id: int, s: Session = Depends(session)) -> Response:
 
 # --- discovery + YouTube catalogue ------------------------------------------------
 
+_last_home: dict[str, list] = {}
+
+
 @router.get("/discover/home", response_model=HomeFeed, tags=["discover"])
 def discover_home(shelves: int = Query(6, ge=1, le=20), s: Session = Depends(session)) -> HomeFeed:
     """YouTube Music's personalised home feed: mixes, playlists, new releases. Empty for a
@@ -362,7 +368,17 @@ def discover_home(shelves: int = Query(6, ge=1, le=20), s: Session = Depends(ses
         from . import kids_home
         return HomeFeed(shelves=[Shelf(title=sh.title, items=_items(sh.items, s.lib))
                                  for sh in kids_home.shelves(s.lib, lambda fn, *a: youtube.call(s.lib.profile, fn, *a))])
-    feed = youtube.call(s.user.profile, "home", shelves)
+    try:
+        feed = youtube.call(s.user.profile, "home", shelves)
+        _last_home[s.user.profile.lower()] = feed
+    except HTTPException as e:
+        if e.status_code != status.HTTP_502_BAD_GATEWAY:
+            raise
+        # YouTube hiccup: show the last home feed that loaded (this run of the server)
+        feed = _last_home.get(s.user.profile.lower())
+        if feed is None:
+            raise
+        log.warning("Home feed failed for %s; showing the last one that loaded", s.user.profile)
     r = _ratings(s)
     return HomeFeed(shelves=[Shelf(title=sh.title, items=_items(r.arrange(sh.items), s.lib)) for sh in feed])
 
