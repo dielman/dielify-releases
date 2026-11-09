@@ -264,7 +264,6 @@ fun NowPlayingScreen(vm: AppViewModel) {
             Row(Modifier.fillMaxWidth().padding(bottom = 8.dp), horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically) {
                 SleepButton(vm)
-                LyricsButton(vm)
                 IconButton(onClick = { vm.radioFromCurrent() }) { Icon(Icons.Filled.Radio, "Start radio from this song") }
                 IconButton(onClick = { vm.pickPlaylistForCurrent() }) { Icon(Icons.AutoMirrored.Filled.PlaylistAdd, "Add to playlist") }
                 UpNextButton(vm)

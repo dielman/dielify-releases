@@ -601,9 +601,17 @@ src/dielify/
     instant (the 9 Nov freeze fix holds); Discover home/charts/endless take 15-60 s and some 502. Cause found in
     code: one YouTube call at a time per sign-in, and `_YouTube.background` counts "quiet" from the START of the
     last person's call, so background jobs (lyrics Backfill every 5 s through ~2,500 older songs, release watcher,
-    later artwork photos) slip in between people's calls (Lock isn't fair). Not fixed yet; offered to Josh. Also
-    seen: Josh's PC served /ui/logo.svg at 07:06, so it runs a build with the 0.9.9 UI (likely dist\ 0.9.8 rebuilt
-    06:09); ask him which before assuming.
+    later artwork photos) slip in between people's calls (Lock isn't fair). Josh's PC runs the dist\ installer
+    (0.9.8 number, 0.9.9 UI, built 10 Nov 06:09).
+  - Josh (10 Nov): **lyrics removed entirely** ("prioritise the music experience, not a side feature") and
+    **Discover cached 10 min**. Built (not released): lyrics.py, /api/lyrics, /api/library/lyrics-search, the
+    Backfill thread, lyrics at download time, yt_adapter.lyrics, PC lyrics page + mic button + "In the lyrics",
+    phone LyricsStore/LyricsSheet/prefetch/search all gone; library._migrate drops tables lyrics + lyrics_fts; the
+    phone deletes filesDir/lyrics on start. Kids "Check words" now checks titles only (field still lyrics_check).
+    PC Now playing's right half shows Up next instead. custom_api._cached_feed: home + charts kept 10 min
+    (FEED_FRESH_S), up to 1 h old shown at once while a fresh copy loads in the background, YouTube 502 -> last
+    copy; offline mode bypasses it. _YouTube: background jobs wait while any person's call runs or waits, then
+    QUIET_S (3 s) after it ends; person calls over 5 s are logged ("YouTube <fn> for <profile> took N s").
 
 ## Backlog (Josh, 8 Nov; after Phase 8 item 6)
 
@@ -685,6 +693,9 @@ src/dielify/
 - Wake-on-LAN wanted?
 
 ## Decisions log
+
+- 2026-11-10 (Josh): **no lyrics in Dielify** (removed from server, PC and phone; don't bring them back
+  without asking). Discover's YouTube parts are cached for 10 minutes.
 
 - 2026-11-09 (Josh): **the code lives in github.com/dielman/dielify-releases** (remote `origin`,
   PUBLIC), the same repo the releases come from. First push 9 Nov: main (replaced the README-only

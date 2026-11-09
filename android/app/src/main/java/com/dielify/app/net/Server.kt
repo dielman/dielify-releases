@@ -324,9 +324,6 @@ class Server(private val context: Context, private val accounts: AccountStore) {
     suspend fun taste(): List<TasteItem> = get<TasteList>("api/taste").items
     /** A 12-hour "play only" key for a speaker (Chromecast / Nest). */
     suspend fun castToken(): CastToken = json.decodeFromString(CastToken.serializer(), send("POST", "api/cast/token"))
-    /** Library songs whose lyrics have these words. */
-    suspend fun lyricsSearch(q: String): List<LyricsHit> =
-        get<LyricsSearch>("api/library/lyrics-search?q=" + java.net.URLEncoder.encode(q, "UTF-8")).results
     suspend fun recapPeriods(): List<RecapPeriod> = get<RecapPeriods>("api/recap/periods").periods
     suspend fun recap(period: String): Recap = get("api/recap?period=$period")
     // --- 0.9.8 Together ---
@@ -352,7 +349,6 @@ class Server(private val context: Context, private val accounts: AccountStore) {
     suspend fun endJam() { send("DELETE", "api/jam") }
     suspend fun setTaste(body: TasteIn): List<TasteItem> = json.decodeFromString(TasteList.serializer(),
         send("PUT", "api/taste", json.encodeToString(TasteIn.serializer(), body))).items
-    suspend fun lyrics(query: String): Lyrics = get("api/lyrics?$query")
     /** Songs to keep on the phone automatically (Settings). */
     suspend fun keepList(liked: Boolean, top: Int, playlists: Set<Long>): List<Track> =
         get<TrackList>("api/keep?liked=$liked&top=$top&playlists=" + playlists.joinToString(",")).tracks

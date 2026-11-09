@@ -71,12 +71,10 @@ def test_blocked_artists_songs_titles_and_albums(kid):
     assert [i.id for i in f.items(items)] == ["b4", "MPREb_y"]
 
 
-def test_lyrics(kid):
-    from dielify import lyrics
-    lyrics.store("l1", {"lines": None, "text": "la la fucking la", "source": "LRCLIB"})
-    lyrics.store("l2", {"lines": None, "text": "la la la", "source": "LRCLIB"})
+def test_words_in_titles(kid):
     f = kids.KidFilter(kid)
-    assert [i.id for i in f.items([song("l1", explicit=False), song("l2", explicit=False)])] == ["l2"]
+    items = [song("l1", "La la fucking la", explicit=False), song("l2", "La la la", explicit=False)]
+    assert [i.id for i in f.items(items)] == ["l2"]
 
 
 def test_quiet_hours_over_midnight():

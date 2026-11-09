@@ -114,7 +114,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
     val showDevices = MutableStateFlow(false)
     val showUpNext = MutableStateFlow(false)
-    val showLyrics = MutableStateFlow(false)
     fun sleepAtSongEnd() {
         val c = controller ?: return
         if (c.currentMediaItem == null) { messages.tryEmit("Nothing playing"); return }

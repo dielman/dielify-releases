@@ -335,18 +335,6 @@ class DownloadQueue:
                                  "status = 'queued'", (profile,))
         return adapter
 
-    @staticmethod
-    def _fetch_lyrics(adapter, video_id: str, info) -> None:
-        """Keep the song's lyrics with it (so they show offline). Never fails the download."""
-        from . import lyrics
-        try:
-            if lyrics.cached(video_id)[0]:
-                return
-            yt = (lambda: adapter.lyrics(video_id, info.lyrics_id)) if info.lyrics_id else None
-            lyrics.find(video_id, yt, info.artist, info.title, info.album, info.duration_s)
-        except Exception as e:  # noqa: BLE001
-            log.info("Lyrics for %s not kept: %s", video_id, e)
-
     def _process(self, job: dict) -> None:
         job_id, profile = job["id"], job["profile"]
         if settings_mod.load().offline:
@@ -385,19 +373,9 @@ class DownloadQueue:
             track_id = track["id"] if track else lib.index_file(res.path)
             if job_id in self._cancel:  # cancelled at the very end: keep the file, report it
                 log.info("Job %d finished after cancel was requested", job_id)
-            if lib.role == "child":  # the lyrics decide too: kept first, then checked
-                from . import kids
-                self._fetch_lyrics(adapter, job["video_id"], res.info)
-                c = kids.load(profile)
-                if c.lyrics_check and kids.lyrics_bad(job["video_id"], c.extra_words):
-                    lib.remove_track(track_id)  # out of her library (a child never deletes files)
-                    self._set(job_id, status="failed", error="Not allowed in your account (language in the lyrics)",
-                              title=res.info.title, artist=res.info.artist, album=res.info.album)
-                    return
             self._set(job_id, status="done", progress=1.0, track_id=track_id, error=None,
                       title=res.info.title, artist=res.info.artist, album=res.info.album)
             log.info("Done %s -> track %s", job["video_id"], track_id)
-            self._fetch_lyrics(adapter, job["video_id"], res.info)
         except Exception as e:
             if isinstance(e, Offline):  # switched offline mid-download: wait, don't count it
                 self._set(job_id, status="queued", attempts=attempt - 1, progress=0.0)

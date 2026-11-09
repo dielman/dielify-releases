@@ -33,8 +33,6 @@ class DielifyApp : Application(), SingletonImageLoader.Factory {
     /** This phone hosting a Jam (the playback service plays it). */
     val jamHost by lazy { com.dielify.app.playback.JamHost(server) }
     /** Never-ending discovery play (Discover). */
-    /** Lyrics, kept on the phone once seen (Now playing > lyrics). */
-    val lyrics by lazy { com.dielify.app.net.LyricsStore(this, server) }
     /** Sleep timer (Now playing); the playback service pauses. */
     val sleep by lazy { com.dielify.app.playback.SleepTimer() }
     /** "Even out volume" (Settings). */
@@ -45,6 +43,8 @@ class DielifyApp : Application(), SingletonImageLoader.Factory {
 
     override fun onCreate() {
         super.onCreate()
+        // Lyrics were removed in 0.9.9: drop what 0.9.0-0.9.8 kept on the phone.
+        java.io.File(filesDir, "lyrics").takeIf { it.exists() }?.deleteRecursively()
         accounts = AccountStore(this)
         server = Server(this, accounts)
         saved = SavedSongs(this)

@@ -132,10 +132,6 @@ object MediaItems {
         return if (m.groupValues[2] == "stream") saved.audioFile(id) else saved.coverFile(id)
     }
 
-    fun lyricsSong(m: MediaItem) = com.dielify.app.net.LyricsStore.Song(
-        videoId(m), trackId(m), m.mediaMetadata.title?.toString() ?: "", m.mediaMetadata.artist?.toString(),
-        m.mediaMetadata.albumTitle?.toString(), m.mediaMetadata.durationMs?.let { (it / 1000).toInt() })
-
     fun trackId(item: MediaItem?): Long? = item?.mediaId?.takeIf { it.startsWith(PREFIX) }?.removePrefix(PREFIX)?.toLongOrNull()
 
     /** A song sent by another device (remote control). */
@@ -259,10 +255,6 @@ class PlaybackService : MediaLibraryService() {
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 dielify.endless.onTransition(player, mediaItem, scope)
                 applyVolume()
-                // lyrics for this song and the next two, ready for when there's no signal
-                val i = player.currentMediaItemIndex
-                val ahead = (i until minOf(i + 3, player.mediaItemCount)).map { player.getMediaItemAt(it) }
-                scope.launch { ahead.forEach { dielify.lyrics.get(MediaItems.lyricsSong(it)) } }
                 val m = mediaItem ?: return
                 if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT) return
                 if (dielify.ratings.banned(MediaItems.videoId(m), MediaItems.trackId(m), m.mediaMetadata.artist?.toString())) {

@@ -186,19 +186,6 @@ CREATE TABLE IF NOT EXISTS ratings (
     PRIMARY KEY (profile, kind, key)
 );
 
--- Lyrics (lyrics.py), kept so they show offline. key = video id, or tr-<track id> for
--- library songs without one. body = JSON {"lines": [[ms, text], ...] | null, "text": ...};
--- NULL = looked, none found (looked again after a while).
-CREATE TABLE IF NOT EXISTS lyrics (
-    key        TEXT PRIMARY KEY,
-    body       TEXT,
-    source     TEXT,
-    fetched_at REAL NOT NULL
-);
-
--- Full-text index of the lyrics above (0.9.6 search by lyrics; lyrics.index_text).
-CREATE VIRTUAL TABLE IF NOT EXISTS lyrics_fts USING fts5(key UNINDEXED, text, tokenize = 'unicode61 remove_diacritics 2');
-
 -- Songs never-ending discovery play brought in (explore.py): thumbs down deletes these.
 CREATE TABLE IF NOT EXISTS explore_songs (
     profile  TEXT NOT NULL,
@@ -373,6 +360,9 @@ def _migrate(conn: sqlite3.Connection) -> None:
     tcols = {r[1] for r in conn.execute("PRAGMA table_info(tracks)")}
     if "loudness" not in tcols:  # 0.9: volume levelling (leveller.py); NULL = not measured yet
         conn.execute("ALTER TABLE tracks ADD COLUMN loudness REAL")
+    # lyrics were removed in 0.9.9 (Josh): drop what 0.9.0-0.9.8 kept
+    conn.execute("DROP TABLE IF EXISTS lyrics_fts")
+    conn.execute("DROP TABLE IF EXISTS lyrics")
     if conn.execute("PRAGMA user_version").fetchone()[0] < 1:
         _to_households(conn)
 

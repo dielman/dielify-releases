@@ -87,7 +87,6 @@ fun App(vm: AppViewModel) {
     AddToPlaylistDialog(vm)
     DevicePicker(vm)
     UpNextSheet(vm)
-    LyricsSheet(vm)
     CompositionLocalProvider(LocalSnackbar provides snackbar) { Box(Modifier.fillMaxSize()) {
         androidx.compose.animation.AnimatedContent(
             targetState = stack.size to stack.last(),

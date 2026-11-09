@@ -85,7 +85,7 @@ def test_background_check_waits_for_people(monkeypatch):
     yt.background("josh", "search_items", "y", "song", 1)      # waits ~3 s for a quiet moment
     assert time.monotonic() - started >= 2.5
     assert [q for q in calls if q in ("x", "y", "z")] == ["x", "y"]  # (other tests' background jobs may search too)
-    yt._last_person = 0.0
+    yt._quiet_since = 0.0
     started = time.monotonic()
     yt.background("josh", "search_items", "z", "song", 1)      # nobody busy: straight away
     assert time.monotonic() - started < 1

@@ -4,8 +4,8 @@ goes through (search, radio, discovery play, Household, downloads, instant play)
 Explicit songs: YouTube marks them ("E" badge) in search, album and playlist results, and
 those marks are remembered here (table yt_flags). Radio results carry no mark, so a song
 with no mark yet is looked up once (a YouTube search for it) and the answer remembered.
-Until a song has been checked, a child doesn't get it. Lyrics: songs whose stored lyrics
-(or titles) contain words on the list are blocked too, when that control is on.
+Until a song has been checked, a child doesn't get it. Songs whose titles contain words on
+the list are blocked too, when that control is on.
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ Call = Callable[..., object]  # call("search_items", q, "song", 5) -> list[YTIte
 class Controls:
     explicit: str = "block"            # block | allow
     clean_versions: bool = True        # when blocked: offer the clean version instead, if YouTube has one
-    lyrics_check: bool = True          # also block songs whose lyrics / title use words on the list
+    lyrics_check: bool = True          # also block songs whose title uses words on the list (name kept from when lyrics were checked too)
     extra_words: list[str] = field(default_factory=list)
     downloads: str = "auto"            # auto | approve (new downloads wait for a parent's OK)
     daily_limit: int = 50              # new downloads per day (0 = none)
@@ -137,14 +137,6 @@ def bad_words(text: str | None, extra=()) -> bool:
         if (w.startswith(_STEMS) or (w.startswith("mother") and "fuck" in w)) and not w.startswith(_INNOCENT_PREFIXES):
             return True
     return False
-
-
-def lyrics_bad(video_id: str | None, extra: list[str] = ()) -> bool:
-    if not video_id:
-        return False
-    from .lyrics import cached
-    known, body = cached(video_id)
-    return bool(known and body and bad_words(body.get("text"), extra))
 
 
 # --- explicit marks -----------------------------------------------------------------------
@@ -265,8 +257,6 @@ class KidFilter:
                 from .library import signin_of
                 check_soon(video_id, title, artists, signin_of(self.profile))  # shows next time
                 return "not checked yet"
-        if self.c.lyrics_check and lyrics_bad(video_id, self.c.extra_words):
-            return "language in the lyrics"
         return None
 
     def items(self, items: list) -> list:

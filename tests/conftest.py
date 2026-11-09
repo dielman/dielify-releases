@@ -13,9 +13,8 @@ def isolated_home(tmp_path, monkeypatch):
     """Every test gets its own app-data folder; never touches the real one."""
     monkeypatch.setenv("DIELIFY_HOME", str(tmp_path / "appdata"))
     monkeypatch.delenv("DIELIFY_INSECURE_DEV_STORE", raising=False)
-    from dielify import lyrics
-    monkeypatch.setattr(lyrics, "from_lrclib", lambda *a, **k: None)  # tests never call lrclib.net
-    from dielify import kids, kids_home
+    from dielify import custom_api, kids, kids_home
+    custom_api._feeds.clear()
     kids._pending.clear()  # in-memory state from other tests
     kids_home.forget()
     from dielify import artwork, playlist_api

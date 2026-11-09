@@ -1,4 +1,4 @@
-"""0.9.6 Library power: smart playlists, search by lyrics, the recap (year in review)."""
+"""0.9.6 Library power: smart playlists, the recap (year in review)."""
 
 import json
 import time
@@ -6,7 +6,7 @@ from datetime import date, datetime
 
 import pytest
 
-from dielify import library, lyrics, recap, settings, smart
+from dielify import library, recap, settings, smart
 from dielify.library import connect
 from test_api import login, make_client, setup, wait_done  # noqa: F401
 
@@ -86,26 +86,13 @@ def test_smart_rules_numbers_and_days():
         smart.validate({"rules": []})
 
 
-def test_search_by_lyrics():
-    with make_client() as c:
-        h = login(c)
-        one, two = download(c, h, "s1"), download(c, h, "s2")
-        lyrics.store("s1", {"lines": [(0, "Pressure pushing down on me"), (4000, "Pressing down on you")],
-                            "text": "", "source": "test"})
-        lyrics.store("s2", {"lines": None, "text": "I want to break free\nGod knows I want to break free",
-                            "source": "test"})
-        lyrics.store("zzzz", {"lines": None, "text": "pressure everywhere", "source": "test"})  # not in your library
-        r = c.get("/api/library/lyrics-search", headers=h, params={"q": "pressure down"}).json()["results"]
-        assert [(x["track"]["id"], x["line"]) for x in r] == [(one["track_id"], "Pressure pushing down on me")]
-        r = c.get("/api/library/lyrics-search", headers=h, params={"q": '"break free"'}).json()["results"]
-        assert [x["track"]["id"] for x in r] == [two["track_id"]]
-        assert c.get("/api/library/lyrics-search", headers=h, params={"q": "nothing like it"}).json()["results"] == []
-
-        # lyrics kept before 0.9.6 aren't indexed yet: the first search indexes them
-        with connect() as conn:
-            conn.execute("DELETE FROM lyrics_fts")
-        r = c.get("/api/library/lyrics-search", headers=h, params={"q": "pushing"}).json()["results"]
-        assert [x["track"]["id"] for x in r] == [one["track_id"]]
+def test_lyrics_tables_are_dropped():
+    """Lyrics were removed in 0.9.9: tables kept by 0.9.0-0.9.8 go on the next start."""
+    with connect() as conn:
+        conn.execute("CREATE TABLE IF NOT EXISTS lyrics (key TEXT PRIMARY KEY)")
+        library._migrate(conn)
+        names = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    assert "lyrics" not in names and "lyrics_fts" not in names
 
 
 def test_recap():

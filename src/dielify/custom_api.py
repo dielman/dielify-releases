@@ -237,19 +237,44 @@ class _YouTube:
     def __init__(self):
         self._adapters: dict[str, tuple[YTMusicAdapter, threading.Lock]] = {}
         self._lock = threading.Lock()
-        self._last_person = 0.0  # when someone (not a background job) last asked YouTube
+        # People go first: background jobs wait while anyone's call is running or waiting, and for
+        # QUIET_S after the last one ends. (Before 10 Nov 2026 the quiet time counted from the START
+        # of a call, so background lookups slipped in between a Discover page's calls.)
+        self._people = 0
+        self._quiet_since = 0.0
+        self._count = threading.Lock()
+
+    QUIET_S = 3.0
+
+    def _busy(self) -> bool:
+        with self._count:
+            return self._people > 0 or time.monotonic() - self._quiet_since < self.QUIET_S
 
     def background(self, profile: str, fn_name: str, *args, **kwargs):
-        """For background jobs (the kids' explicit check): waits until nobody has asked
-        YouTube for 3 seconds, so people never queue behind it."""
-        while time.monotonic() - self._last_person < 3:
+        """For background jobs (new releases, the kids' explicit check, artist photos): waits
+        until no one's call is running or waiting and QUIET_S have passed since the last."""
+        while self._busy():
             time.sleep(0.5)
         return self.call(profile, fn_name, *args, _background=True, **kwargs)
 
     def call(self, profile: str, fn_name: str, *args, _background: bool = False, **kwargs):
+        if _background:
+            return self._call(profile, fn_name, *args, **kwargs)
+        with self._count:
+            self._people += 1
+        started = time.monotonic()
+        try:
+            return self._call(profile, fn_name, *args, **kwargs)
+        finally:
+            took = time.monotonic() - started
+            with self._count:
+                self._people -= 1
+                self._quiet_since = time.monotonic()
+            if took > 5:  # slow YouTube answers, logged so a slow Discover can be explained
+                log.info("YouTube %s for %s took %.1f s", fn_name, profile, took)
+
+    def _call(self, profile: str, fn_name: str, *args, **kwargs):
         from . import credstore
-        if not _background:
-            self._last_person = time.monotonic()
         profile = signin_of(profile)
         with self._lock:
             if profile not in self._adapters:
@@ -364,7 +389,53 @@ def revoke_device(device_id: int, s: Session = Depends(session)) -> Response:
 
 # --- discovery + YouTube catalogue ------------------------------------------------
 
-_last_home: dict[str, list] = {}
+# Discover's YouTube parts (home feed, charts) are kept for 10 minutes (Josh, 10 Nov 2026: "it
+# doesn't need fresh data from YouTube every load"). Older than that but under an hour: shown at
+# once while a fresh copy loads in the background. YouTube failing: the last copy is shown.
+FEED_FRESH_S = 600
+FEED_STALE_S = 3600
+_feeds: dict[tuple, tuple[float, object]] = {}
+_refreshing: set[tuple] = set()
+_feeds_lock = threading.Lock()
+
+
+def _cached_feed(key: tuple, load):
+    """load() through the 10-minute cache (see FEED_FRESH_S)."""
+    if settings_mod.load().offline:
+        return load()  # offline mode: say so (load raises), don't show YouTube things
+    with _feeds_lock:
+        hit = _feeds.get(key)
+    age = time.time() - hit[0] if hit else None
+    if hit and age < FEED_FRESH_S:
+        return hit[1]
+    if hit and age < FEED_STALE_S:
+        with _feeds_lock:
+            if key in _refreshing:
+                return hit[1]
+            _refreshing.add(key)
+
+        def refresh():
+            try:
+                value = load()
+                with _feeds_lock:
+                    _feeds[key] = (time.time(), value)
+            except Exception as e:  # noqa: BLE001 - the old copy stays
+                log.info("Refreshing %s in the background failed: %s", key[1], e)
+            finally:
+                with _feeds_lock:
+                    _refreshing.discard(key)
+        threading.Thread(target=refresh, daemon=True, name="dielify-feed-refresh").start()
+        return hit[1]
+    try:
+        value = load()
+    except HTTPException as e:
+        if e.status_code != status.HTTP_502_BAD_GATEWAY or hit is None:
+            raise
+        log.warning("%s failed for %s; showing the last one that loaded", key[1], key[0])
+        return hit[1]  # YouTube hiccup: the last copy, however old
+    with _feeds_lock:
+        _feeds[key] = (time.time(), value)
+    return value
 
 
 @router.get("/discover/home", response_model=HomeFeed, tags=["discover"])
@@ -375,17 +446,8 @@ def discover_home(shelves: int = Query(6, ge=1, le=20), s: Session = Depends(ses
         from . import kids_home
         return HomeFeed(shelves=[Shelf(title=sh.title, items=_items(sh.items, s.lib))
                                  for sh in kids_home.shelves(s.lib, lambda fn, *a: youtube.call(s.lib.profile, fn, *a))])
-    try:
-        feed = youtube.call(s.user.profile, "home", shelves)
-        _last_home[s.user.profile.lower()] = feed
-    except HTTPException as e:
-        if e.status_code != status.HTTP_502_BAD_GATEWAY:
-            raise
-        # YouTube hiccup: show the last home feed that loaded (this run of the server)
-        feed = _last_home.get(s.user.profile.lower())
-        if feed is None:
-            raise
-        log.warning("Home feed failed for %s; showing the last one that loaded", s.user.profile)
+    feed = _cached_feed((s.user.profile.lower(), "Home feed", shelves),
+                        lambda: youtube.call(s.user.profile, "home", shelves))
     r = _ratings(s)
     return HomeFeed(shelves=[Shelf(title=sh.title, items=_items(r.arrange(sh.items), s.lib)) for sh in feed])
 
@@ -406,7 +468,8 @@ def discover_charts(country: str = Query("ZZ", min_length=2, max_length=2,
                     s: Session = Depends(session)) -> Charts:
     if s.kid:  # no YouTube charts in a kids account
         return Charts(country=country.upper(), countries=[], playlists=[], artists=[])
-    c = youtube.call(s.user.profile, "charts", country.upper())
+    c = _cached_feed((s.user.profile.lower(), "Charts", country.upper()),
+                     lambda: youtube.call(s.user.profile, "charts", country.upper()))
     return Charts(country=c["country"], countries=c["countries"],
                   playlists=_items(c["playlists"], s.lib), artists=_items(c["artists"], s.lib))
 
@@ -1148,7 +1211,7 @@ def cast_token(s: Session = Depends(session)) -> CastToken:
     return CastToken(token=token, expires_at=expires)
 
 
-# --- 0.9.6: recap (year in review / any month) and search by lyrics ---------------------
+# --- 0.9.6: recap (year in review / any month) ---------------------
 
 class RecapGenre(BaseModel):
     name: str
@@ -1251,33 +1314,6 @@ def get_recap(period: str = Query(min_length=4, max_length=7, pattern=r"^\d{4}(-
         top_new_artists=[artist(a) for a in r["top_new_artists"]])
 
 
-class LyricsHit(BaseModel):
-    track: Track
-    line: str = Field(description="The line of the lyrics that matched best")
-
-
-class LyricsSearch(BaseModel):
-    results: list[LyricsHit]
-
-
-@router.get("/library/lyrics-search", response_model=LyricsSearch, tags=["library"])
-def lyrics_search(q: str = Query(min_length=2, max_length=200), limit: int = Query(50, ge=1, le=200),
-                  s: Session = Depends(session)) -> LyricsSearch:
-    """Songs in your library whose lyrics have all these words ("quoted words" = that
-    phrase). Only songs whose lyrics Dielify has kept (older songs fill in over time)."""
-    from . import lyrics
-    by_video = s.lib.video_ids()
-    out = []
-    for key, line in lyrics.search(q, 1000):
-        tid = by_video.get(key) if not key.startswith("tr-") else (int(key[3:]) if key[3:].isdigit() else None)
-        t = s.lib.track(tid) if tid else None
-        if t is not None:
-            out.append(LyricsHit(track=_track_out(t), line=line))
-            if len(out) >= limit:
-                break
-    return LyricsSearch(results=out)
-
-
 # --- ratings: thumbs up / down / ban --------------------------------------------------
 
 class Rating(BaseModel):
@@ -1324,49 +1360,6 @@ def put_rating(body: RatingIn, request: Request, s: Session = Depends(session)) 
         from . import explore
         out.removed = explore.disliked(s.user.profile, s.lib, _queue(request), body.video_id, body.track_id)
     return out
-
-
-class LyricLine(BaseModel):
-    ms: int = Field(description="When the line starts, from the start of the song")
-    text: str
-
-
-class Lyrics(BaseModel):
-    synced: bool = Field(description="lines have times (scroll along with the song)")
-    lines: list[LyricLine] = Field(description="Empty when not synced: show `text`")
-    text: str
-    source: str | None = None
-
-
-@router.get("/lyrics", response_model=Lyrics, tags=["library"],
-            responses={404: {"description": "No lyrics for this song"}})
-def get_lyrics(video_id: str | None = Query(None, max_length=64), track_id: int | None = None,
-               title: str | None = Query(None, max_length=300), artist: str | None = Query(None, max_length=300),
-               album: str | None = Query(None, max_length=300), duration_s: int | None = Query(None, ge=0, le=36000),
-               s: Session = Depends(session)) -> Lyrics:
-    """The song's lyrics (YouTube Music, else LRCLIB), synced when possible. Kept on the PC,
-    so songs looked up before (and every downloaded song) have them offline. A YouTube song
-    that isn't in the library: pass video_id plus title / artist."""
-    from . import lyrics
-    t = s.lib.track(track_id) if track_id else (s.lib.track_by_video(video_id) if video_id else None)
-    if t is not None:
-        video_id = video_id or t["video_id"]
-        title, artist, album, duration_s = t["title"], t["artist"], t["album"], t["duration_s"]
-    key = lyrics.key_of(video_id, t["id"] if t is not None else track_id)
-    if not key:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Which song? (video_id or track_id)")
-    if settings_mod.load().offline:
-        found = lyrics.cached(key)[1]
-    else:
-        yt = (lambda: youtube.call(s.user.profile, "lyrics", video_id)) if video_id else None
-        try:
-            found = lyrics.find(key, yt, artist, title, album, duration_s)
-        except lyrics.Busy as e:
-            raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(e), headers={"Retry-After": "60"}) from e
-    if not found:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "No lyrics for this song")
-    lines = [LyricLine(ms=ms, text=txt) for ms, txt in (found["lines"] or [])]
-    return Lyrics(synced=bool(lines), lines=lines, text=found["text"], source=found.get("source"))
 
 
 @router.get("/keep", response_model=TrackList, tags=["library"])

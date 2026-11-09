@@ -1985,68 +1985,6 @@
         }
       }
     },
-    "/api/library/lyrics-search": {
-      "get": {
-        "tags": [
-          "library"
-        ],
-        "summary": "Lyrics Search",
-        "description": "Songs in your library whose lyrics have all these words (\"quoted words\" = that\nphrase). Only songs whose lyrics Dielify has kept (older songs fill in over time).",
-        "operationId": "lyrics_search_api_library_lyrics_search_get",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "q",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "minLength": 2,
-              "maxLength": 200,
-              "title": "Q"
-            }
-          },
-          {
-            "name": "limit",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "maximum": 200,
-              "minimum": 1,
-              "default": 50,
-              "title": "Limit"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LyricsSearch"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/ratings": {
       "get": {
         "tags": [
@@ -2116,150 +2054,6 @@
             "HTTPBearer": []
           }
         ]
-      }
-    },
-    "/api/lyrics": {
-      "get": {
-        "tags": [
-          "library"
-        ],
-        "summary": "Get Lyrics",
-        "description": "The song's lyrics (YouTube Music, else LRCLIB), synced when possible. Kept on the PC,\nso songs looked up before (and every downloaded song) have them offline. A YouTube song\nthat isn't in the library: pass video_id plus title / artist.",
-        "operationId": "get_lyrics_api_lyrics_get",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "video_id",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "maxLength": 64
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Video Id"
-            }
-          },
-          {
-            "name": "track_id",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Track Id"
-            }
-          },
-          {
-            "name": "title",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "maxLength": 300
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Title"
-            }
-          },
-          {
-            "name": "artist",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "maxLength": 300
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Artist"
-            }
-          },
-          {
-            "name": "album",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "maxLength": 300
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Album"
-            }
-          },
-          {
-            "name": "duration_s",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer",
-                  "maximum": 36000,
-                  "minimum": 0
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Duration S"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Lyrics"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "No lyrics for this song"
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
       }
     },
     "/api/keep": {
@@ -3065,6 +2859,65 @@
         }
       }
     },
+    "/api/library/artists/{artist_id}/image": {
+      "get": {
+        "tags": [
+          "library"
+        ],
+        "summary": "Library Artist Image",
+        "description": "The artist's photo (from YouTube Music, fetched once in the background); until there\nis one, their first album's cover.",
+        "operationId": "library_artist_image_api_library_artists__artist_id__image_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "artist_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Artist Id"
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 3000,
+              "minimum": 0,
+              "default": 0,
+              "title": "Size"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              },
+              "image/jpeg": {}
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/settings": {
       "get": {
         "tags": [
@@ -3387,6 +3240,66 @@
                   "$ref": "#/components/schemas/PlaylistDetail"
                 }
               }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/playlists/{playlist_id}/cover": {
+      "get": {
+        "tags": [
+          "playlists",
+          "playlists"
+        ],
+        "summary": "Playlist Cover",
+        "description": "The playlist's cover: four of its album covers, or a designed one (mixes, Blends,\nsmart playlists, and playlists whose songs have no covers on this PC).",
+        "operationId": "playlist_cover_api_playlists__playlist_id__cover_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "playlist_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Playlist Id"
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 1200,
+              "minimum": 64,
+              "default": 600,
+              "title": "Size"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              },
+              "image/jpeg": {}
             }
           },
           "422": {
@@ -4732,7 +4645,8 @@
                 "type": "null"
               }
             ],
-            "title": "Cover Url"
+            "title": "Cover Url",
+            "description": "Always set: the album's cover, or a generated one"
           },
           "starred": {
             "type": "boolean",
@@ -4741,6 +4655,17 @@
           "created_at": {
             "type": "number",
             "title": "Created At"
+          },
+          "colors": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ArtColors"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "From the cover (None: not worked out yet)"
           }
         },
         "type": "object",
@@ -4856,6 +4781,32 @@
         ],
         "title": "ApprovalList"
       },
+      "ArtColors": {
+        "properties": {
+          "bg": {
+            "type": "string",
+            "title": "Bg",
+            "description": "A dark colour from the artwork, for page backgrounds (#rrggbb)"
+          },
+          "accent": {
+            "type": "string",
+            "title": "Accent",
+            "description": "Its liveliest colour, readable on bg"
+          },
+          "fg": {
+            "type": "string",
+            "title": "Fg",
+            "description": "Text colour on bg"
+          }
+        },
+        "type": "object",
+        "required": [
+          "bg",
+          "accent",
+          "fg"
+        ],
+        "title": "ArtColors"
+      },
       "Artist": {
         "properties": {
           "id": {
@@ -4884,6 +4835,28 @@
           "starred": {
             "type": "boolean",
             "title": "Starred"
+          },
+          "image_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Url",
+            "description": "The artist's photo (YouTube Music), else an album cover"
+          },
+          "colors": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ArtColors"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -6447,98 +6420,6 @@
         ],
         "title": "LoginResult"
       },
-      "LyricLine": {
-        "properties": {
-          "ms": {
-            "type": "integer",
-            "title": "Ms",
-            "description": "When the line starts, from the start of the song"
-          },
-          "text": {
-            "type": "string",
-            "title": "Text"
-          }
-        },
-        "type": "object",
-        "required": [
-          "ms",
-          "text"
-        ],
-        "title": "LyricLine"
-      },
-      "Lyrics": {
-        "properties": {
-          "synced": {
-            "type": "boolean",
-            "title": "Synced",
-            "description": "lines have times (scroll along with the song)"
-          },
-          "lines": {
-            "items": {
-              "$ref": "#/components/schemas/LyricLine"
-            },
-            "type": "array",
-            "title": "Lines",
-            "description": "Empty when not synced: show `text`"
-          },
-          "text": {
-            "type": "string",
-            "title": "Text"
-          },
-          "source": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Source"
-          }
-        },
-        "type": "object",
-        "required": [
-          "synced",
-          "lines",
-          "text"
-        ],
-        "title": "Lyrics"
-      },
-      "LyricsHit": {
-        "properties": {
-          "track": {
-            "$ref": "#/components/schemas/Track"
-          },
-          "line": {
-            "type": "string",
-            "title": "Line",
-            "description": "The line of the lyrics that matched best"
-          }
-        },
-        "type": "object",
-        "required": [
-          "track",
-          "line"
-        ],
-        "title": "LyricsHit"
-      },
-      "LyricsSearch": {
-        "properties": {
-          "results": {
-            "items": {
-              "$ref": "#/components/schemas/LyricsHit"
-            },
-            "type": "array",
-            "title": "Results"
-          }
-        },
-        "type": "object",
-        "required": [
-          "results"
-        ],
-        "title": "LyricsSearch"
-      },
       "Me": {
         "properties": {
           "username": {
@@ -7279,6 +7160,31 @@
             "title": "Shared",
             "description": "Shared with the household: everyone can add and remove songs",
             "default": false
+          },
+          "cover_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cover Url",
+            "description": "Always set: a 2x2 grid of its album covers, or a designed cover"
+          },
+          "colors": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Colors",
+            "description": "bg / accent / fg from the cover"
           },
           "owner": {
             "anyOf": [
@@ -8692,6 +8598,17 @@
             ],
             "title": "Gain Db",
             "description": "Volume levelling: play this song this many dB louder (negative = quieter). None: not measured yet"
+          },
+          "colors": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ArtColors"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "From its album's cover"
           }
         },
         "type": "object",

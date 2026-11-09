@@ -46,7 +46,7 @@ def test_add_a_kid_and_what_she_sees(monkeypatch):
         # checked yet, so it's left out and checked in the background, then shows
         assert c.get("/api/discover/home", headers=kid).json()["shelves"] == []
         from dielify import custom_api, kids_home
-        custom_api.youtube._last_person = 0.0      # nobody busy: the background check may go
+        custom_api.youtube._quiet_since = 0.0      # nobody busy: the background check may go
         assert c.app.state.kids_check.run_once() == 1
         kids_home.forget()
         shelves = c.get("/api/discover/home", headers=kid).json()["shelves"]
@@ -119,9 +119,6 @@ def controls(c, name="emma", **changes) -> dict:
 
 
 def test_controls_approvals_limit_quiet_hours_and_stats(monkeypatch):
-    from dielify import lyrics
-    monkeypatch.setattr(lyrics, "from_lrclib", lambda artist, title, *a: {
-        "lines": None, "text": "shit shit" if title == "Song Two" else "la la", "source": "LRCLIB"})
     kids.remember([YTItem("song", v, v, explicit=False) for v in ("s1", "s2", "s3")])
     with make_client() as c:
         h = login(c)
@@ -139,12 +136,10 @@ def test_controls_approvals_limit_quiet_hours_and_stats(monkeypatch):
         c.post("/api/desktop/approvals", headers=desk(c), json={"ids": [job["id"]], "allow": True})
         assert wait_done(c, kid, job["id"])["status"] == "done"
 
-        # lyrics: downloaded, then out of her library because of the words
+        # straight away again: downloads with no OK
         controls(c, downloads="auto")
         job = c.post("/api/downloads", headers=kid, json={"type": "song", "id": "s2"}).json()["downloads"][0]
-        done = wait_done(c, kid, job["id"])
-        assert done["status"] == "failed" and "lyrics" in done["error"]
-        assert library.library_for("emma").track_by_video("s2") is None
+        assert wait_done(c, kid, job["id"])["status"] == "done"
 
         # daily limit
         controls(c, daily_limit=2)

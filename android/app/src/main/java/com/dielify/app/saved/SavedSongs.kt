@@ -128,7 +128,7 @@ class SavedSongs(private val context: Context) {
     internal suspend fun download(server: Server, t: Track) = saving.withPermit { downloadNow(server, t) }
 
     // Two songs at a time: "Keep on this phone" for a 165-song playlist started them all at
-    // once (9 Nov 2026) and, with their lyrics, swamped the PC.
+    // once (9 Nov 2026) and swamped the PC.
     private val saving = kotlinx.coroutines.sync.Semaphore(2)
 
     private suspend fun downloadNow(server: Server, t: Track) = withContext(Dispatchers.IO) {
@@ -173,10 +173,6 @@ class SaveWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         return try {
             app.server.ensureConnected()
             app.saved.download(app.server, track)
-            runCatching {  // lyrics too, so they show with no connection
-                app.lyrics.get(com.dielify.app.net.LyricsStore.Song(track.videoId, track.id, track.title,
-                    track.artist, track.album, track.durationS))
-            }
             Result.success()
         } catch (e: ApiError) {
             if (e.code == 401 || e.code == 404) Result.failure()

@@ -413,17 +413,10 @@ async function viewAlbum(id) {
 async function viewLibrarySearch(q) {
   enter(`lsearch:${q}`, `“${q}”`, () => viewLibrarySearch(q));
   try {
-    const [r, ly] = await Promise.all([api(`/api/library/search?q=${encodeURIComponent(q)}`),
-      api(`/api/library/lyrics-search?q=${encodeURIComponent(q)}`).catch(() => ({ results: [] }))]);
-    const lyricHits = ly.results.filter((x) => !r.tracks.some((t) => t.id === x.track.id));
+    const r = await api(`/api/library/search?q=${encodeURIComponent(q)}`);
     show(h("h1", {}, `“${q}” in your library`),
-      r.tracks.length ? trackTable(r.tracks, true) : lyricHits.length ? null : h("p", { class: "muted" }, "No songs found."),
+      r.tracks.length ? trackTable(r.tracks, true) : h("p", { class: "muted" }, "No songs found."),
       r.albums.length ? [h("h2", {}, "Albums"), h("div", { class: "grid" }, r.albums.map(albumCard))] : null,
-      lyricHits.length ? [h("h2", {}, "In the lyrics"), h("table", { class: "tracks" }, h("tbody", {}, lyricHits.map((x, i) =>
-        h("tr", {}, h("td", { class: "n" }, i + 1),
-          h("td", { class: "title", onclick: () => playList(lyricHits.map((y) => y.track), i) }, x.track.title,
-            h("div", { class: "muted small" }, x.track.artist, " · ", h("i", {}, `“${x.line}”`))),
-          h("td", { class: "d" }, dur(x.track.duration_s)), h("td", { class: "a" }, queueBtn(() => [x.track]))))))] : null,
       h("p", {}, h("button", { class: "link", onclick: () => { go("discover"); viewYtSearch(q); } }, "Search YouTube Music instead →")));
   } catch (e) { failed(e); }
 }
@@ -1303,7 +1296,7 @@ async function viewKidControls(name) {
     row("Explicit songs", "YouTube Music marks explicit songs. Songs without a mark are checked before she gets them.",
       select("explicit", { block: "Block", allow: "Allow" })),
     c.explicit === "block" ? check("clean_versions", "Offer clean versions", "When a song is explicit, give her the clean version if YouTube has one") : null,
-    check("lyrics_check", "Check words", "Also block songs whose title or lyrics use strong language (a built-in list, plus your words below)"),
+    check("lyrics_check", "Check words", "Also block songs whose title uses strong language (a built-in list, plus your words below)"),
     c.lyrics_check ? list("extra_words", "Your words", "Extra words to block", "a word") : null,
     list("blocked_artists", "Blocked artists", "She never gets these artists", "artist name"),
     c.blocked_songs.length ? h("div", { class: "setting" }, h("div", { class: "label" }, "Blocked songs"),
@@ -2154,72 +2147,7 @@ $("btn-queue").addEventListener("click", () => {
   renderUpnext();
 });
 
-// --- lyrics (dielify/lyrics.py): over the page, scrolling along with the song ----------------------
-const lyr = { box: null, key: "", data: null, cache: new Map(), line: -2, timer: null };
-function lyricsSong() {
-  const d = elsewhere();
-  if (d) {
-    const st = d.state || {};
-    const s = st.queue && st.index >= 0 ? st.queue[st.index] : null;
-    return s && { video_id: s.video_id || null, id: s.track_id || null, title: s.title, artist: s.artist || "",
-      album: s.album || "", duration_s: st.duration_ms ? Math.round(st.duration_ms / 1000) : null };
-  }
-  const t = player.current;
-  return t && { video_id: t.video_id || null, id: t.id || null, title: t.title, artist: t.artist || "",
-    album: t.album || "", duration_s: Math.round(audio.duration) || null };
-}
-const lyricsPos = () => { const d = elsewhere(); return d ? nowPos(d.state || {}) : audio.currentTime * 1000; };
-async function loadLyrics(s) {
-  const key = s.video_id || `tr-${s.id}`;
-  if (lyr.cache.has(key)) return lyr.cache.get(key);
-  const q = new URLSearchParams();
-  if (s.id) q.set("track_id", s.id);
-  if (s.video_id) q.set("video_id", s.video_id);
-  if (!s.id) { q.set("title", s.title); if (s.artist) q.set("artist", s.artist); if (s.album) q.set("album", s.album); }
-  if (s.duration_s) q.set("duration_s", s.duration_s);
-  let data = null;
-  try { data = await api(`/api/lyrics?${q}`); } catch (e) { data = { error: /No lyrics/.test(e.message) ? null : e.message }; }
-  if (data && !data.error) lyr.cache.set(key, data);
-  return data;
-}
-async function paintLyrics() {
-  const box = lyr.box;
-  if (!box) return;
-  const s = lyricsSong();
-  const key = s ? s.video_id || `tr-${s.id}` : "";
-  if (key !== lyr.key) {
-    lyr.key = key; lyr.data = null; lyr.line = -2;
-    const head = lyr.embedded ? null : h("div", { class: "lyr-head" }, h("div", {}, h("b", {}, s ? s.title : "Nothing playing"),
-      h("div", { class: "muted small" }, s ? s.artist : "")), ib("close", "Close lyrics", closeLyrics));
-    const body = h("div", { class: "lyr-body" }, s ? h("p", { class: "muted" }, "Looking for lyrics…") : null);
-    box.replaceChildren(...[head, body].filter(Boolean));
-    if (!s) return;
-    const data = await loadLyrics(s);
-    if (lyr.key !== key || !lyr.box) return;  // the song changed meanwhile
-    lyr.data = data;
-    if (!data || data.error) {
-      body.replaceChildren(h("p", { class: "muted" }, data && data.error ? `Couldn't get lyrics: ${data.error}` : "No lyrics for this song."));
-      return;
-    }
-    const seek = (ms) => { if (!control({ action: "seek", position_ms: ms })) audio.currentTime = ms / 1000; };
-    body.replaceChildren(...(data.synced
-      ? data.lines.map((l) => h("div", { class: "lyr-line", onclick: () => seek(l.ms) }, l.text || "♪"))
-      : data.text.split("\n").map((t) => h("div", { class: "lyr-line plain" }, t || " "))),
-      h("p", { class: "muted small lyr-src" }, data.source ? `Lyrics: ${data.source}` : ""));
-  }
-  const data = lyr.data;
-  if (!data || !data.synced) return;
-  const pos = lyricsPos() + 200;  // show a line a moment early, like karaoke
-  let i = -1;
-  while (i + 1 < data.lines.length && data.lines[i + 1].ms <= pos) i++;
-  if (i === lyr.line) return;
-  lyr.line = i;
-  const rows = box.querySelectorAll(".lyr-line");
-  rows.forEach((r, k) => { r.classList.toggle("now", k === i); r.classList.toggle("past", k < i); });
-  const cur = rows[Math.max(0, i)];
-  if (cur) cur.scrollIntoView({ block: "center", behavior: "smooth" });
-}
-// --- Now playing: the whole window, in the song's colours, with its lyrics -------------------------
+// --- Now playing: the whole window, in the song's colours, with what plays next ---------------------
 var np = { box: null, key: "" };  // var: the player bar may paint before this line runs
 function nowShown() {
   const d = elsewhere();
@@ -2234,27 +2162,22 @@ function nowShown() {
 }
 function openNowPlaying() {
   if (np.box) return;
-  closeLyrics();
   np.box = h("div", { class: "nowplaying" });
   document.body.append(np.box);
-  np.key = "";
+  np.key = ""; np.sig = "";
   paintNowPlaying();
-  lyr.embedded = true;
-  lyr.box = np.box.querySelector(".np-right");
-  lyr.key = null;
-  paintLyrics();
-  lyr.timer = setInterval(paintLyrics, 250);
+  np.timer = setInterval(paintNowPlaying, 1000);
 }
 function closeNowPlaying() {
   if (!np.box) return;
-  clearInterval(lyr.timer); lyr.box = null; lyr.embedded = false;
+  clearInterval(np.timer);
   np.box.remove(); np.box = null;
 }
 function paintNowPlaying() {
   if (!np.box) return;
   const s = nowShown();
   const key = s ? s.key : "-";
-  if (key === np.key) return;
+  if (key === np.key) return paintNpNext();
   np.key = key;
   np.box.setAttribute("style", tintStyle(s && s.colors));
   const right = np.box.querySelector(".np-right") || h("div", { class: "np-right" });
@@ -2265,27 +2188,25 @@ function paintNowPlaying() {
       h("div", { class: "np-name" }, s ? s.title : "Nothing playing"),
       h("div", { class: "np-by" }, s ? [s.artist, s.album].filter(Boolean).join(" · ") : "")),
     right);
+  np.sig = "";
+  paintNpNext();
 }
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeNowPlaying(); closeLyrics(); } });
-function closeLyrics() {
-  if (lyr.box) { lyr.box.remove(); lyr.box = null; }
-  clearInterval(lyr.timer);
-  $("btn-lyrics").classList.remove("on");
+// The right half of Now playing: the next songs (click one to play it).
+function paintNpNext() {
+  const right = np.box && np.box.querySelector(".np-right");
+  if (!right) return;
+  const q = queueNow();
+  const coming = q.list.map((t, i) => [t, i]).slice(q.index + 1, q.index + 13);
+  const sig = `${q.index}|${coming.map(([t]) => t.video_id || t.id).join(",")}`;
+  if (sig === np.sig) return;
+  np.sig = sig;
+  right.replaceChildren(h("div", { class: "np-next" },
+    h("div", { class: "np-next-label" }, "Up next"),
+    coming.length ? coming.map(([t, i]) => h("button", { class: "np-next-row", onclick: () => jumpTo(i) },
+      h("b", {}, t.title), h("span", {}, t.artist || "")))
+      : h("p", { class: "muted" }, "Nothing after this song.")));
 }
-$("btn-lyrics").replaceChildren(icon("mic"));
-$("btn-lyrics").addEventListener("click", () => {
-  if (np.box) return closeNowPlaying();
-  if (lyr.box) return closeLyrics();
-  const top = document.querySelector("header.top").getBoundingClientRect().bottom;
-  const bottom = innerHeight - $("player").getBoundingClientRect().top;
-  lyr.box = h("div", { class: "lyrics", style: `top:${top}px;bottom:${bottom}px` });
-  document.body.append(lyr.box);
-  lyr.key = null;
-  $("btn-lyrics").classList.add("on");
-  paintLyrics();
-  lyr.timer = setInterval(paintLyrics, 250);
-});
-
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeNowPlaying(); });
 // --- sleep timer: pause after N minutes (fading out over the last 15 s) or at the end of the song --
 const sleep = { at: 0, songEnd: false, songKey: null, timer: null };
 const FADE_S = 15;
