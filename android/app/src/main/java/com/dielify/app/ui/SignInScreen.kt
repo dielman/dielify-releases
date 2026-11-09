@@ -61,7 +61,7 @@ fun SignInScreen(vm: AppViewModel) {
                     vm.signedIn(vm.server.signIn(addresses, user, password))
                 } catch (e: ApiError) {
                     error = if (e.code == 401) "Wrong name or password. Check them in Dielify on the PC: " +
-                        "Settings > Phone logins." else e.message
+                        "Settings > People & phones." else e.message
                 } finally {
                     busy = false
                 }

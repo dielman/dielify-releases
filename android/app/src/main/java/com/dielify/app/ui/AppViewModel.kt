@@ -233,7 +233,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         getApplication<Application>().dielify.endless.started(media, seed)
         c.prepare()
         c.play()
-        messages.tryEmit("Never-ending discovery: thumbs down deletes a song again")
+        messages.tryEmit("Never-ending discovery: thumbs down removes a song for good")
     }
 
     /** Song radio / artist radio: plays now, then keeps going with songs like it. */
@@ -459,7 +459,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val c = controller ?: return
         val m = c.mediaMetadata
         val vid = MediaItems.videoId(c.currentMediaItem)
-        if (vid == null) { messages.tryEmit("This song can't go in a YouTube playlist (no YouTube id)"); return }
+        if (vid == null) { messages.tryEmit("Only songs from YouTube Music can go in this playlist"); return }
         addToPlaylist.value = listOf(SongIn(vid, "song", m.title?.toString() ?: vid,
             listOfNotNull(m.artist?.toString()), m.albumTitle?.toString(), m.durationMs?.let { (it / 1000).toInt() }))
     }
@@ -471,7 +471,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             playlistsVersion.value++
         } catch (e: ApiError) {
             if (e.code == 401) tokenRejected()
-            messages.tryEmit(e.message ?: "That didn't work")
+            messages.tryEmit(e.message ?: "Couldn't change the playlist")
         }
     }
 

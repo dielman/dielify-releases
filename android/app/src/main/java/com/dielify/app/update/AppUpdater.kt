@@ -147,7 +147,7 @@ class AppUpdater(private val context: Context) {
                     val hex = digest.digest().joinToString("") { "%02x".format(it) }
                     if (!hex.equals(release.sha256, ignoreCase = true) || done != release.size) {
                         apk.delete()
-                        throw IllegalStateException("the download doesn't match the release (damaged?)")
+                        throw IllegalStateException("the update didn't download properly: try again")
                     }
                 }
             }

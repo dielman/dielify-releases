@@ -395,7 +395,7 @@ class Server(private val context: Context, private val accounts: AccountStore) {
                 code == 401 && detail != null -> detail
                 code == 401 -> "This phone's sign-in isn't accepted any more. Sign in again."
                 detail != null -> detail
-                else -> "The PC answered with an error (HTTP $code)"
+                else -> "Something went wrong on the PC (error $code). Try again."
             }
         }
     }

@@ -41,7 +41,7 @@ def new_password() -> str:
 
 def _check_name(name: str) -> str:
     if not name or safe_name(name) != name or len(name) > 40:
-        raise ValueError(f"'{name}' isn't a usable user name (letters, digits, - and _ only)")
+        raise ValueError(f"'{name}' isn't a usable name (letters, numbers, - and _ only)")
     return name
 
 

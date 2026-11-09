@@ -213,7 +213,7 @@ def change(body: DesktopChange, s: Session = Depends(desktop_session)) -> Deskto
             raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Can't use that folder: {e}") from e
         changes["backup_folder"] = str(folder)
     if "active_profile" in changes and safe_name(changes["active_profile"]) != changes["active_profile"]:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Profile names: letters, digits, - and _ only")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Names can use letters, numbers, - and _ only")
     for key, value in changes.items():
         settings_mod.set_value(key, str(value))
     if changes.get("backup_folder"):
@@ -243,7 +243,7 @@ def backup_now(s: Session = Depends(desktop_session)) -> DesktopStatus:
 @router.post("/profiles", response_model=DesktopStatus)
 def add_profile(body: NewProfile, s: Session = Depends(desktop_session)) -> DesktopStatus:
     if safe_name(body.name) != body.name:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Profile names: letters, digits, - and _ only")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Names can use letters, numbers, - and _ only")
     cfg = settings_mod.load()
     cfg.profile_library(body.name).mkdir(parents=True, exist_ok=True)
     settings_mod.set_value("active_profile", body.name)
@@ -256,7 +256,7 @@ def add_child(body: NewPerson, s: Session = Depends(desktop_session)) -> PhoneLo
     scenes), has its own library, and a phone login of the same name."""
     name = body.name.strip()
     if safe_name(name) != name or not name.replace("-", "").replace("_", "").isalnum():
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Names: letters, digits, - and _ only")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Names can use letters, numbers, - and _ only")
     cfg = settings_mod.load()
     taken = {n.casefold() for n in _profiles(cfg)} | {p["profile"].casefold() for p in library_mod.people()}
     taken |= {u.name.casefold() for u in auth.list_users()}

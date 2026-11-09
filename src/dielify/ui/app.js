@@ -25,7 +25,7 @@ async function api(path, opts = {}) {
   if (r.status === 204) return null;
   if (r.status === 401) throw new Error("This window lost its connection to Dielify. Quit Dielify from the tray icon and open it again.");
   const data = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(typeof data.detail === "string" ? data.detail : `Error ${r.status}`);
+  if (!r.ok) throw new Error(typeof data.detail === "string" ? data.detail : `Something went wrong on the PC (error ${r.status}). Try again.`);
   return data;
 }
 const media = (url, size) => url && `${url}?token=${encodeURIComponent(KEY)}${size ? `&size=${size}` : ""}`;
@@ -673,7 +673,7 @@ async function renderDownloads(active) {
   const summary = active.active_total
     ? h("p", { class: "muted" }, running ? `Downloading 1 song` : "Starting…",
         waitingTotal ? ` · ${waitingTotal} waiting · ${minutes(active.active_total * pace)} left` : "",
-        " · one at a time, to keep your account's traffic modest")
+        " · one at a time, so YouTube doesn't mind")
     : h("p", { class: "muted" }, "Nothing waiting.");
   const now = running ? [h("h2", {}, "Now"), h("div", { class: "job" }, who(running),
     h("div", { class: "bar" }, h("div", { style: `width:${Math.round(running.progress * 100)}%` })), cancel(running))] : null;
@@ -781,7 +781,7 @@ function reportJamPlaying(i) {
 async function addToJam(tracks) {
   const songs = tracks.filter((t) => t.video_id).map((t) => ({ type: "song", id: t.video_id, title: t.title,
     artists: t.artist ? splitArtists(t.artist) : [], album: t.album || null }));
-  if (!songs.length) return toast("Only songs with a YouTube id can go in a Jam");
+  if (!songs.length) return toast("Only songs from YouTube Music can go in a Jam");
   try {
     const j = await api("/api/jam/songs", { method: "POST", body: { songs } });
     toast(j.left_out.length ? `Added, but not: ${j.left_out.join("; ")}` : `Added to ${j.host}'s Jam`, j.left_out.length ? 7000 : 3000);
@@ -907,7 +907,7 @@ async function smartEditor(id = null) {
 async function newPlaylist(items) {
   const name = (prompt("Name of the new playlist:") || "").trim();
   if (!name) return;
-  const onYoutube = confirm("Also create it on YouTube Music (private) and keep it in sync?\n\nOK = yes, Cancel = only in Dielify");
+  const onYoutube = confirm("Also make it on YouTube Music (private), and keep the two the same?\n\nOK: on YouTube Music too\nCancel: only in Dielify");
   const d = await playlistAction(() => api("/api/playlists", { method: "POST", body: { name, on_youtube: onYoutube } }), `Created “${name}”`);
   if (d && items.length) await playlistAction(() => api(`/api/playlists/${d.playlist.id}/songs`, { method: "POST", body: { songs: items.map(songIn) } }),
     `Added to “${name}”`);
@@ -943,7 +943,7 @@ async function viewPlaylist(id) {
     };
     const del = async () => {
       if (!confirm(`Delete “${p.name}” from Dielify? Your downloaded songs are kept.`)) return;
-      const both = p.yt_id && !p.read_only && confirm(`Also delete it on YouTube Music?\n\nOK = delete there too, Cancel = keep it on YouTube Music (it just stops syncing)`);
+      const both = p.yt_id && !p.read_only && confirm(`Also delete it on YouTube Music?\n\nOK: delete it there too\nCancel: keep it on YouTube Music (it stops syncing)`);
       if (await playlistAction(() => api(`/api/playlists/${id}?on_youtube=${!!both}`, { method: "DELETE" }), "Deleted") !== null) {
         go("library"); viewLibrary("playlists");
       }
@@ -1071,7 +1071,7 @@ async function saveSettings(body, msg = "Saved") {
 
 async function signIn(fresh) {
   const app = desktopApp();
-  if (!app) return toast("Sign-in works in the Dielify app window.");
+  if (!app) return toast("Sign in from the Dielify app on the PC, not from a browser.");
   toast("A sign-in window has opened. Sign in there.", 6000);
   const r = await app.sign_in(status.active_profile, fresh);
   if (r.ok) toast(`Signed in as ${r.account}`);
@@ -1119,8 +1119,8 @@ async function viewSettings() {
           const r = await api("/api/desktop/scan", { method: "POST" });
           toast(`Scanned: ${r.added} added, ${r.removed} removed`); viewSettings();
         } }, "Rescan")),
-      setting("Quality", "", select("quality", { auto: "Best available (Premium: ~256 kbps)", high: "High", standard: "Standard (~160 kbps max)" }, s.quality)),
-      setting("Format", "", select("preferred_format", { auto: "Automatic (no re-encoding)", opus: "Prefer Opus", m4a: "Prefer AAC (.m4a)" }, s.preferred_format)));
+      setting("Quality", "", select("quality", { auto: "Best available (Premium: ~256 kbps)", high: "High", standard: "Standard (up to ~160 kbps)" }, s.quality)),
+      setting("Format", "", select("preferred_format", { auto: "Automatic (kept as YouTube sends it)", opus: "Prefer Opus", m4a: "Prefer AAC (.m4a)" }, s.preferred_format)));
 
     const windows = h("div", { class: "panel" }, h("h2", {}, "Windows"),
       setting("Start with Windows", s.start_with_windows ? "On: Dielify starts in the tray when you sign in" : "Off",
@@ -1141,9 +1141,9 @@ async function viewSettings() {
         : h("p", { class: "muted small" }, "Away from home: install Tailscale on this PC and your phone (see Phase 5 in the README)."),
       s.phone_users.map((u) => h("div", { class: "setting" },
         h("div", { class: "label" }, u.name),
-        h("div", { class: "value" }, `plays profile ${u.profile}`,
+        h("div", { class: "value" }, `${u.profile}'s library`,
           u.devices.map((d) => h("div", { class: "small muted" }, `${d.device_name} · last used ${d.last_used_at ? new Date(d.last_used_at * 1000).toLocaleString() : "never"} `,
-            h("button", { class: "link", onclick: async () => { await api(`/api/desktop/devices/${d.id}`, { method: "DELETE" }); viewSettings(); } }, "sign out")))),
+            h("button", { class: "link", onclick: async () => { await api(`/api/desktop/devices/${d.id}`, { method: "DELETE" }); viewSettings(); } }, "Sign out")))),
         h("button", { onclick: async () => {
           if (!confirm(`Make a new password for ${u.name}? The old one stops working.`)) return;
           showPassword(await api(`/api/desktop/phone-users/${encodeURIComponent(u.name)}/password`, { method: "POST" }));
@@ -1359,14 +1359,14 @@ async function viewKidControls(name) {
 }
 
 async function addChild() {
-  const name = prompt("Name for the kids account (letters and digits, e.g. emma). It's also their phone login:");
+  const name = prompt("Name for the kids account (letters and numbers, e.g. emma). It's also the name they sign in with on their phone:");
   if (!name) return;
   try { showPassword(await api("/api/desktop/people", { method: "POST", body: { name: name.trim() } })); }
   catch (e) { toast(e.message, 6000); }
 }
 
 async function addProfile() {
-  const name = prompt("Name for the new profile (letters and digits, e.g. emma):");
+  const name = prompt("Name for the new profile (letters and numbers, e.g. emma):");
   if (!name) return;
   try { await api("/api/desktop/profiles", { method: "POST", body: { name: name.trim() } }); toast(`Switched to ${name}`); }
   catch (e) { toast(e.message, 6000); }
@@ -1382,9 +1382,9 @@ function showPassword(login) {
   show(h("h1", {}, "Phone login"), h("div", { class: "panel" },
     h("p", {}, "Type these into the phone app now. The password is shown only this once."),
     (status.addresses || []).map((a) => h("div", { class: "setting" },
-      h("div", { class: "label" }, /^http:\/\/100\./.test(a) ? "Server address away from home (Tailscale)" : "Server address on home Wi-Fi"),
+      h("div", { class: "label" }, /^http:\/\/100\./.test(a) ? "PC address away from home (Tailscale)" : "PC address on home Wi-Fi"),
       h("div", { class: "value" }, a))),
-    h("div", { class: "setting" }, h("div", { class: "label" }, "User"), h("div", { class: "value secret" }, login.name)),
+    h("div", { class: "setting" }, h("div", { class: "label" }, "Phone login name"), h("div", { class: "value secret" }, login.name)),
     h("div", { class: "setting" }, h("div", { class: "label" }, "Password"), h("div", { class: "value secret" }, login.password)),
     h("div", { class: "row", style: "margin-top:12px" }, h("button", { class: "primary", onclick: viewSettings }, "Done"))));
 }
@@ -1584,7 +1584,7 @@ function playAt(i) {
   applyVolume();
   // AbortError = another song was started before this one began (e.g. a double click, or
   // Next pressed quickly): the newer one plays, so it's not an error worth showing.
-  audio.play().catch((e) => { if (e.name !== "AbortError") toast(`Can't play: ${e.message}`); });
+  audio.play().catch((e) => { if (e.name !== "AbortError") toast(e.name === "NotSupportedError" ? "Can't play this song: the PC couldn't send it. Try again in a moment." : `Can't play this song: ${e.message}`); });
   if (t.jamId) reportJamPlaying(i); else player.jamHost = false;  // something else started: not the Jam any more
   paintBar();
   topUpEndless();
@@ -1656,7 +1656,7 @@ $("btn-addpl").addEventListener("click", () => {
   const st = d && d.state;
   const s = st && st.queue && st.index >= 0 ? st.queue[st.index] : null;
   const t = d ? (s && { video_id: s.video_id, title: s.title, artist: s.artist, album: s.album }) : player.current;
-  if (!t || !t.video_id) return toast(t ? "This song has no YouTube id, so it can't go in a playlist." : "Nothing playing");
+  if (!t || !t.video_id) return toast(t ? "Only songs from YouTube Music can go in a playlist." : "Nothing playing");
   addToPlaylist([{ type: "song", id: t.video_id, title: t.title, artists: t.artist ? [t.artist] : [], album: t.album || null }]);
 });
 onAudio("play", () => { if (eq.ctx && eq.ctx.state === "suspended") eq.ctx.resume().catch(() => {}); if (!elsewhere()) paintBar(); });
@@ -1866,7 +1866,7 @@ async function rate(kind, body, value, msg) {
     const res = await api("/api/ratings", { method: "PUT", body: { kind, value, ...body } });
     loadRatings(res.ratings);
     if (res.removed) {
-      toast(`Thumbs down: deleted “${res.removed}” from your PC`);
+      toast(`Thumbs down: “${res.removed}” is gone from your PC`);
       if (player.endless && !elsewhere() && player.current && player.current.video_id === body.video_id) skipNow();
     } else if (msg) toast(msg);
   } catch (e) { toast(e.message); }
@@ -1943,9 +1943,9 @@ function artistThumbs(name) {
   const paint = () => {
     const v = rated.artists.get(key) || 0;
     box.replaceChildren(
-      ib("thumbUp", v === UP ? "You like this artist (click to clear)" : "Like this artist",
+      ib("thumbUp", v === UP ? "You like this artist (click to undo)" : "Like this artist",
         async () => { await rate("artist", { name }, v === UP ? 0 : UP); paint(); }, { class: `ib${v === UP ? " on" : ""}` }),
-      ib("thumbDown", v === DOWN ? "Thumbed down (click to clear)" : "Less of this artist (hold to ban)",
+      ib("thumbDown", v === DOWN ? "Less of this artist (click to undo)" : "Less of this artist (hold to ban)",
         async () => { if (!heldA) { await rate("artist", { name }, v === DOWN ? 0 : DOWN); paint(); } }, { class: `ib${v === DOWN ? " on" : ""}` }),
       v === BAN ? h("span", { class: "muted small" }, " Banned · ",
         h("button", { class: "link", onclick: async () => { await rate("artist", { name }, 0, `Unbanned ${name}`); paint(); } }, "unban")) : "");
@@ -1981,7 +1981,7 @@ function playbackPanel() {
   return h("div", { class: "panel" }, h("h2", {}, "Playback on this PC"),
     h("label", { class: "row", style: "gap:8px" }, box, "Even out volume"),
     h("p", { class: "muted small" }, "Loud songs are turned down to match the rest, so the volume doesn't jump between songs. "
-      + "Dielify measures each song once in the background (new downloads within a few minutes)."),
+      + "Each song is measured once, in the background."),
     h("h3", {}, "Equaliser"),
     h("div", { class: "row", style: "gap:8px" }, "Sound ", preset, reset),
     h("div", { class: "row", style: "gap:8px;margin-top:6px" }, h("span", { style: "width:60px" }, "Bass"), ...slider("bass")),

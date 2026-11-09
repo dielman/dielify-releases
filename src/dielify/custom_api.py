@@ -471,10 +471,10 @@ def yt_stream(video_id: str, request: Request, s: Session = Depends(media_sessio
             info = ytstream.cache.get(s.user.profile, video_id, resolve, fresh=True)
             upstream = ytstream.open_upstream(info, range_header)
     except ytstream.requests.RequestException as e:
-        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"YouTube didn't answer: {e}") from e
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, "Couldn't reach YouTube. Try again in a moment.") from e
     if upstream.status_code not in (200, 206):
         upstream.close()
-        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"YouTube answered HTTP {upstream.status_code}")
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"YouTube wouldn't send this song right now (error {upstream.status_code}). Try again in a moment.")
     code, headers, body = ytstream.relay(upstream)
     return StreamingResponse(body, status_code=code, media_type=info.mime, headers=headers)
 
@@ -512,7 +512,7 @@ def request_download(body: DownloadRequest, request: Request, s: Session = Depen
         info, items = youtube.call(s.user.profile, body.type, body.id)
         title = info.title
         if not items:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, f"No downloadable tracks in that {body.type}")
+            raise HTTPException(status.HTTP_404_NOT_FOUND, f"Nothing to download in this {body.type}")
     jobs = _queue(request).enqueue(s.user.profile, items, body.type, title, s.user.name,
                                    next_up=body.next)
     return DownloadList(downloads=[_download_out(j) for j in jobs])
@@ -1684,7 +1684,7 @@ def library_stream(track_id: int, s: Session = Depends(media_session)) -> FileRe
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No such track")
     path = s.lib.path_of(t)
     if not path.exists():
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "The file is missing; run a library scan")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "This song's file is missing from the PC. On the PC: Settings > Music & YouTube > Rescan.")
     return FileResponse(path, media_type=CONTENT_TYPES.get(path.suffix.lower(), "application/octet-stream"))
 
 

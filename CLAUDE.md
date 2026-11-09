@@ -592,6 +592,18 @@ src/dielify/
     favicon) and packaging/wizard-{large,small}-{100,200}.bmp (Inno WizardImageFile / WizardSmallImageFile);
     rerun it after changing brand.py. Tray + dielify.ico (build.py) use icon_image. Phone start-up screen:
     values-v31/themes.xml (icon on #0E0F12). Checked: emulator drawer + start-up screen, PC side bar.
+  - Stage 5 words pass (not released): every string listed (build/words_extract.py), 37 rewrites applied
+    (OK/Cancel dialogs spelt out, "YouTube id" -> "from YouTube Music", raw HTTP errors -> plain "Something went
+    wrong on the PC (error N)", "letters and numbers", phone sign-in pointed at the right PC section "People &
+    phones", "Download later"). Found + fixed: ui/fonts/inter.css pointed at fonts/fonts/*.woff2 (404), so the PC
+    app never showed Inter (stage 2 screenshots were the fallback font).
+  - Josh's real server.log (read-only, build/log_load.py + log_window.py via a terminal tab), 10 Nov: health
+    instant (the 9 Nov freeze fix holds); Discover home/charts/endless take 15-60 s and some 502. Cause found in
+    code: one YouTube call at a time per sign-in, and `_YouTube.background` counts "quiet" from the START of the
+    last person's call, so background jobs (lyrics Backfill every 5 s through ~2,500 older songs, release watcher,
+    later artwork photos) slip in between people's calls (Lock isn't fair). Not fixed yet; offered to Josh. Also
+    seen: Josh's PC served /ui/logo.svg at 07:06, so it runs a build with the 0.9.9 UI (likely dist\ 0.9.8 rebuilt
+    06:09); ask him which before assuming.
 
 ## Backlog (Josh, 8 Nov; after Phase 8 item 6)
 

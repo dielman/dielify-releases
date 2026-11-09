@@ -693,7 +693,7 @@ class YTMusicAdapter:
         except Exception as e:
             raise YouTubeError(f"Couldn't load video {video_id}: {e}") from e
         if not vd.get("title"):
-            raise YouTubeError(f"Video {video_id} not found")
+            raise YouTubeError(f"This song isn't on YouTube any more ({video_id})")
         artist, title = split_video_title(vd["title"], vd.get("author"))
         try:
             duration = int(vd.get("lengthSeconds") or 0) or None
@@ -782,7 +782,7 @@ class YTMusicAdapter:
             fmt = (info.get("requested_formats") or [info])[0]
             url = fmt.get("url") or info.get("url")
             if not url:
-                raise YouTubeError(f"No playable audio for {video_id}")
+                raise YouTubeError(f"YouTube has no audio for this song ({video_id})")
             ext = fmt.get("ext") or info.get("ext") or "webm"
             mime = {"m4a": "audio/mp4", "mp4": "audio/mp4", "webm": "audio/webm",
                     "opus": "audio/ogg"}.get(ext, "application/octet-stream")

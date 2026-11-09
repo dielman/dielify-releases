@@ -74,7 +74,7 @@ fun SongThumbs(vm: AppViewModel) {
         try {
             val removed = if (kind == "song") ratings.rate("song", label, value, p.videoId, p.trackId) else ratings.rate("artist", label, value)
             if (removed != null) {
-                vm.messages.tryEmit("Thumbs down: deleted “$removed” from your PC")
+                vm.messages.tryEmit("Thumbs down: “$removed” is gone from your PC")
                 if (value == Ratings.DOWN && ctx.dielify.endless.active) vm.next()  // a ban skips anyway
             }
             then()

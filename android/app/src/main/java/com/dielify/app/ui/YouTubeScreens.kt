@@ -174,7 +174,7 @@ fun ItemRow(vm: AppViewModel, item: Item, queue: List<Item> = listOf(item),
                         text = { Text(if (item.isSong) "Download next" else "Download all next") },
                         onClick = { menu = false; vm.download(item, next = true) })
                     DropdownMenuItem(
-                        text = { Text(if (item.isSong) "Download (back of the line)" else "Download all") },
+                        text = { Text(if (item.isSong) "Download later" else "Download all") },
                         onClick = { menu = false; vm.download(item, next = false) })
                 }
                 if (item.isSong) DropdownMenuItem(
@@ -543,7 +543,7 @@ fun DownloadsScreen(vm: AppViewModel) {
                 item { Section("Now") }
                 item(key = "run${running.id}") {
                     DownloadRow(running, onCancel = { scope.launch { cancel(vm, running) ; tick++ } }) {
-                        val label = if (running.status == "processing") "Tagging and saving…"
+                        val label = if (running.status == "processing") "Saving to your library…"
                         else "${(running.progress * 100).toInt()}%"
                         LinearProgressIndicator(
                             progress = { running.progress.toFloat() },
