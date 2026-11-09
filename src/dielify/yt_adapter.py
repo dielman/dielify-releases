@@ -488,6 +488,15 @@ class YTMusicAdapter:
                          videoId=video_id, radio=True, limit=limit + 1)
         return [i for i in _items(raw.get("tracks")) if i.id != video_id][:limit]
 
+    def artist_radio(self, channel_id: str, limit: int = 50) -> list[YTItem]:
+        """An artist's radio (YouTube Music's "Radio" button on the artist page)."""
+        raw = self._call("Loading the artist", self._yt.get_artist, channel_id)
+        radio = raw.get("radioId") or raw.get("shuffleId")
+        if not radio:
+            raise YouTubeError("YouTube Music has no radio for this artist")
+        wp = self._call("Loading the artist radio", self._yt.get_watch_playlist, playlistId=radio, limit=limit)
+        return _items(wp.get("tracks"))[:limit]
+
     def lyrics(self, video_id: str, lyrics_id: str | None = None) -> dict | None:
         """The song's lyrics: {"lines": [(start_ms, text), ...] or None, "text": str, "source"}.
         Synced (timed) when YouTube Music has them. None: no lyrics. lyrics_id saves a lookup."""

@@ -42,7 +42,14 @@ def test_add_a_kid_and_what_she_sees(monkeypatch):
             ("josh", "parent", 1, ["josh"]), ("emma", "child", 0, ["emma"])]
 
         # nothing from Josh's YouTube account
-        shelves = c.get("/api/discover/home", headers=kid).json()["shelves"]   # Kids discovery, not Josh's feed
+        # Kids discovery, not Josh's feed. It never waits on explicit checks: Josh's song isn't
+        # checked yet, so it's left out and checked in the background, then shows
+        assert c.get("/api/discover/home", headers=kid).json()["shelves"] == []
+        from dielify import custom_api, kids_home
+        custom_api.youtube._last_person = 0.0      # nobody busy: the background check may go
+        assert c.app.state.kids_check.run_once() == 1
+        kids_home.forget()
+        shelves = c.get("/api/discover/home", headers=kid).json()["shelves"]
         assert [sh["title"] for sh in shelves] == ["On the PC: add to your library"]
         assert c.get("/api/discover/charts", headers=kid).json()["playlists"] == []
         assert c.get("/api/yt/my-playlists", headers=kid).json() == {"items": []}

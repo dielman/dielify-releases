@@ -3,6 +3,8 @@ package com.dielify.app.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -18,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material.icons.filled.Shuffle
@@ -62,7 +65,6 @@ private fun coverPath(trackId: Long?) = trackId?.let { "/api/library/tracks/$it/
 fun MiniPlayer(vm: AppViewModel) {
     val p by vm.player.collectAsStateWithLifecycle()
     if (!p.hasItem) return
-    PlayingOnStrip(vm)
     Row(
         Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh)
             .clickable { vm.open(Screen.NowPlaying) }
@@ -112,23 +114,21 @@ fun NowPlayingScreen(vm: AppViewModel) {
             delay(500)
         }
     }
-    Page(vm, "Now playing", actions = { DevicesButton(vm) }) { pad ->
+    // No mini player here, and the cover takes only the room that's left: the controls
+    // always fit on the screen, whatever its height (the green bar sits in the top bar).
+    Page(vm, "Now playing", mini = false, actions = { DevicesButton(vm) }) { pad ->
         Column(
-            Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
+            Modifier.padding(pad).fillMaxSize().navigationBarsPadding().padding(horizontal = 24.dp, vertical = 12.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             if (!p.hasItem) {
                 Text("Nothing playing")
                 return@Column
             }
-            val on by vm.playingOn.collectAsStateWithLifecycle()
-            on?.let {
-                Text("Playing on $it", color = ConnectGreen, style = MaterialTheme.typography.titleSmall,
-                    modifier = Modifier.clickable { vm.showDevices.value = true })
-                Spacer(Modifier.height(12.dp))
+            BoxWithConstraints(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                Cover(vm, coverPath(p.trackId), minOf(maxWidth, maxHeight), pixels = 900)
             }
-            Cover(vm, coverPath(p.trackId), null, pixels = 900)
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(16.dp))
             Text(p.title, style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center)
             Text(p.artist, color = MaterialTheme.colorScheme.primary, textAlign = TextAlign.Center)
             Text(
@@ -139,6 +139,7 @@ fun NowPlayingScreen(vm: AppViewModel) {
                 SongThumbs(vm)
                 SleepButton(vm)
                 LyricsButton(vm)
+                IconButton(onClick = { vm.radioFromCurrent() }) { Icon(Icons.Filled.Radio, "Start radio from this song") }
                 UpNextButton(vm)
             }
             p.error?.let {

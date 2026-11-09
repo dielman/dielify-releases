@@ -11,13 +11,14 @@ count up the last digit: 0.9.1, 0.9.2 ... then 1.0.0.
 | 0.9.1 | Household foundations | shared music store, per-person libraries, parent/child roles (no visible change) |
 | 0.9.2 | Second person | create a profile, her own phone login, her own library, borrow from the household |
 | 0.9.3 | Kids accounts | Kids discovery, parent controls (explicit, approvals, search, limits) |
-| 0.9.4 | Discovery | new releases from your artists, artist About pages, time-of-day mix, leave out of my taste |
-| 0.9.5 | Library power | smart playlists, search by lyrics, year in review |
-| 0.9.6 | Sound | crossfade, equaliser |
-| 0.9.7 | Phone extras | cast to speakers, home-screen widget |
-| 0.9.8 | Together | shared household playlists, Blend, Jam |
-| 0.9.9 | 1.0 hardening | clean-PC install, car test, security review, restore drill, help pages |
-| 1.0.0 | Release | the 0.9.9 build, renamed, once Josh is happy |
+| 0.9.4 | Fixes from Josh's testing | docs/ISSUES-0.9.3.md: kids Discover speed, remove from library, green bar, open on Discover, Back keeps the search, song + artist radio |
+| 0.9.5 | Discovery | new releases from your artists, artist About pages, time-of-day mix, leave out of my taste |
+| 0.9.6 | Library power | smart playlists, search by lyrics, year in review |
+| 0.9.7 | Sound | crossfade, equaliser |
+| 0.9.8 | Phone extras | cast to speakers, home-screen widget |
+| 0.9.9 | Together | shared household playlists, Blend, Jam |
+| 0.9.10 | 1.0 hardening | clean-PC install, car test, security review, restore drill, help pages |
+| 1.0.0 | Release | the last 0.9 build, renamed, once Josh is happy |
 
 Multi-user goes first because every later feature has to know whose library, whose taste
 and what a kid may see. Building those features once, with that already in place, is
@@ -129,7 +130,7 @@ Built only from Dielify's own data, filtered by the parent's controls:
   already on the PC are checked in the background (about 1,500 an hour) while a kids
   account blocks explicit songs; until a song is checked, a child doesn't get it.
 
-## 0.9.4: Discovery
+## 0.9.5: Discovery
 
 - **New releases from your artists**: follow artists (or use your top 20 played). A daily
   check of their YouTube artist pages builds "New for you". Optional: download new
@@ -139,7 +140,7 @@ Built only from Dielify's own data, filtered by the parent's controls:
 - **Time-of-day mix**: changes through the day, from what you play at each hour.
 - **Leave out of my taste**: mark a playlist or song so it doesn't shape your recommendations.
 
-## 0.9.5: Library power
+## 0.9.6: Library power
 
 - **Smart playlists**: rule-based lists that keep themselves up to date. Rules can use
   genre, artist, decade, play count, last played, rating, added date and length. The PC
@@ -149,20 +150,20 @@ Built only from Dielify's own data, filtered by the parent's controls:
 - **Year in review**: a recap page per person (top songs, artists, genres, minutes,
   firsts). Any month, plus a December edition. A child's recap is hers only.
 
-## 0.9.6: Sound
+## 0.9.7: Sound
 
 - **Crossfade**: 0–12 s on the PC (two-player setup already exists) and the phone. Never
   between songs of the same album played in order. Uses the loudness data to blend evenly.
 - **Equaliser**: presets plus bass and treble on the phone (Android's equaliser on
   Media3's audio session) and the PC (Web Audio filters). Set per device.
 
-## 0.9.7: Phone extras
+## 0.9.8: Phone extras
 
 - **Cast to speakers**: Google Cast from the phone to Nest speakers and Chromecasts
   (Media3 Cast). Streams from the PC over the home network. Checked on Josh's speakers.
 - **Home-screen widget**: cover, title, play/pause/next; shows the active device too.
 
-## 0.9.8: Together
+## 0.9.9: Together
 
 - **Shared household playlists**: lists more than one person can edit. A child sees only
   the songs her filter allows.
@@ -171,7 +172,7 @@ Built only from Dielify's own data, filtered by the parent's controls:
 - **Jam**: one shared queue, e.g. in the car. The host plays; others add songs from their
   phones. If a child is in the Jam, every song is filtered for her.
 
-## 0.9.9: 1.0 hardening
+## 0.9.10: 1.0 hardening
 
 - **Clean-PC install test** (Windows Sandbox): install, sign in, play offline, no
   terminal. Owed since Phase 4.

@@ -49,6 +49,7 @@ const $ = (id) => document.getElementById(id);
 const ICONS = {
   play: "M8 5v14l11-7z",
   add: "M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z",
+  radio: "M3.24 6.15C2.51 6.43 2 7.17 2 8v12c0 1.1.89 2 2 2h16c1.11 0 2-.9 2-2V8c0-1.11-.89-2-2-2H8.3l8.26-3.34L15.88 1 3.24 6.15zM7 20c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm13-8h-2v-2h-2v2H4V8h16v4z",
   person: "M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z",
   pause: "M6 19h4V5H6v14zm8-14v14h4V5h-4z",
   next: "M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z",
@@ -104,9 +105,39 @@ function art(src, ph = "♪", cls = "art") {
 }
 function failed(e) { show(h("p", { class: "pad warn" }, e.message || String(e))); }
 
+// Back history. Each page calls enter() with how to show it again; a detail page (album,
+// artist, playlist) first remembers the page you were on, with its scroll position, so its
+// Back button returns there exactly (a search keeps its words, tab and results).
+let here = null;            // { key, label, render }
+const backStack = [];
+let restoring = false;
+let backAction = null;      // what this page's Back button does (also the mouse's Back button)
+function enter(key, label, render, detail = false) {
+  backAction = null;
+  if (detail && !restoring && here && here.key !== key) {
+    backStack.push({ ...here, scroll: main.scrollTop });
+    if (backStack.length > 30) backStack.shift();
+  }
+  here = { key, label, render };
+}
+function backButton(fallbackLabel, fallback) {
+  const prev = backStack[backStack.length - 1];
+  backAction = async () => {
+    if (!prev) return fallback();
+    backStack.pop();
+    restoring = true;
+    try { await prev.render(); } finally { restoring = false; }
+    requestAnimationFrame(() => { main.scrollTop = prev.scroll; });
+  };
+  return h("button", { onclick: backAction }, icon("back", "ico lead"), prev ? prev.label : fallbackLabel);
+}
+window.addEventListener("mouseup", (e) => {  // the mouse's own Back button
+  if (e.button === 3 && backAction) { e.preventDefault(); backAction(); }
+});
+
 // --- state ---------------------------------------------------------------------------
 let status = null;          // /api/desktop/status
-let view = "library";
+let view = "discover";  // the app opens on Discover
 let libTab = "albums";
 
 async function refreshStatus() {
@@ -119,6 +150,7 @@ async function refreshStatus() {
 document.querySelectorAll("#nav button").forEach((b) => b.addEventListener("click", () => go(b.dataset.view)));
 function go(v, ...args) {
   view = v;
+  backStack.length = 0;  // a new section: nothing to go back to
   document.querySelectorAll("#nav button").forEach((b) => b.classList.toggle("active", b.dataset.view === v));
   $("search-input").placeholder = v === "discover" ? "Search YouTube Music" : "Search your library";
   ({ library: viewLibrary, discover: viewDiscover, downloads: viewDownloads, stats: viewStats, settings: viewSettings })[v](...args);
@@ -149,6 +181,7 @@ function welcome() {
 
 async function viewLibrary(tab = libTab) {
   libTab = tab;
+  enter(`library:${tab}`, "Library", () => viewLibrary(tab));
   try {
     await refreshStatus();
     const shared = (status.people || []).length > 1;
@@ -241,15 +274,20 @@ const artistCard = (r) => h("div", { class: "card", onclick: () => viewArtist(r.
 async function viewArtist(id) {
   try {
     const { artist, albums } = await api(`/api/library/artists/${id}`);
-    show(h("button", { onclick: () => viewLibrary("artists") }, icon("back", "ico lead"), "Artists"),
-      h("h1", { style: "margin-top:16px" }, artist.name, " ", artistThumbs(artist.name)), h("div", { class: "grid" }, albums.map(albumCard)));
+    enter(`artist:${id}`, artist.name, () => viewArtist(id), true);
+    show(backButton("Artists", () => { go("library"); viewLibrary("artists"); }),
+      h("h1", { style: "margin-top:16px" }, artist.name, " ", artistThumbs(artist.name)),
+      h("div", { class: "row", style: "margin:4px 0 12px" },
+        ibtn("radio", "Artist radio", { class: "primary", onclick: () => startRadio({ artist: artist.name }, `${artist.name} radio`) })),
+      h("div", { class: "grid" }, albums.map(albumCard)));
   } catch (e) { failed(e); }
 }
 
 async function viewAlbum(id) {
   try {
     const { album, tracks } = await api(`/api/library/albums/${id}`);
-    show(h("button", { onclick: () => viewLibrary() }, icon("back", "ico lead"), "Library"),
+    enter(`album:${id}`, album.name, () => viewAlbum(id), true);
+    show(backButton("Library", () => { go("library"); viewLibrary(); }),
       h("div", { class: "hero", style: "margin-top:16px" }, art(media(album.cover_url, 400), "♪", ""),
         h("div", {},
           h("div", { class: "muted small" }, "ALBUM"), h("h1", {}, album.name),
@@ -257,12 +295,14 @@ async function viewAlbum(id) {
           h("div", { class: "row", style: "margin-top:12px" },
             ibtn("play", "Play", { class: "primary", onclick: () => playList(tracks, 0) }),
             ibtn("shuffle", "Shuffle", { onclick: () => playList(shuffle(tracks), 0) }),
-            ibtn("queueAdd", "Add to queue", { onclick: () => addToQueue(tracks, false) })))),
-      trackTable(tracks));
+            ibtn("queueAdd", "Add to queue", { onclick: () => addToQueue(tracks, false) }),
+            ibtn("remove", "Remove from library", { onclick: () => removeFromLibrary({ album: album.id, name: album.name, count: tracks.length }) })))),
+      trackTable(tracks, false, () => viewAlbum(id)));
   } catch (e) { failed(e); }
 }
 
 async function viewLibrarySearch(q) {
+  enter(`lsearch:${q}`, `“${q}”`, () => viewLibrarySearch(q));
   try {
     const r = await api(`/api/library/search?q=${encodeURIComponent(q)}`);
     show(h("h1", {}, `“${q}” in your library`),
@@ -272,7 +312,19 @@ async function viewLibrarySearch(q) {
   } catch (e) { failed(e); }
 }
 
-function trackTable(tracks, showAlbum = false) {
+// Take songs out of your library (the file goes too, unless someone else in the household has it).
+async function removeFromLibrary({ track, album, name, count = 1 }, after) {
+  const what = album ? `the album “${name}” (${count} song${count === 1 ? "" : "s"})` : `“${name}”`;
+  if (!confirm(`Remove ${what} from your library?\n\nThe music file is deleted from this PC too, unless someone else in your household has it.`)) return;
+  try {
+    const r = await api(album ? `/api/library/albums/${album}` : `/api/library/tracks/${track}`, { method: "DELETE" });
+    toast(`Removed ${r.removed} song${r.removed === 1 ? "" : "s"}${r.deleted < r.removed ? " (kept on the PC for others in your household)" : ""}`);
+    if (album) { if (backAction) backAction(); else { go("library"); viewLibrary(); } }
+    else if (after) after();
+  } catch (e) { toast(e.message, 6000); }
+}
+
+function trackTable(tracks, showAlbum = false, after = null) {
   return h("table", { class: "tracks" }, h("tbody", {}, tracks.map((t, i) =>
     h("tr", { "data-track": t.id, class: player.current && player.current.id === t.id ? "playing" : "" },
       h("td", { class: "n" }, t.track_no || i + 1),
@@ -280,7 +332,9 @@ function trackTable(tracks, showAlbum = false) {
         h("div", { class: "muted small" }, t.artist, showAlbum ? ` · ${t.album}` : "")),
       h("td", { class: "d" }, dur(t.duration_s)),
       h("td", { class: "a" }, queueBtn(() => [t]), t.video_id ? ib("playlistAdd", "Add to playlist", () => addToPlaylist(
-        [{ type: "song", id: t.video_id, title: t.title, artists: t.artist ? [t.artist] : [], album: t.album || null }])) : null)))));
+        [{ type: "song", id: t.video_id, title: t.title, artists: t.artist ? [t.artist] : [], album: t.album || null }])) : null,
+        ib("remove", "Remove from your library", () => removeFromLibrary({ track: t.id, name: t.title },
+          after || (() => main.querySelector(`tr[data-track="${t.id}"]`)?.remove()))))))));
 }
 const shuffle = (xs) => xs.map((x) => [Math.random(), x]).sort((a, b) => a[0] - b[0]).map((x) => x[1]);
 
@@ -296,6 +350,7 @@ function needsSignIn() {
 }
 
 async function viewDiscover() {
+  enter("discover", "Discover", viewDiscover);
   try {
     await refreshStatus();
     if (status.offline) return show(h("h1", {}, "Discover"), offlineNotice());
@@ -329,6 +384,7 @@ function ytCard(item, from, list) {  // also used as .map(ytCard): (item, index,
   const open = () => {
     if (item.type === "album" || item.type === "playlist") return viewCollection(item.type, item.id, origin);
     if (item.type === "song" || item.type === "video") return songActions(item, Array.isArray(list) ? list : [item]);
+    if (item.type === "artist") return startRadio({ artist_id: item.id }, `${item.title} radio`);
   };
   return h("div", { class: "card", onclick: open, title: `${item.title}${sub ? " — " + sub : ""}` },
     art(item.thumbnail, item.type === "artist" ? "👤" : "♪"),
@@ -366,13 +422,15 @@ async function requestDownload(body) {
 
 async function viewCollection(type, id, from = "discover") {
   try {
+    if (!restoring && here) backStack.push({ ...here, scroll: main.scrollTop }), (here = null);  // before "Loading…"
     show(h("p", { class: "muted" }, "Loading…"));
     const { info, tracks } = await api(`/api/yt/${type}/${encodeURIComponent(id)}`);
     const missing = tracks.filter((t) => !t.library_track_id).length;
     const have = tracks.filter((t) => t.library_track_id).map((t) => t.library_track_id);
+    enter(`yt:${type}:${id}`, info.title, () => viewCollection(type, id, from), true);
     const back = from === "library"
-      ? h("button", { onclick: () => { go("library"); viewLibrary("playlists"); } }, icon("back", "ico lead"), "Playlists")
-      : h("button", { onclick: () => go("discover") }, icon("back", "ico lead"), "Discover");
+      ? backButton("Playlists", () => { go("library"); viewLibrary("playlists"); })
+      : backButton("Discover", () => go("discover"));
     show(back,
       h("div", { class: "hero", style: "margin-top:16px" }, art(info.thumbnail, "♪", ""),
         h("div", {},
@@ -401,14 +459,23 @@ function ytTrackTable(items) {
             { type: t.type, id: t.id, title: t.title, artists: t.artists, album: t.album, next: true })))))));
 }
 
+const searchCache = new Map();  // "type:q" -> [time, items]: going back shows the results at once
 async function viewYtSearch(q, type = "song") {
+  enter(`search:${type}:${q}`, `“${q}”`, () => viewYtSearch(q, type));
   try {
     await refreshStatus();
     if (status.offline) return show(h("h1", {}, "Search"), offlineNotice());
     const tabs = h("div", { class: "tabs" }, ["song", "album", "playlist", "video"].map((t) =>
       h("button", { class: t === type ? "active" : "", onclick: () => viewYtSearch(q, t) }, t[0].toUpperCase() + t.slice(1) + "s")));
-    show(h("h1", {}, `“${q}” on YouTube Music`), tabs, h("p", { class: "muted" }, "Searching…"));
-    const { items } = await api(`/api/yt/search?q=${encodeURIComponent(q)}&type=${type}`);
+    const cached = searchCache.get(`${type}:${q}`);
+    let items;
+    if (cached && Date.now() - cached[0] < 10 * 60 * 1000) items = cached[1];
+    else {
+      show(h("h1", {}, `“${q}” on YouTube Music`), tabs, h("p", { class: "muted" }, "Searching…"));
+      ({ items } = await api(`/api/yt/search?q=${encodeURIComponent(q)}&type=${type}`));
+      searchCache.set(`${type}:${q}`, [Date.now(), items]);
+      if (searchCache.size > 30) searchCache.delete(searchCache.keys().next().value);
+    }
     const body = !items.length ? h("p", { class: "muted" }, "No results.")
       : (type === "song" || type === "video") ? ytTrackTable(items) : h("div", { class: "grid" }, items.map(ytCard));
     show(h("h1", {}, `“${q}” on YouTube Music`), tabs, body);
@@ -528,6 +595,7 @@ async function addToPlaylist(items) {
 async function viewPlaylist(id) {
   try {
     const { playlist: p, entries } = await api(`/api/playlists/${id}`);
+    enter(`playlist:${id}`, p.name, () => viewPlaylist(id), true);
     const songs = entries.map((e) => e.item);
     const have = songs.filter((s) => s.library_track_id).length;
     const rename = async () => {
@@ -545,7 +613,7 @@ async function viewPlaylist(id) {
       if (p.yt_id && !confirm(`Remove “${e.item.title}”? This playlist is synced, so it's also removed on YouTube Music. The song stays in your library.`)) return;
       if (await playlistAction(() => api(`/api/playlists/${id}/entries/${e.entry_id}?on_youtube=${!!p.yt_id}`, { method: "DELETE" }), "Removed")) viewPlaylist(id);
     };
-    show(h("button", { onclick: () => { go("library"); viewLibrary("playlists"); } }, icon("back", "ico lead"), "Playlists"),
+    show(backButton("Playlists", () => { go("library"); viewLibrary("playlists"); }),
       h("div", { class: "hero", style: "margin-top:16px" }, art(p.thumbnail, "♪", ""),
         h("div", {}, h("div", { class: "muted small" }, "PLAYLIST"), h("h1", {}, p.name),
           h("div", { class: "muted" }, describePlaylist(p)),
@@ -572,6 +640,7 @@ async function viewPlaylist(id) {
 let statsPeriod = "month";
 async function viewStats(period = statsPeriod, who = null) {
   statsPeriod = period;
+  enter(`stats:${who || ""}:${period}`, who ? `${who}'s stats` : "Stats", () => viewStats(period, who));
   try {
     const st = await api(who ? `/api/desktop/people/${encodeURIComponent(who)}/stats?period=${period}&limit=25`
       : `/api/stats?period=${period}&limit=25`);
@@ -946,7 +1015,7 @@ function playList(list, index) {
     remoteSend({ type: "command", to: d.device, command: { action: "load", queue: list.map(songOut), index, position_ms: 0, playing: true } });
     return;
   }
-  player.list = list; player.endless = false; playAt(index);
+  player.list = list; player.endless = false; player.radio = null; playAt(index);
 }
 
 // --- never-ending discovery play (explore.py) ----------------------------------------------------
@@ -954,8 +1023,22 @@ async function endlessBatch(count) {
   const ids = player.list.map((t) => t.video_id).filter(Boolean);
   const heard = player.list.slice(0, player.index + 1).map((t) => t.video_id).filter(Boolean);
   const seeds = heard.length ? heard.slice(-20) : (player.current && player.current.video_id ? [player.current.video_id] : []);
-  const r = await api("/api/discover/endless", { method: "POST", body: { seeds, exclude: ids.slice(-2000), count } });
+  const r = player.radio  // radio: more like the last few songs heard (library songs welcome, nothing downloaded)
+    ? await api("/api/radio", { method: "POST", body: { seeds: seeds.slice(-5), exclude: ids.slice(-2000), count } })
+    : await api("/api/discover/endless", { method: "POST", body: { seeds, exclude: ids.slice(-2000), count } });
   return r.items.map(ytAsTrack);
+}
+// Song radio / artist radio: plays at once, then keeps going with songs like it.
+async function startRadio(source, label, first = null) {
+  try {
+    toast(`Starting ${label}…`);
+    const r = await api("/api/radio", { method: "POST", body: { ...source, count: 25 } });
+    const list = [...(first ? [first] : []), ...r.items.map(ytAsTrack)];
+    if (!list.length) return toast("Couldn't find songs for this radio right now");
+    if (elsewhere()) return playList(list, 0);  // the other device plays this batch (it doesn't top up)
+    player.list = list; player.endless = true; player.radio = label;
+    playAt(0);
+  } catch (e) { toast(e.message, 6000); }
 }
 async function startEndless() {
   try {
@@ -965,7 +1048,7 @@ async function startEndless() {
     const more = await endlessBatch(10);
     if (!more.length) return toast("Couldn't find new songs right now");
     if (elsewhere()) return playList(more, 0);  // the other device plays this batch (it doesn't top up)
-    player.list = [...keep, ...more]; player.endless = true;
+    player.list = [...keep, ...more]; player.endless = true; player.radio = null;
     playAt(keep.length);
   } catch (e) { toast(e.message); }
 }
@@ -1442,7 +1525,10 @@ function queueMenu(btn, tracks) {
   const r = btn.getBoundingClientRect();
   const m = h("div", { class: "menu", style: `right:${Math.max(8, innerWidth - r.right)}px;top:${r.bottom + 4}px` },
     h("button", { onclick: () => { closeMenu(); addToQueue(tracks, true); } }, icon("playNext", "ico lead"), "Play next"),
-    h("button", { onclick: () => { closeMenu(); addToQueue(tracks, false); } }, icon("queueAdd", "ico lead"), "Add to queue"));
+    h("button", { onclick: () => { closeMenu(); addToQueue(tracks, false); } }, icon("queueAdd", "ico lead"), "Add to queue"),
+    tracks.length === 1 && tracks[0].video_id
+      ? h("button", { onclick: () => { closeMenu(); startRadio({ video_id: tracks[0].video_id }, `Radio: ${tracks[0].title}`, tracks[0]); } },
+        icon("radio", "ico lead"), "Start radio") : null);
   document.body.append(m);
   if (r.bottom + 4 + m.offsetHeight > innerHeight - 90) m.style.top = `${r.top - m.offsetHeight - 4}px`;
   menuOpen = m;
@@ -1502,7 +1588,7 @@ function renderUpnext() {
     cur ? [h("div", { class: "uq-label" }, "Now playing"), row(cur, q.index, true)] : h("p", { class: "muted small" }, "Nothing playing."),
     coming.length ? [h("div", { class: "uq-label" }, `Next · ${coming.length} song${coming.length === 1 ? "" : "s"}`),
       h("div", { class: "uq-list" }, coming.map(([t, i]) => row(t, i, false)))]
-      : cur ? h("p", { class: "muted small" }, player.endless && !q.d ? "Finding more new songs…"
+      : cur ? h("p", { class: "muted small" }, player.endless && !q.d ? (player.radio ? `${player.radio}: finding more…` : "Finding more new songs…")
         : "Nothing after this song. Use the queue button on any song to add it.") : null,
   ].flat().filter(Boolean));
 }
@@ -1680,7 +1766,9 @@ $("btn-sleep").addEventListener("click", (e) => {
 // --- start ----------------------------------------------------------------------------------------
 if (!KEY) show(h("p", { class: "pad warn" }, "Open Dielify from its desktop app."));
 else {
-  go("library"); pollDownloads(); remoteConnect(); refreshRatings();
+  // opens on Discover; in offline mode (no YouTube) on your library instead
+  refreshStatus().then(() => go(status.offline ? "library" : "discover")).catch(() => go("library"));
+  pollDownloads(); remoteConnect(); refreshRatings();
   $("update-pill").addEventListener("click", () => go("settings"));
   // the app checks in the background shortly after starting; pick up the result
   setTimeout(() => api("/api/desktop/update").then(showUpdatePill).catch(() => {}), 45000);

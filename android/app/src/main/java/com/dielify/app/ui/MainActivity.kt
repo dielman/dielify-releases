@@ -58,9 +58,12 @@ fun App(vm: AppViewModel) {
     }
     val stack by vm.stack.collectAsStateWithLifecycle()
     val tab by vm.tab.collectAsStateWithLifecycle()
-    BackHandler(enabled = stack.size > 1 || tab != Tab.Library) {
-        if (!vm.back()) vm.selectTab(Tab.Library)
+    BackHandler(enabled = stack.size > 1 || tab != Tab.Discover) {
+        if (!vm.back()) vm.selectTab(Tab.Discover)
     }
+    // Every screen in the back stack keeps its state (search words, results, tab, scroll
+    // position), so Back returns to it exactly as it was.
+    val saved = androidx.compose.runtime.saveable.rememberSaveableStateHolder()
     val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(Unit) { vm.messages.collect { snackbar.showSnackbar(it) } }
     // Keep the Downloads badge current while the app is on screen.
@@ -78,7 +81,8 @@ fun App(vm: AppViewModel) {
     UpNextSheet(vm)
     LyricsSheet(vm)
     CompositionLocalProvider(LocalSnackbar provides snackbar) { Box(Modifier.fillMaxSize()) {
-        when (val screen = stack.last()) {
+        val screen = stack.last()
+        saved.SaveableStateProvider("${stack.size}:$screen") { when (screen) {
             Screen.Library -> RootScreen(vm)
             is Screen.AlbumPage -> AlbumScreen(vm, screen)
             is Screen.ArtistPage -> ArtistScreen(vm, screen)
@@ -90,6 +94,6 @@ fun App(vm: AppViewModel) {
             is Screen.SavedAlbumPage -> SavedAlbumScreen(vm, screen)
             Screen.StatsPage -> StatsScreen(vm)
             is Screen.PlaylistPage -> PlaylistScreen(vm, screen)
-        }
+        } }
     } }
 }

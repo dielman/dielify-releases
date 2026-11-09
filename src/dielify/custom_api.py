@@ -10,6 +10,7 @@ for that device; send it as "Authorization: Bearer <token>" on every other call.
 from __future__ import annotations
 
 import threading
+import time
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
@@ -226,9 +227,19 @@ class _YouTube:
     def __init__(self):
         self._adapters: dict[str, tuple[YTMusicAdapter, threading.Lock]] = {}
         self._lock = threading.Lock()
+        self._last_person = 0.0  # when someone (not a background job) last asked YouTube
 
-    def call(self, profile: str, fn_name: str, *args, **kwargs):
+    def background(self, profile: str, fn_name: str, *args, **kwargs):
+        """For background jobs (the kids' explicit check): waits until nobody has asked
+        YouTube for 3 seconds, so people never queue behind it."""
+        while time.monotonic() - self._last_person < 3:
+            time.sleep(0.5)
+        return self.call(profile, fn_name, *args, _background=True, **kwargs)
+
+    def call(self, profile: str, fn_name: str, *args, _background: bool = False, **kwargs):
         from . import credstore
+        if not _background:
+            self._last_person = time.monotonic()
         profile = signin_of(profile)
         with self._lock:
             if profile not in self._adapters:
@@ -362,7 +373,7 @@ def discover_similar(video_id: str, limit: int = Query(25, ge=1, le=50),
     """Songs like this one (its YouTube Music radio)."""
     if s.kid:  # radio songs carry no explicit mark: fetch more, check some, keep what passes
         found = youtube.call(s.user.profile, "similar", video_id, min(50, limit * 2))
-        return ItemList(items=_items(_ratings(s).arrange(found), s.lib, lookups=10)[:limit])
+        return ItemList(items=_items(_ratings(s).arrange(found), s.lib)[:limit])
     return ItemList(items=_items(_ratings(s).arrange(youtube.call(s.user.profile, "similar", video_id, limit)), s.lib))
 
 
@@ -384,7 +395,7 @@ def yt_search(q: str = Query(min_length=1), type: Literal["song", "video", "albu
     if c and not c.youtube_search:
         return ItemList(items=[])  # a parent turned YouTube search off for this account
     # songs and albums come with YouTube's explicit mark; videos don't, so a few are checked
-    return ItemList(items=_items(youtube.call(s.user.profile, "search_items", q, type, limit), s.lib, lookups=5))
+    return ItemList(items=_items(youtube.call(s.user.profile, "search_items", q, type, limit), s.lib, lookups=2))
 
 
 @router.get("/yt/my-playlists", response_model=ItemList, tags=["youtube"])
@@ -462,7 +473,7 @@ def _collection(s: Session, info: YTItem, tracks: list[YTItem]) -> Collection:
     head = _items([info], s.lib)
     if not head:  # e.g. an explicit album, for a kids account
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Not available in your account")
-    return Collection(info=head[0], tracks=_items(tracks, s.lib, lookups=5))
+    return Collection(info=head[0], tracks=_items(tracks, s.lib))
 
 
 # --- download requests ------------------------------------------------------------
@@ -586,6 +597,20 @@ class TrackList(BaseModel):
     tracks: list[Track]
 
 
+class RadioIn(BaseModel):
+    video_id: str | None = Field(None, description="Song radio: start from this song")
+    artist_id: str | None = Field(None, description="Artist radio: the YouTube channel id (UC...)")
+    artist: str | None = Field(None, description="Artist radio by name (library artists)")
+    seeds: list[str] = Field([], max_length=50, description="Top-ups: the songs played so far, newest last")
+    exclude: list[str] = Field([], max_length=2000, description="Already in the list")
+    count: int = Field(25, ge=1, le=50)
+
+
+class Removed(BaseModel):
+    removed: int = Field(description="Songs taken out of your library")
+    deleted: int = Field(description="Of those, files deleted from the PC (nobody else had them)")
+
+
 class AddSongs(BaseModel):
     track_ids: list[int] = Field(min_length=1, max_length=2000)
 
@@ -684,6 +709,70 @@ def library_search(q: str = "", limit: int = Query(30, ge=1, le=500),
 @router.get("/library/tracks/{track_id}", response_model=Track, tags=["library"])
 def library_track(track_id: int, s: Session = Depends(session)) -> Track:
     return _track_out(_track(s, track_id))
+
+
+def _remove(s: Session, tracks) -> Removed:
+    removed = deleted = 0
+    for t in tracks:
+        path = s.lib.path_of(t)
+        if s.lib.remove_track(t["id"]):
+            removed += 1
+            deleted += not path.exists()
+    return Removed(removed=removed, deleted=deleted)
+
+
+@router.delete("/library/tracks/{track_id}", response_model=Removed, tags=["library"])
+def library_remove_track(track_id: int, s: Session = Depends(session)) -> Removed:
+    """Take a song out of your library. Its file is deleted from the PC only when nobody
+    else in the household has it (and never because of a kids account)."""
+    try:
+        return _remove(s, [_track(s, track_id)])
+    except OSError as e:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from e
+
+
+@router.delete("/library/albums/{album_id}", response_model=Removed, tags=["library"])
+def library_remove_album(album_id: int, s: Session = Depends(session)) -> Removed:
+    """Take an album (its songs in your library) out of your library; files as above."""
+    tracks = s.lib.tracks_on_album(album_id)
+    if not tracks:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No such album in your library")
+    try:
+        return _remove(s, tracks)
+    except OSError as e:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from e
+
+
+@router.post("/radio", response_model=ItemList, tags=["discover"])
+def radio(body: RadioIn, s: Session = Depends(session)) -> ItemList:
+    """Song radio or artist radio: songs like this song / artist, to play now. Ask again
+    with `seeds` (what's been played) and `exclude` to keep it going. Library songs come
+    too; nothing is downloaded unless it's played (like instant play)."""
+    from . import explore
+    r = _ratings(s)
+    similar = lambda vid, n: youtube.call(s.user.profile, "similar", vid, n)  # noqa: E731
+    exclude = set(body.exclude)
+    if body.seeds:  # top-up: like the latest songs heard
+        items = explore.next_songs(s.lib, r, similar, body.seeds, exclude | set(body.seeds), [],
+                                   body.count * (3 if s.kid else 1), new_only=False)
+    elif body.video_id:
+        items = [i for i in similar(body.video_id, 50) if i.id not in exclude]
+    elif body.artist_id or body.artist:
+        channel = body.artist_id
+        if not channel:  # a library artist: find them on YouTube Music
+            found = youtube.call(s.user.profile, "search_items", body.artist, "artist", 3)
+            match = next((a for a in found if a.title.casefold() == body.artist.casefold()), found[0] if found else None)
+            channel = match.id if match else None
+        if channel:
+            items = youtube.call(s.user.profile, "artist_radio", channel, 50)
+        else:  # not on YouTube Music: radio of their songs in your library
+            mine = [t["video_id"] for t in s.lib.search(body.artist or "", 0, 0, 0, 0, 20)[2]
+                    if t["video_id"] and (body.artist or "").casefold() in (t["artist"] or "").casefold()]
+            items = explore.next_songs(s.lib, r, similar, mine[:4], exclude, [], body.count, new_only=False)
+    else:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Give video_id, artist_id or artist")
+    items = [i for i in r.arrange(items) if i.type in ("song", "video") and r.value(i.id, i.artists) > -1]
+    return ItemList(items=_items(items, s.lib, lookups=4 if s.kid else 0)[:body.count])
 
 
 @router.put("/library/tracks/{track_id}/star", response_model=Track, tags=["library"])
@@ -974,7 +1063,7 @@ def discover_endless(body: EndlessIn, request: Request, s: Session = Depends(ses
                                seeds, set(body.exclude) | set(body.seeds), fallback,
                                body.count * 3 if s.kid else body.count)
     if s.kid:  # only songs her controls allow (checked with YouTube where unmarked)
-        allowed = {i.id for i in _items(items, s.lib, lookups=12)}
+        allowed = {i.id for i in _items(items, s.lib, lookups=4)}
         items = [i for i in items if i.id in allowed][:body.count]
     if items:
         explore.remember(s.user.profile, items)
@@ -1033,7 +1122,7 @@ def discover_for_you(s: Session = Depends(session)) -> ForYou:
             if it.id not in have and it.id not in seen:
                 seen.add(it.id)
                 more.append(it)
-    return ForYou(on_repeat=on_repeat, forgotten=forgotten, more_like=_items(r.arrange(more)[:40], s.lib, lookups=8))
+    return ForYou(on_repeat=on_repeat, forgotten=forgotten, more_like=_items(r.arrange(more)[:40], s.lib))
 
 
 @router.get("/me", response_model=Me, tags=["auth"])

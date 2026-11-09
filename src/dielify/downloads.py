@@ -370,7 +370,12 @@ class DownloadQueue:
                 self._set(job_id, status="failed", error=f"Not allowed in your account ({reason})")
                 return
         attempt = job["attempts"] + 1
-        self._set(job_id, status="downloading", attempts=attempt, error=None, progress=0.0)
+        with connect() as conn:  # only if it's still waiting (it may have been cancelled meanwhile)
+            started = conn.execute(
+                "UPDATE downloads SET status = 'downloading', attempts = ?, error = NULL, progress = 0, "
+                "updated_at = ? WHERE id = ? AND status = 'queued'", (attempt, time.time(), job_id)).rowcount
+        if not started:
+            return
         log.info("Downloading %s (%s), attempt %d", job["video_id"], job["title"], attempt)
         try:
             s = settings_mod.load()

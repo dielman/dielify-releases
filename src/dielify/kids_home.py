@@ -15,7 +15,7 @@ from . import history, kids
 from .library import Library
 from .yt_adapter import Shelf, YTItem
 
-KEEP_S = 30 * 60
+KEEP_S = 10 * 60  # songs checked in the background meanwhile show on the next build
 _cache: dict[str, tuple[float, list[Shelf]]] = {}
 _lock = threading.Lock()
 
@@ -40,7 +40,7 @@ def shelves(lib: Library, call: kids.Call) -> list[Shelf]:
         hit = _cache.get(lib.profile)
         if hit and time.time() - hit[0] < KEEP_S:
             return hit[1]
-    f = kids.KidFilter(lib.profile, call, lookups=15)
+    f = kids.KidFilter(lib.profile, call)  # never waits on explicit checks (see kids.check_soon)
     out: list[Shelf] = []
 
     picks = [YTItem(**{k: v for k, v in p.items() if k in YTItem.__dataclass_fields__}) for p in f.c.picks]
@@ -75,6 +75,6 @@ def shelves(lib: Library, call: kids.Call) -> list[Shelf]:
     if on_pc:
         out.append(Shelf("On the PC: add to your library", on_pc))
 
-    with _lock:
-        _cache[lib.profile] = (time.time(), out)
+    with _lock:  # songs still waiting for their check: build again in a minute
+        _cache[lib.profile] = (time.time() - (KEEP_S - 60 if kids._pending else 0), out)
     return out

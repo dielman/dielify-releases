@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.DownloadForOffline
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.VerticalAlignTop
@@ -76,11 +77,21 @@ import kotlinx.coroutines.launch
 @Composable
 fun RootScreen(vm: AppViewModel) {
     val tab by vm.tab.collectAsStateWithLifecycle()
-    when (tab) {
-        Tab.Library -> LibraryScreen(vm)
-        Tab.Discover -> DiscoverScreen(vm)
-        Tab.Search -> YtSearchScreen(vm)
-        Tab.Downloads -> DownloadsScreen(vm)
+    // Discover needs the PC: when it can't be reached, open on the songs saved on the phone.
+    val link by vm.server.link.collectAsStateWithLifecycle()
+    val savedCount = vm.savedSongs.collectAsStateWithLifecycle().value.size
+    LaunchedEffect(link is com.dielify.app.net.Link.Down) {
+        if (link is com.dielify.app.net.Link.Down && savedCount > 0 && tab == Tab.Discover) vm.selectTab(Tab.Library)
+    }
+    // each tab keeps its state while you're on another one (e.g. the search)
+    val tabs = androidx.compose.runtime.saveable.rememberSaveableStateHolder()
+    tabs.SaveableStateProvider(tab.name) {
+        when (tab) {
+            Tab.Library -> LibraryScreen(vm)
+            Tab.Discover -> DiscoverScreen(vm)
+            Tab.Search -> YtSearchScreen(vm)
+            Tab.Downloads -> DownloadsScreen(vm)
+        }
     }
 }
 
@@ -148,7 +159,13 @@ fun ItemRow(vm: AppViewModel, item: Item, queue: List<Item> = listOf(item),
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                 if (item.isSong) DropdownMenuItem(
                     text = { Text("Play") }, onClick = { menu = false; vm.openItem(item, queue) })
-                if (item.isSong) QueueMenuItems({ menu = false }) { next -> vm.queueItems(listOf(item), next) }
+                if (item.isSong) QueueMenuItems({ menu = false },
+                    radio = { vm.songRadio(item.id, item.title, com.dielify.app.playback.MediaItems.fromItem(item)) },
+                ) { next -> vm.queueItems(listOf(item), next) }
+                if (item.type == "artist") DropdownMenuItem(
+                    text = { Text("Artist radio") },
+                    leadingIcon = { Icon(Icons.Filled.Radio, null) },
+                    onClick = { menu = false; vm.startRadio(com.dielify.app.net.RadioIn(artistId = item.id), "${item.title} radio") })
                 if (item.type != "artist" && item.libraryTrackId == null) {
                     DropdownMenuItem(
                         text = { Text(if (item.isSong) "Download next" else "Download all next") },
@@ -259,7 +276,7 @@ private data class DiscoverData(
 fun DiscoverScreen(vm: AppViewModel) {
     Page(vm, "Discover", back = false, tabs = true, actions = { TopActions(vm) }) { pad ->
         Box(Modifier.padding(pad)) {
-            Loaded(vm, "discover", {
+            Loaded(vm, "discover", cacheMs = 3 * 60_000, load = {
                 val home = vm.server.home()
                 val charts = runCatching { vm.server.charts() }.getOrNull()
                 val forYou = runCatching { vm.server.forYou() }.getOrNull()
@@ -345,7 +362,7 @@ fun YtSearchScreen(vm: AppViewModel) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             } else {
-                Loaded(vm, "$type:$query", { vm.server.ytSearch(query, type) }) { items ->
+                Loaded(vm, "search:$type:$query", { vm.server.ytSearch(query, type) }, cacheMs = 10 * 60_000) { items ->
                     if (items.isEmpty()) Box(Modifier.fillMaxSize(), Alignment.Center) { Text("No results") }
                     else LazyColumn(Modifier.fillMaxSize()) {
                         items(items, key = { it.type + it.id }) { ItemRow(vm, it, items) }
@@ -362,7 +379,7 @@ fun YtSearchScreen(vm: AppViewModel) {
 fun YtCollectionScreen(vm: AppViewModel, name: String, key: String, load: suspend () -> YtCollection) {
     Page(vm, name) { pad ->
         Box(Modifier.padding(pad)) {
-            Loaded(vm, key, load) { c ->
+            Loaded(vm, "collection:$key", load, cacheMs = 5 * 60_000) { c ->
                 val missing = c.tracks.count { it.libraryTrackId == null }
                 val have = c.tracks.mapNotNull { it.libraryTrackId }
                 LazyColumn(Modifier.fillMaxSize()) {

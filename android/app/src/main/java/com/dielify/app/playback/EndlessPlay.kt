@@ -17,15 +17,21 @@ import kotlinx.coroutines.launch
 class EndlessPlay(private val server: Server) {
     @Volatile var active = false
         private set
+    /** Song / artist radio: tops up with songs like the last few heard (library songs too,
+     *  nothing downloaded unless played) instead of new-to-you songs. */
+    @Volatile var radio = false
+        private set
     private val ids = mutableSetOf<String>()  // media ids this mode put in the list
     @Volatile private var fetching = false
 
     suspend fun batch(seeds: List<String>, exclude: List<String>, count: Int = 10): List<Item> =
-        server.endless(EndlessIn(seeds.takeLast(20), exclude.takeLast(2000), count))
+        if (radio) server.radio(com.dielify.app.net.RadioIn(seeds = seeds.takeLast(5), exclude = exclude.takeLast(2000), count = count))
+        else server.endless(EndlessIn(seeds.takeLast(20), exclude.takeLast(2000), count))
 
     /** The first songs, for the view model to play. */
-    fun started(items: List<MediaItem>, seed: MediaItem?) {
+    fun started(items: List<MediaItem>, seed: MediaItem?, asRadio: Boolean = false) {
         synchronized(ids) { ids.clear(); seed?.let { ids += it.mediaId }; items.forEach { ids += it.mediaId } }
+        radio = asRadio
         active = true
     }
 

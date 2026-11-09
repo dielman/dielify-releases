@@ -29,6 +29,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -54,13 +55,16 @@ fun UpNextButton(vm: AppViewModel) {
     }
 }
 
-/** Play next / Add to queue, for a song's ⋮ menu. */
+/** Play next / Add to queue (and Start radio), for a song's ⋮ menu. */
 @Composable
-fun QueueMenuItems(close: () -> Unit, add: (next: Boolean) -> Unit) {
+fun QueueMenuItems(close: () -> Unit, radio: (() -> Unit)? = null, add: (next: Boolean) -> Unit) {
     DropdownMenuItem(text = { Text("Play next") }, leadingIcon = { Icon(Icons.AutoMirrored.Filled.PlaylistPlay, null) },
         onClick = { close(); add(true) })
     DropdownMenuItem(text = { Text("Add to queue") }, leadingIcon = { Icon(Icons.AutoMirrored.Filled.QueueMusic, null) },
         onClick = { close(); add(false) })
+    if (radio != null) DropdownMenuItem(text = { Text("Start radio") },
+        leadingIcon = { Icon(Icons.Filled.Radio, null) },
+        onClick = { close(); radio() })
 }
 
 /** Up next: the song playing now and the ones coming up. Tap one to play it. */

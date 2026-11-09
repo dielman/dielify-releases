@@ -54,7 +54,7 @@ def create_app(queue: DownloadQueue | None = None) -> FastAPI:
     mix_maker = MixMaker(youtube.call)
     outside = Discovery(youtube.call)
     leveller = Leveller()
-    kids_check = Checker(youtube.call)
+    kids_check = Checker(youtube.background)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):

@@ -304,6 +304,11 @@ class Server(private val context: Context, private val accounts: AccountStore) {
     suspend fun rate(r: RatingIn): RatingList =
         json.decodeFromString(RatingList.serializer(), send("PUT", "api/ratings", json.encodeToString(RatingIn.serializer(), r)))
     /** Never-ending discovery play: the next new songs (the PC queues their downloads). */
+    suspend fun radio(body: RadioIn): List<Item> =
+        json.decodeFromString(ItemList.serializer(), send("POST", "api/radio", json.encodeToString(RadioIn.serializer(), body))).items
+    /** Take songs out of your library (the PC deletes a file only if nobody else has it). */
+    suspend fun removeTrack(id: Long): Removed = json.decodeFromString(Removed.serializer(), send("DELETE", "api/library/tracks/$id"))
+    suspend fun removeAlbum(id: Long): Removed = json.decodeFromString(Removed.serializer(), send("DELETE", "api/library/albums/$id"))
     suspend fun endless(body: EndlessIn): List<Item> =
         json.decodeFromString(ItemList.serializer(), send("POST", "api/discover/endless", json.encodeToString(EndlessIn.serializer(), body))).items
     suspend fun forYou(): ForYou = get("api/discover/for-you")

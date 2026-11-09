@@ -87,8 +87,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val _player = MutableStateFlow(PlayerUi())
     val player: StateFlow<PlayerUi> = _player.asStateFlow()
 
-    private val _tab = MutableStateFlow(Tab.Library)
+    private val _tab = MutableStateFlow(Tab.Discover)  // the app opens on Discover
     val tab: StateFlow<Tab> = _tab.asStateFlow()
+
+    /** Results already loaded (searches, albums, Discover), so going back shows them at once. */
+    val loadCache = java.util.concurrent.ConcurrentHashMap<String, Pair<Long, Any?>>()
 
     /** Short messages shown at the bottom ("Added to downloads", errors). */
     val messages = MutableSharedFlow<String>(extraBufferCapacity = 4)
@@ -219,6 +222,48 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         c.prepare()
         c.play()
         messages.tryEmit("Never-ending discovery: thumbs down deletes a song again")
+    }
+
+    /** Song radio / artist radio: plays now, then keeps going with songs like it. */
+    fun startRadio(source: com.dielify.app.net.RadioIn, label: String, first: MediaItem? = null) = viewModelScope.launch {
+        val c = controller ?: return@launch
+        messages.tryEmit("Starting $label…")
+        val items = try { server.radio(source) } catch (e: ApiError) { messages.tryEmit(e.message ?: "Couldn't reach your PC"); return@launch }
+        val media = listOfNotNull(first) + items.map(MediaItems::fromItem).filter { it.mediaId != first?.mediaId }
+        if (media.isEmpty()) { messages.tryEmit("Couldn't find songs for this radio right now"); return@launch }
+        c.shuffleModeEnabled = false
+        c.setMediaItems(media, 0, 0L)
+        getApplication<Application>().dielify.endless.started(media, null, asRadio = true)
+        c.prepare()
+        c.play()
+    }
+
+    /** Radio of the song playing now (Now playing). */
+    fun radioFromCurrent() {
+        val m = controller?.currentMediaItem ?: return
+        val vid = MediaItems.videoId(m) ?: return run { messages.tryEmit("No radio for this song (it isn't from YouTube Music)") }
+        songRadio(vid, m.mediaMetadata.title?.toString() ?: "this song", m)
+    }
+
+    fun songRadio(videoId: String, title: String, first: MediaItem? = null) =
+        startRadio(com.dielify.app.net.RadioIn(videoId = videoId), "radio: $title", first)
+
+    /** Bumped when songs leave the library, so open library lists load again. */
+    val libraryChanged = MutableStateFlow(0)
+
+    fun removeTracks(ids: List<Long>, albumId: Long? = null) = viewModelScope.launch {
+        try {
+            var removed = 0
+            var deleted = 0
+            if (albumId != null) server.removeAlbum(albumId).let { removed += it.removed; deleted += it.deleted }
+            else ids.forEach { id -> server.removeTrack(id).let { removed += it.removed; deleted += it.deleted } }
+            libraryChanged.value++
+            messages.tryEmit("Removed $removed ${if (removed == 1) "song" else "songs"} from your library" +
+                if (deleted < removed) " (kept on the PC for others in your household)" else "")
+            if (albumId != null) back()
+        } catch (e: ApiError) {
+            messages.tryEmit(e.message ?: "Couldn't remove it")
+        }
     }
 
     // --- Up next (the queue) ---------------------------------------------------------------------

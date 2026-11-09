@@ -24,6 +24,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -40,20 +41,37 @@ sealed interface Load<out T> {
     data class Failed(val message: String) : Load<Nothing>
 }
 
-/** Loads something from the PC and shows a spinner, the result, or the error with a retry button. */
+/**
+ * Loads something from the PC and shows a spinner, the result, or the error with a retry
+ * button. cacheMs > 0: a result loaded less than that long ago shows at once (going back to
+ * a search or an album doesn't load it again).
+ */
+@Suppress("UNCHECKED_CAST")
 @Composable
 fun <T> Loaded(
     vm: AppViewModel,
     key: Any?,
     load: suspend () -> T,
+    cacheMs: Long = 0,
     content: @Composable (T) -> Unit,
 ) {
     var attempt by remember { mutableIntStateOf(0) }
-    var state by remember(key) { mutableStateOf<Load<T>>(Load.Loading) }
-    LaunchedEffect(key, attempt) {
+    val cacheKey = key.toString()
+    var state by remember(key) {
+        val hit = if (cacheMs > 0) vm.loadCache[cacheKey] else null
+        mutableStateOf<Load<T>>(
+            if (hit != null && System.currentTimeMillis() - hit.first < cacheMs) Load.Done(hit.second as T) else Load.Loading,
+        )
+    }
+    // library lists load again when songs leave the library (cached ones don't need to)
+    val libraryVersion by vm.libraryChanged.collectAsStateWithLifecycle()
+    var loadedVersion by remember(key) { mutableIntStateOf(libraryVersion) }
+    LaunchedEffect(key, attempt, if (cacheMs == 0L) libraryVersion else 0) {
+        if (attempt == 0 && state is Load.Done && loadedVersion == libraryVersion) return@LaunchedEffect  // from the cache
+        loadedVersion = libraryVersion
         if (state !is Load.Done) state = Load.Loading
         state = try {
-            Load.Done(load())
+            Load.Done(load()).also { if (cacheMs > 0) vm.loadCache[cacheKey] = System.currentTimeMillis() to it.value }
         } catch (e: ApiError) {
             if (e.code == 401) vm.tokenRejected()
             Load.Failed(e.message ?: "Something went wrong")

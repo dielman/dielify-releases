@@ -15,6 +15,21 @@ data class Rating(val kind: String, val key: String, val name: String, val value
 @Serializable
 data class EndlessIn(val seeds: List<String>, val exclude: List<String>, val count: Int = 10)
 
+/** Song radio (videoId) or artist radio (artistId = YouTube channel, or artist = a name);
+ *  top-ups send seeds + exclude. */
+@Serializable
+data class RadioIn(
+    @kotlinx.serialization.SerialName("video_id") val videoId: String? = null,
+    @kotlinx.serialization.SerialName("artist_id") val artistId: String? = null,
+    val artist: String? = null,
+    val seeds: List<String> = emptyList(),
+    val exclude: List<String> = emptyList(),
+    val count: Int = 25,
+)
+
+@Serializable
+data class Removed(val removed: Int, val deleted: Int)
+
 @Serializable
 data class RatingIn(
     val kind: String,

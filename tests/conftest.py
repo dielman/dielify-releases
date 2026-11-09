@@ -15,6 +15,9 @@ def isolated_home(tmp_path, monkeypatch):
     monkeypatch.delenv("DIELIFY_INSECURE_DEV_STORE", raising=False)
     from dielify import lyrics
     monkeypatch.setattr(lyrics, "from_lrclib", lambda *a, **k: None)  # tests never call lrclib.net
+    from dielify import kids, kids_home
+    kids._pending.clear()  # in-memory state from other tests
+    kids_home.forget()
     return tmp_path / "appdata"
 
 

@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.DownloadForOffline
 import androidx.compose.material.icons.filled.OfflinePin
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.PlayArrow
@@ -47,6 +48,7 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.TextButton
@@ -86,7 +88,11 @@ import com.dielify.app.net.Track
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-/** Top bar + content + the mini player at the bottom. */
+/**
+ * Top bar (with the green "Playing on <device>" bar under it while another device plays)
+ * + content + the mini player at the bottom. The Scaffold gives the content padding for
+ * both bars, so nothing ends up under them. mini=false: no mini player (Now playing).
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun Page(
@@ -94,24 +100,28 @@ fun Page(
     title: String,
     back: Boolean = true,
     tabs: Boolean = false,
+    mini: Boolean = true,
     actions: @Composable () -> Unit = {},
     content: @Composable (PaddingValues) -> Unit,
 ) {
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                navigationIcon = {
-                    if (back) IconButton(onClick = { vm.back() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
-                    }
-                },
-                actions = { actions() },
-            )
+            Column {
+                TopAppBar(
+                    title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    navigationIcon = {
+                        if (back) IconButton(onClick = { vm.back() }) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
+                        }
+                    },
+                    actions = { actions() },
+                )
+                PlayingOnStrip(vm)
+            }
         },
         bottomBar = {
             Column {
-                MiniPlayer(vm)
+                if (mini) MiniPlayer(vm)
                 if (tabs) TabBar(vm) else Spacer(Modifier.navigationBarsPadding())
             }
         },
@@ -421,13 +431,34 @@ fun TrackRow(vm: AppViewModel, t: Track, showArtist: Boolean, onClick: () -> Uni
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         var menu by remember { mutableStateOf(false) }
+        var confirm by remember { mutableStateOf(false) }
         Box {
             IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "More") }
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                QueueMenuItems({ menu = false }) { next -> vm.queueTracks(listOf(t), next) }
+                QueueMenuItems({ menu = false },
+                    radio = t.videoId?.let { v -> { vm.songRadio(v, t.title, com.dielify.app.playback.MediaItems.fromTrack(t)) } },
+                ) { next -> vm.queueTracks(listOf(t), next) }
+                DropdownMenuItem(text = { Text("Remove from my library") }, leadingIcon = { Icon(Icons.Filled.Delete, null) },
+                    onClick = { menu = false; confirm = true })
             }
         }
+        if (confirm) RemoveDialog("\u201c${t.title}\u201d", onDismiss = { confirm = false }) {
+            confirm = false
+            vm.removeTracks(listOf(t.id))
+        }
     }
+}
+
+/** "Remove X from your library?" (the PC deletes the file only if nobody else has it). */
+@Composable
+fun RemoveDialog(what: String, onDismiss: () -> Unit, onConfirm: () -> Unit) {
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Remove from your library?") },
+        text = { Text("$what leaves your library. The music file is deleted from the PC too, unless someone else in your household has it.") },
+        confirmButton = { TextButton(onClick = onConfirm) { Text("Remove") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
 /** "Save on phone" / "Saving 3 of 12" / "Remove from phone" for a set of songs. */
@@ -574,7 +605,18 @@ fun AlbumScreen(vm: AppViewModel, page: Screen.AlbumPage) {
                                 }
                             }
                             Spacer(Modifier.height(8.dp))
-                            SaveButton(vm, detail.tracks)
+                            var confirm by remember { mutableStateOf(false) }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                SaveButton(vm, detail.tracks)
+                                TextButton(onClick = { confirm = true }) {
+                                    Icon(Icons.Filled.Delete, null); Spacer(Modifier.width(4.dp)); Text("Remove")
+                                }
+                            }
+                            if (confirm) RemoveDialog("The album \u201c${a.name}\u201d (${detail.tracks.size} songs)",
+                                onDismiss = { confirm = false }) {
+                                confirm = false
+                                vm.removeTracks(detail.tracks.map { it.id }, albumId = a.id)
+                            }
                         }
                     }
                     itemsIndexed(detail.tracks, key = { _, t -> t.id }) { i, t ->
@@ -592,7 +634,14 @@ fun ArtistScreen(vm: AppViewModel, page: Screen.ArtistPage) {
         Box(Modifier.padding(pad)) {
             Loaded(vm, page.id, { vm.server.artist(page.id) }) { detail ->
                 Column {
-                    ArtistThumbs(vm, page.name)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        ArtistThumbs(vm, page.name)
+                        Spacer(Modifier.weight(1f))
+                        FilledTonalButton(onClick = { vm.startRadio(com.dielify.app.net.RadioIn(artist = page.name), "${page.name} radio") },
+                            modifier = Modifier.padding(end = 16.dp)) {
+                            Icon(Icons.Filled.Radio, null); Spacer(Modifier.width(4.dp)); Text("Artist radio")
+                        }
+                    }
                     AlbumGrid(vm, detail.albums)
                 }
             }

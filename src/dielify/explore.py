@@ -22,11 +22,12 @@ MAX_SEEDS = 4
 
 
 def next_songs(lib: Library, ratings: Ratings, similar: Callable[[str, int], list[YTItem]],
-               seeds: list[str], exclude: set[str], fallback_seeds: list[str], count: int = 10) -> list[YTItem]:
+               seeds: list[str], exclude: set[str], fallback_seeds: list[str], count: int = 10,
+               new_only: bool = True) -> list[YTItem]:
     """Up to `count` new songs like the seeds (newest seed first): not in the library, not
     already in the list, nothing banned or thumbed down. Seeds that give nothing new fall
-    back to your most-played songs."""
-    have = lib.video_ids()
+    back to your most-played songs. new_only=False (radio): library songs may come too."""
+    have = lib.video_ids() if new_only else {}
     picked: list[YTItem] = []
     seen = set(exclude)
     order = [v for v in dict.fromkeys(list(reversed(seeds))[:MAX_SEEDS] + fallback_seeds[:MAX_SEEDS]) if v]

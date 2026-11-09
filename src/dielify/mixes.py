@@ -220,7 +220,7 @@ class MixMaker:
             return None
         from . import kids
         if kids.is_child(profile):  # a kids account's new finds pass the parent's controls
-            f = lambda: kids.KidFilter(profile, lambda fn, *a: self.call(profile, fn, *a), lookups=6)  # noqa: E731
+            f = lambda: kids.KidFilter(profile)  # noqa: E731  (unchecked songs: checked in the background)
             return lambda vid: f().items(self.call(profile, "similar", vid, 25))[:15]
         return lambda vid: self.call(profile, "similar", vid, 15)
 

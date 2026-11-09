@@ -454,6 +454,12 @@ src/dielify/
   button hidden when discovery play is off. Not done: remote control parent<->kid,
   approvals on the parent's phone, quiet hours for Subsonic apps.
 
+- 0.9.4 built (Josh: "do some coding" after listing issues; Discovery moved to 0.9.5), 160
+  tests, phone builds, PC checked in the browser, **not published**. Fixes the six issues in
+  docs/ISSUES-0.9.3.md (see there). Also: a download only starts if it's still queued
+  (cancel race), `_YouTube.background` (waits for 3 s without people's calls) for the kids
+  Checker; kids.check_soon queues songs a child met for checking first.
+
 ## Backlog (Josh, 8 Nov; after Phase 8 item 6)
 
 - **Published v0.8.11 (9 Nov; not yet confirmed by Josh on device): ratings + ban.** `ratings.py` (table

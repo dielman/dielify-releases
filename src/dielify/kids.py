@@ -160,6 +160,17 @@ def remember(items) -> None:
 
 _MISSING = object()
 
+# Songs a child met (radio, Discover) that had no explicit mark: the background check does
+# these first, so they show next time. video id -> (title, artists, sign-in profile)
+_pending: dict[str, tuple[str, list[str], str]] = {}
+_pending_lock = threading.Lock()
+
+
+def check_soon(video_id: str, title: str, artists: list[str], signin: str) -> None:
+    with _pending_lock:
+        if video_id not in _pending and len(_pending) < 5000:
+            _pending[video_id] = (title, list(artists), signin)
+
 
 def flags(video_ids) -> dict:
     """video id -> True / False (YouTube's mark), None (looked up, YouTube didn't say).
@@ -249,6 +260,8 @@ class KidFilter:
             if flag is True:
                 return "explicit"
             if flag is _MISSING:
+                from .library import signin_of
+                check_soon(video_id, title, artists, signin_of(self.profile))  # shows next time
                 return "not checked yet"
         if self.c.lyrics_check and lyrics_bad(video_id, self.c.extra_words):
             return "language in the lyrics"
@@ -335,20 +348,30 @@ class Checker:
             self._thread.join(5)
 
     def todo(self, limit: int) -> list[tuple[str, dict]]:
-        """(store owner, song) pairs still to check, for stores with a kid who blocks explicit."""
+        """(sign-in, song) pairs still to check: songs a child just met first, then the
+        stores' songs (for stores with a kid who blocks explicit)."""
+        with _pending_lock:
+            out = [(signin, {"video_id": vid, "title": title, "artist": (artists or [""])[0]})
+                   for vid, (title, artists, signin) in list(_pending.items())[:limit]]
+        if len(out) >= limit:
+            return out
         stores = {}
         with connect() as conn:
             for r in conn.execute("SELECT p.profile, p.store, k.body FROM people p LEFT JOIN kid_controls k "
                                   "ON k.profile = p.profile WHERE p.role = 'child'"):
                 if Controls.from_dict(json.loads(r["body"]) if r["body"] else {}).explicit == "block":
                     stores[r["store"]] = True
-            out = []
             for store in stores:
                 out += [(store, dict(t)) for t in conn.execute(
                     "SELECT t.video_id, t.title, t.artist FROM tracks t WHERE t.profile = ? AND t.video_id IS NOT NULL "
                     "AND NOT EXISTS (SELECT 1 FROM yt_flags f WHERE f.video_id = t.video_id) "
                     "ORDER BY t.created_at DESC LIMIT ?", (store, limit))]
-        return out[:limit]
+        seen, unique = set(), []
+        for signin, t in out:  # a song met in Discover may also be on the PC
+            if t["video_id"] not in seen:
+                seen.add(t["video_id"])
+                unique.append((signin, t))
+        return unique[:limit]
 
     def run_once(self) -> int:
         from . import settings as settings_mod
@@ -364,6 +387,8 @@ class Checker:
             except Exception as e:  # noqa: BLE001 - YouTube unreachable / signed out: later
                 log.info("Kids check paused: %s", getattr(e, "detail", e))
                 break
+            with _pending_lock:
+                _pending.pop(t["video_id"], None)
             n += 1
         self.checked += n
         return n
