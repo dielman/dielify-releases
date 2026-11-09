@@ -502,6 +502,10 @@ def get_cover_art(ctx: Ctx) -> Response:
     kind, num = parse_id(ctx.p.need("id"), "tr", "al", "ar")
     track_id = num if kind == "tr" else None
     if kind == "ar":
+        from . import artwork
+        r = ctx.lib.artist(num)
+        if r is not None and artwork.photo_path(r["name"]).exists():  # the artist's photo (0.9.9)
+            return Response(artwork.photo_path(r["name"]).read_bytes(), media_type="image/jpeg")
         albums = ctx.lib.albums_by_artist(num)
         track_id = next((a["cover_track_id"] for a in albums if a["cover_track_id"]), None)
     elif kind == "al":

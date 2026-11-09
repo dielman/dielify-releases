@@ -18,6 +18,9 @@ def isolated_home(tmp_path, monkeypatch):
     from dielify import kids, kids_home
     kids._pending.clear()  # in-memory state from other tests
     kids_home.forget()
+    from dielify import artwork, playlist_api
+    artwork.forget_cache()  # cover colours of another test's database
+    playlist_api._grid_colours.clear()
     return tmp_path / "appdata"
 
 

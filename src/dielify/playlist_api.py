@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response,
 from pydantic import BaseModel, Field
 
 from . import playlists as pl
-from .custom_api import Item, Session, _items, session
+from .custom_api import Item, Session, _items, media_session, session
 from .yt_adapter import YTItem
 
 router = APIRouter(prefix="/api", tags=["playlists"])
@@ -26,6 +26,8 @@ class PlaylistSummary(BaseModel):
     sync_error: str | None
     thumbnail: str | None
     shared: bool = Field(False, description="Shared with the household: everyone can add and remove songs")
+    cover_url: str | None = Field(None, description="Always set: a 2x2 grid of its album covers, or a designed cover")
+    colors: dict | None = Field(None, description="bg / accent / fg from the cover")
     owner: str | None = Field(None, description="Who made it")
     mine: bool = Field(True, description="False: someone else's list shared with you (you can't rename/delete it)")
 
@@ -114,7 +116,20 @@ def _summary(p: dict, viewer: str | None = None) -> PlaylistSummary:
                            kind=p.get("kind") or "user", description=p.get("description"),
                            count=p["count"] if "count" in p else len(p.get("items", [])),
                            pending=p.get("pending", 0), synced_at=p["synced_at"], sync_error=p["sync_error"],
-                           thumbnail=_thumb(first), shared=bool(p.get("shared")), owner=p["profile"], mine=mine)
+                           thumbnail=_thumb(first), shared=bool(p.get("shared")), owner=p["profile"], mine=mine,
+                           cover_url=f"/api/playlists/{p['id']}/cover", colors=_cover_colours(p))
+
+
+def _cover_colours(p: dict) -> dict | None:
+    """Colours for a playlist card: designed covers have theirs from the name; grids take
+    the first album's (worked out when the cover is drawn)."""
+    from . import artwork
+    if (p.get("kind") or "user") != "user" or not p.get("first_video"):
+        return artwork.seed_colours(p["name"])
+    return _grid_colours.get(p["id"])
+
+
+_grid_colours: dict[int, dict] = {}
 
 
 def _detail(s: Session, p: dict) -> PlaylistDetail:
@@ -187,6 +202,21 @@ def set_smart_rules(playlist_id: int, body: SmartPlaylistIn, s: Session = Depend
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No such smart playlist")
     _smart(lambda: smart.update(s.user.profile, playlist_id, body.name, body.rules.model_dump()))
     return _detail(s, pl.get(s.user.profile, playlist_id))
+
+
+@router.get("/playlists/{playlist_id}/cover", tags=["playlists"],
+            responses={200: {"content": {"image/jpeg": {}}}})
+def playlist_cover(playlist_id: int, size: int = Query(600, ge=64, le=1200),
+                   s: Session = Depends(media_session)) -> Response:
+    """The playlist's cover: four of its album covers, or a designed one (mixes, Blends,
+    smart playlists, and playlists whose songs have no covers on this PC)."""
+    from . import artwork
+    p = pl.get(s.user.profile, playlist_id)
+    if p is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No such playlist")
+    data, colours = artwork.playlist_cover(s.lib, p, size)
+    _grid_colours[playlist_id] = {k: colours[k] for k in ("bg", "accent", "fg")}
+    return Response(data, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=3600"})
 
 
 class ShareIn(BaseModel):

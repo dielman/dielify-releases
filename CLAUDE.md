@@ -555,6 +555,19 @@ src/dielify/
     the queue after the playing song, reports on transitions). Phone: Jam icon in top bars, JamScreen,
     "Add to Jam" in song menus. Phone Server.send no longer sends a body with GET.
 
+- 0.9.9 Beautification (Josh, 10 Nov: all 27 items; plan in docs/ROADMAP.md). Decisions: font **Inter**
+  (Josh OK'd downloading the font files from Google Fonts), phone colours from the **song's cover**
+  (not Material You), app icon: "get creative" (draw options for Josh to pick).
+  - Stage 1 built (not released): `artwork.py`. Colours per album (table art_colors, key al:<album id>,
+    a:<artist key> for photos; palette() = Pillow median-cut: bg dark main colour, accent liveliest,
+    fg white; in-memory copy) on Track/Album/Artist (`colors`) and PlaylistSummary (`colors`, `cover_url`).
+    Covers always exist: album/track cover endpoints draw one (designed(): gradient from a curated hue set +
+    big Segoe UI Bold title) when there's no art. GET /api/playlists/{id}/cover = 2x2 of 4 different album
+    covers (1 if fewer), designed for mix/blend/smart. Artist photos: GET /api/library/artists/{id}/image
+    (photo file in <data>/artists/, else first album cover); artwork.Worker: colours first (local), then
+    photos via artists.photo_url (one artist search each, youtube.background, retried monthly). Subsonic
+    getCoverArt ar- uses the photo. Apps don't use the new fields yet (stages 2 and 3).
+
 ## Backlog (Josh, 8 Nov; after Phase 8 item 6)
 
 - **Published v0.8.11 (9 Nov; not yet confirmed by Josh on device): ratings + ban.** `ratings.py` (table

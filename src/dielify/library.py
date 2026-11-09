@@ -311,6 +311,15 @@ CREATE TABLE IF NOT EXISTS cast_tokens (
     expires_at REAL NOT NULL
 );
 
+-- Cover colours (0.9.9, artwork.py): key t:<track id> (its cover) | a:<artist key> (photo).
+CREATE TABLE IF NOT EXISTS art_colors (
+    key         TEXT PRIMARY KEY,
+    bg          TEXT NOT NULL,
+    accent      TEXT NOT NULL,
+    fg          TEXT NOT NULL,
+    computed_at REAL NOT NULL
+);
+
 -- Logins for our own API (auth.py): only a hash of each token is kept.
 CREATE TABLE IF NOT EXISTS device_tokens (
     id           INTEGER PRIMARY KEY,
@@ -358,6 +367,9 @@ def _migrate(conn: sqlite3.Connection) -> None:
     icols = {r[1] for r in conn.execute("PRAGMA table_info(playlist_items)")}
     if "added_by" not in icols:  # 0.9.8: who added a song to a shared playlist
         conn.execute("ALTER TABLE playlist_items ADD COLUMN added_by TEXT")
+    ycols = {r[1] for r in conn.execute("PRAGMA table_info(yt_artists)")}
+    if "photo_tried_at" not in ycols:  # 0.9.9: artist photos (artwork.py)
+        conn.execute("ALTER TABLE yt_artists ADD COLUMN photo_tried_at REAL")
     tcols = {r[1] for r in conn.execute("PRAGMA table_info(tracks)")}
     if "loudness" not in tcols:  # 0.9: volume levelling (leveller.py); NULL = not measured yet
         conn.execute("ALTER TABLE tracks ADD COLUMN loudness REAL")
@@ -889,3 +901,11 @@ class Library:
                 "FROM library_items li JOIN tracks t ON t.id = li.track_id WHERE li.profile = ?",
                 (self.profile,)).fetchone()
         return dict(row)
+
+
+def library_profiles_of_artists() -> list[tuple[str, str]]:
+    """(album artist name, store owner) for every artist in any library, most songs first."""
+    with connect() as conn:
+        return [(r["name"], r["profile"]) for r in conn.execute(
+            "SELECT ar.name, ar.profile, COUNT(t.id) n FROM artists ar JOIN tracks t ON t.artist_id = ar.id "
+            "GROUP BY ar.id ORDER BY n DESC")]

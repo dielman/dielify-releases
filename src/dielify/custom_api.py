@@ -179,6 +179,7 @@ class Track(BaseModel):
     cover_url: str | None
     gain_db: float | None = Field(None, description="Volume levelling: play this song this many dB "
                                                     "louder (negative = quieter). None: not measured yet")
+    colors: ArtColors | None = Field(None, description="From its album's cover")
 
 
 # --- session + YouTube access -----------------------------------------------------
@@ -575,12 +576,26 @@ def _track(s: Session, track_id: int):
     return t
 
 
+class ArtColors(BaseModel):
+    bg: str = Field(description="A dark colour from the artwork, for page backgrounds (#rrggbb)")
+    accent: str = Field(description="Its liveliest colour, readable on bg")
+    fg: str = Field(description="Text colour on bg")
+
+
+def _colours(key: str | None) -> ArtColors | None:
+    from . import artwork
+    c = artwork.colours(key) if key else None
+    return ArtColors(**c) if c else None
+
+
 class Artist(BaseModel):
     id: int
     name: str
     album_count: int
     cover_url: str | None
     starred: bool
+    image_url: str | None = Field(None, description="The artist's photo (YouTube Music), else an album cover")
+    colors: ArtColors | None = None
 
 
 class Album(BaseModel):
@@ -592,9 +607,10 @@ class Album(BaseModel):
     song_count: int
     duration_s: int
     play_count: int
-    cover_url: str | None
+    cover_url: str | None = Field(description="Always set: the album's cover, or a generated one")
     starred: bool
     created_at: float
+    colors: ArtColors | None = Field(None, description="From the cover (None: not worked out yet)")
 
 
 class ArtistList(BaseModel):
@@ -669,22 +685,25 @@ def _track_out(t) -> Track:
                  size=t["size"], video_id=t["video_id"], play_count=t["play_count"],
                  starred=t["starred_at"] is not None,
                  stream_url=f"/api/library/tracks/{t['id']}/stream",
-                 cover_url=f"/api/library/tracks/{t['id']}/cover" if t["has_cover"] else None,
-                 gain_db=gain_db(t["loudness"]) if "loudness" in t.keys() else None)
+                 cover_url=f"/api/library/tracks/{t['id']}/cover",  # generated when the song has no art
+                 gain_db=gain_db(t["loudness"]) if "loudness" in t.keys() else None,
+                 colors=_colours(f"al:{t['album_id']}") if "album_id" in t.keys() else None)
 
 
 def _album_out(a) -> Album:
     return Album(id=a["id"], name=a["name"], artist=a["artist"], artist_id=a["artist_id"],
                  year=a["year"], song_count=a["song_count"], duration_s=a["duration"] or 0,
                  play_count=a["play_count"],
-                 cover_url=f"/api/library/albums/{a['id']}/cover" if a["cover_track_id"] else None,
-                 starred=a["starred_at"] is not None, created_at=a["created_at"])
+                 cover_url=f"/api/library/albums/{a['id']}/cover",  # generated when the album has no art
+                 starred=a["starred_at"] is not None, created_at=a["created_at"], colors=_colours(f"al:{a['id']}"))
 
 
 def _artist_out(r) -> Artist:
+    from . import artwork
     cover = f"/api/library/albums/{r['first_album_id']}/cover" if r["first_album_id"] else None
+    colours = _colours(artwork.artist_key_of(r["name"])) or (_colours(f"al:{r['first_album_id']}") if r["first_album_id"] else None)
     return Artist(id=r["id"], name=r["name"], album_count=r["album_count"], cover_url=cover,
-                  starred=r["starred_at"] is not None)
+                  starred=r["starred_at"] is not None, image_url=f"/api/library/artists/{r['id']}/image", colors=colours)
 
 
 
@@ -1669,14 +1688,25 @@ def library_stream(track_id: int, s: Session = Depends(media_session)) -> FileRe
     return FileResponse(path, media_type=CONTENT_TYPES.get(path.suffix.lower(), "application/octet-stream"))
 
 
-def _cover_response(s: Session, track_id: int | None, size: int) -> Response:
+def _image(data: bytes) -> Response:
+    return Response(data, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=86400"})
+
+
+def _cover_response(s: Session, track_id: int | None, size: int, album_id: int | None = None) -> Response:
+    """The song's / album's cover; one is drawn (album name on a colour) when it has none."""
+    from . import artwork
     from .subsonic_api import _cover_bytes
     t = (s.lib.track(track_id) or _household_track(s, track_id)) if track_id else None
     path = s.lib.path_of(t) if t else None
-    data = _cover_bytes(str(path), path.stat().st_mtime, size) if path and path.exists() else None
-    if not data:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "No cover art")
-    return Response(data, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=86400"})
+    data = _cover_bytes(str(path), path.stat().st_mtime, size) if path and path.exists() and t["has_cover"] else None
+    if data:
+        return _image(data)
+    a = s.lib.album(album_id or t["album_id"]) if (album_id or t is not None) else None
+    if a is None and t is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No such song or album")
+    name = a["name"] if a else t["album"] or t["title"]
+    artist = a["artist"] if a else t["artist"]
+    return _image(artwork.designed(name or "Unknown album", None, artist, seed=f"{artist}|{name}", size=size or 600))
 
 
 @router.get("/library/tracks/{track_id}/cover", tags=["library"],
@@ -1691,7 +1721,32 @@ def library_cover(track_id: int, size: int = Query(0, ge=0, le=3000),
 def library_album_cover(album_id: int, size: int = Query(0, ge=0, le=3000),
                         s: Session = Depends(media_session)) -> Response:
     a = s.lib.album(album_id)
-    return _cover_response(s, a["cover_track_id"] if a else None, size)
+    if a is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No such album")
+    return _cover_response(s, a["cover_track_id"], size, album_id=album_id)
+
+
+@router.get("/library/artists/{artist_id}/image", tags=["library"],
+            responses={200: {"content": {"image/jpeg": {}}}})
+def library_artist_image(artist_id: int, size: int = Query(0, ge=0, le=3000),
+                         s: Session = Depends(media_session)) -> Response:
+    """The artist's photo (from YouTube Music, fetched once in the background); until there
+    is one, their first album's cover."""
+    from . import artwork
+    r = s.lib.artist(artist_id)
+    if r is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No such artist")
+    photo = artwork.photo_path(r["name"])
+    if photo.exists():
+        data = photo.read_bytes()
+        if size and size < 600:
+            from PIL import Image
+            import io as _io
+            data = artwork._jpeg(Image.open(_io.BytesIO(data)), size)
+        return _image(data)
+    if r["first_album_id"]:
+        return library_album_cover(r["first_album_id"], size, s)
+    return _image(artwork.designed(r["name"], "Artist", seed=r["name"], size=size or 600))
 
 
 # --- settings -------------------------------------------------------------------------

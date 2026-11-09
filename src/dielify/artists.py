@@ -154,3 +154,34 @@ def about(call: Call | None, name: str, refresh: bool = False) -> dict:
         conn.execute("INSERT OR REPLACE INTO artist_about (key, body, fetched_at) VALUES (?,?,?)",
                      (key, json.dumps(body), time.time() if "links" in body else 0.0))
     return {"name": name, **body}
+
+
+# --- artist photos (artwork.py) ------------------------------------------------------------
+
+PHOTO_RETRY_S = 30 * 86400
+
+
+def photo_due(name: str) -> bool:
+    with connect() as conn:
+        r = conn.execute("SELECT photo_tried_at FROM yt_artists WHERE key = ?", (artist_key(name),)).fetchone()
+    return r is None or not r["photo_tried_at"] or time.time() - r["photo_tried_at"] > PHOTO_RETRY_S
+
+
+def photo_tried(name: str) -> None:
+    with connect() as conn:
+        conn.execute("INSERT INTO yt_artists (key, name, channel_id, checked_at, photo_tried_at) VALUES (?,?,NULL,0,?) "
+                     "ON CONFLICT(key) DO UPDATE SET photo_tried_at = excluded.photo_tried_at",
+                     (artist_key(name), name, time.time()))
+
+
+def photo_url(call: Call, name: str) -> str | None:
+    """The artist's square picture on YouTube Music (from an artist search, exact name)."""
+    key = artist_key(name)
+    for it in call("search_items", name, "artist", 5):
+        if it.type == "artist" and artist_key(it.title) == key:
+            with connect() as conn:  # the channel is useful for About / new releases too
+                conn.execute("INSERT INTO yt_artists (key, name, channel_id, checked_at) VALUES (?,?,?,?) "
+                             "ON CONFLICT(key) DO UPDATE SET channel_id = COALESCE(yt_artists.channel_id, excluded.channel_id)",
+                             (key, name, it.id, time.time()))
+            return it.thumbnail
+    return None
