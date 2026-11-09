@@ -117,6 +117,18 @@ Built only from Dielify's own data, filtered by the parent's controls:
   check while building: which YouTube calls carry the mark (radio results may not). Where
   it's missing, Dielify looks the song up again before letting it through.
 
+### Built in 0.9.3 (9 Nov), and what changed from the plan
+
+- All controls above except "Remote control" (parent's devices controlling hers): moved to
+  after 1.0 (the device hub is per person; joining two people's devices is its own job).
+- Approvals are on the PC's Downloads page only (no phone notification yet).
+- Quiet hours stop streaming from the PC (Dielify app, instant play); songs saved on her
+  phone still play, and Symfonium / Subsonic apps aren't covered.
+- Explicit marks: search, album and playlist results carry YouTube's mark; radio results
+  don't, so those songs get one YouTube search each (remembered in yt_flags). The songs
+  already on the PC are checked in the background (about 1,500 an hour) while a kids
+  account blocks explicit songs; until a song is checked, a child doesn't get it.
+
 ## 0.9.4: Discovery
 
 - **New releases from your artists**: follow artists (or use your top 20 played). A daily

@@ -7,7 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from conftest import FakeAdapter, needs_ffmpeg
-from dielify import auth, settings, subsonic_api
+from dielify import auth, kids, settings, subsonic_api
 from dielify.downloader import download_track
 from dielify.downloads import DownloadQueue
 from dielify.library import connect, db_path, library_for, person, set_person
@@ -106,6 +106,7 @@ def test_files_go_only_when_no_library_uses_them(household):
 def test_queue_reuses_the_store_and_people_take_turns(household):
     josh, kid = household
     q = DownloadQueue(adapter_factory=lambda p: pytest.fail("nothing should download"))
+    kids.remember([YTItem("song", "abc123", "Under Pressure", explicit=False)])  # checked: not explicit
     [job] = q.enqueue("daughter", [YTItem("song", "abc123", "Under Pressure")], "song")
     assert job["status"] == "done" and kid.track_by_video("abc123")  # already on the PC
 

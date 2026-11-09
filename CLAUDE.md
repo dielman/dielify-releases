@@ -435,6 +435,25 @@ src/dielify/
   store. tests/test_kids_accounts.py. Also fixed the test_lyrics race (lyrics saved just
   after "done"). Filters + Kids discovery are 0.9.3: don't hand the phone over before that.
 
+- 0.9.3 built (kids accounts' controls + Kids discovery), 157 tests, phone builds, **not
+  published** (0.9.2 wasn't either: Josh chose to go straight on). `kids.py`: Controls
+  (table kid_controls, JSON; defaults explicit block, clean versions, word check, auto
+  downloads, 50/day, search on, discovery play on, quiet hours off, stats private, picks),
+  KidFilter (blocked songs/artists, words in titles + stored lyrics, explicit via yt_flags;
+  unmarked songs looked up with a YouTube song search, capped per request; never-checked =
+  withheld), Checker thread (checks store songs with no mark while a child blocks explicit).
+  YTItem.explicit from ytmusicapi isExplicit (search: songs + albums only; album/playlist
+  tracks yes; watch-playlist radio no). `custom_api._items` filters for children (lookups
+  per endpoint); /discover/home for a child = `kids_home.shelves` (Picked for you, Your
+  favourites, Because you like X, On the PC); quiet hours 403 on library stream + yt
+  stream, /api/me.notice. Queue: child requests filtered, daily limit, status "approval"
+  (PC Downloads: Allow / No via /api/desktop/approvals), worker re-checks unmarked songs
+  and, after downloading, the lyrics (bad words -> out of her library, job failed).
+  PC: Settings > People > Controls page (saves on each change), her stats if allowed.
+  Phone: approval section in Downloads, quiet-hours banner (Library + Discover), endless
+  button hidden when discovery play is off. Not done: remote control parent<->kid,
+  approvals on the parent's phone, quiet hours for Subsonic apps.
+
 ## Backlog (Josh, 8 Nov; after Phase 8 item 6)
 
 - **Published v0.8.11 (9 Nov; not yet confirmed by Josh on device): ratings + ban.** `ratings.py` (table

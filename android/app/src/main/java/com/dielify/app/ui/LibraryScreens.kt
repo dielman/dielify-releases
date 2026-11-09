@@ -205,6 +205,7 @@ fun LibraryScreen(vm: AppViewModel) {
                     // No PC? Show what's on the phone instead of an error.
                     if (link is Link.Down && savedCount > 0) tab = tabs.lastIndex
                 }
+                me?.notice?.let { Notice(it) }
                 PrimaryScrollableTabRow(selectedTabIndex = tab, edgePadding = 8.dp) {
                     tabs.forEachIndexed { i, name -> Tab(tab == i, { tab = i }, text = { Text(name) }) }
                 }

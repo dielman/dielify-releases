@@ -65,7 +65,12 @@ data class Track(
 @Serializable data class TrackList(val tracks: List<Track>)
 
 /** Who's signed in: role "child" = a kids account (shares the parent's music). */
-@Serializable data class Me(val username: String, val profile: String, val role: String, val household: List<String> = emptyList()) {
+@Serializable data class Me(
+    val username: String, val profile: String, val role: String, val household: List<String> = emptyList(),
+    val notice: String? = null,
+    @SerialName("youtube_search") val youtubeSearch: Boolean = true,
+    @SerialName("discovery_play") val discoveryPlay: Boolean = true,
+) {
     val shared get() = household.size > 1
 }
 @Serializable data class AddToLibrary(@SerialName("track_ids") val trackIds: List<Long>)
@@ -136,7 +141,7 @@ data class Download(
     @SerialName("track_id") val trackId: Long? = null,
     val next: Boolean = false,
 ) {
-    val isActive get() = status == "queued" || status == "downloading" || status == "processing"
+    val isActive get() = status == "approval" || status == "queued" || status == "downloading" || status == "processing"
 }
 
 @Serializable

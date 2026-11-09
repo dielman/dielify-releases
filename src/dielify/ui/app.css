@@ -217,3 +217,8 @@ img.mini, .mini.ph { width: 44px; height: 44px; border-radius: 4px; object-fit: 
   .player { grid-template-columns: 56px minmax(80px, 200px) auto minmax(90px, 1fr) auto; gap: 8px; }
   #volume { display: none; }
 }
+
+/* kids controls: removable chips (blocked artists, extra words) */
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.chip { background: var(--panel-2); border-radius: 12px; padding: 2px 10px; font-size: 13px; }
+.chip .link { padding: 0 2px; }

@@ -218,6 +218,10 @@ class MixMaker:
     def _similar(self, profile: str):
         if self.call is None:
             return None
+        from . import kids
+        if kids.is_child(profile):  # a kids account's new finds pass the parent's controls
+            f = lambda: kids.KidFilter(profile, lambda fn, *a: self.call(profile, fn, *a), lookups=6)  # noqa: E731
+            return lambda vid: f().items(self.call(profile, "similar", vid, 25))[:15]
         return lambda vid: self.call(profile, "similar", vid, 15)
 
     def run_once(self, force: bool = False) -> None:

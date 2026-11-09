@@ -234,6 +234,19 @@ CREATE TABLE IF NOT EXISTS stars (
     PRIMARY KEY (profile, kind, item_id)
 );
 
+-- Kids accounts (kids.py): the parent's controls per child, and YouTube's explicit marks
+-- (explicit NULL = looked up, YouTube didn't say; no row = never checked).
+CREATE TABLE IF NOT EXISTS kid_controls (
+    profile    TEXT PRIMARY KEY COLLATE NOCASE,
+    body       TEXT NOT NULL,
+    updated_at REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS yt_flags (
+    video_id   TEXT PRIMARY KEY,
+    explicit   INTEGER,
+    checked_at REAL NOT NULL
+);
+
 -- Logins for our own API (auth.py): only a hash of each token is kept.
 CREATE TABLE IF NOT EXISTS device_tokens (
     id           INTEGER PRIMARY KEY,
@@ -589,6 +602,12 @@ class Library:
                            "LIMIT :n OFFSET :o", store=self.store, q=f"%{q}%", n=limit, o=offset)
         return self._q(self._HOUSEHOLD_SELECT + " ORDER BY t.created_at DESC, t.album_id, t.track_no "
                        "LIMIT :n OFFSET :o", store=self.store, n=limit, o=offset)
+
+    def store_track_by_video(self, video_id: str) -> sqlite3.Row | None:
+        """A song in the store (whoever's library it's in) with this YouTube id."""
+        sql = self._HOUSEHOLD_SELECT.split("AND NOT EXISTS")[0] + " AND t.video_id = :v ORDER BY t.id LIMIT 1"
+        rows = self._q(sql, store=self.store, v=video_id)
+        return rows[0] if rows else None
 
     def household_track(self, track_id: int) -> sqlite3.Row | None:
         rows = self._q(self._HOUSEHOLD_SELECT + " AND t.id = :id", store=self.store, id=track_id)

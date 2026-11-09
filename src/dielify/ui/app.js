@@ -436,9 +436,21 @@ const minutes = (s) => (s < 90 ? "about a minute" : s < 5400 ? `about ${Math.rou
 
 async function renderDownloads(active) {
   const { downloads: finished } = await api("/api/downloads?finished=true&limit=40");
+  const { approvals } = (status.people || []).some((p) => p.role === "child")
+    ? await api("/api/desktop/approvals").catch(() => ({ approvals: [] })) : { approvals: [] };
+  const decide = async (ids, allow) => {
+    await api("/api/desktop/approvals", { method: "POST", body: { ids, allow } });
+    toast(allow ? "Allowed: it's downloading" : "Said no"); pollDownloads();
+  };
+  const asks = approvals.length ? [h("h2", {}, `Waiting for your OK (${approvals.length})`,
+      approvals.length > 1 ? h("button", { style: "margin-left:12px; font-size:13px", onclick: () => decide(approvals.map((a) => a.id), true) }, "Allow all") : null),
+    approvals.map((a) => h("div", { class: "job" },
+      h("div", {}, h("div", {}, a.title), h("div", { class: "muted small" }, `${a.artist || ""} · asked by ${a.person}`)),
+      h("div", { class: "row" }, h("button", { class: "primary", onclick: () => decide([a.id], true) }, "Allow"),
+        h("button", { onclick: () => decide([a.id], false) }, "No"))))] : null;
   const label = { done: "Done", failed: "Failed", cancelled: "Cancelled" };
   const running = active.downloads.find((d) => d.status === "downloading" || d.status === "processing");
-  const waiting = active.downloads.filter((d) => d.status === "queued");
+  const waiting = active.downloads.filter((d) => d.status === "queued" || d.status === "approval");
   const waitingTotal = active.active_total - (running ? 1 : 0);
   const pace = active.seconds_per_song || 20;
   const cancel = (d) => ib("close", "Cancel", async () => { await api(`/api/downloads/${d.id}`, { method: "DELETE" }); pollDownloads(); });
@@ -467,7 +479,7 @@ async function renderDownloads(active) {
 
   if (view !== "downloads") return;
   const keep = main.scrollTop;  // re-drawn every 1.5 s: don't jump back to the top
-  show(h("h1", {}, "Downloads"), summary, now, line, done);
+  show(h("h1", {}, "Downloads"), asks, summary, now, line, done);
   main.scrollTop = keep;
 }
 
@@ -558,14 +570,16 @@ async function viewPlaylist(id) {
 
 // --- stats -------------------------------------------------------------------------------------
 let statsPeriod = "month";
-async function viewStats(period = statsPeriod) {
+async function viewStats(period = statsPeriod, who = null) {
   statsPeriod = period;
   try {
-    const st = await api(`/api/stats?period=${period}&limit=25`);
+    const st = await api(who ? `/api/desktop/people/${encodeURIComponent(who)}/stats?period=${period}&limit=25`
+      : `/api/stats?period=${period}&limit=25`);
+    const title = who ? `${who}'s stats` : "Your stats";
     const tabs = h("div", { class: "tabs" }, [["week", "This week"], ["month", "This month"], ["year", "This year"], ["all", "All time"]]
-      .map(([p, l]) => h("button", { class: p === period ? "active" : "", onclick: () => viewStats(p) }, l)));
+      .map(([p, l]) => h("button", { class: p === period ? "active" : "", onclick: () => viewStats(p, who) }, l)));
     if (!st.plays) {
-      return show(h("h1", {}, "Your stats"), tabs, h("p", { class: "muted" }, st.history_starts
+      return show(h("h1", {}, title), tabs, h("p", { class: "muted" }, st.history_starts
         ? "Nothing played in this period." : "No plays recorded yet. Your history starts with the next song you play."));
     }
     const time = st.minutes < 120 ? `${st.minutes} min` : `${Math.round(st.minutes / 60)} hours`;
@@ -765,9 +779,11 @@ function peoplePanel(s) {
     people.map((p) => h("div", { class: "setting" },
       h("div", { class: "label" }, icon("person", "ico lead"), p.name),
       h("div", { class: "value" }, p.role === "child" ? `Kids account · ${songs(p.tracks)}` : `Parent · ${songs(p.tracks)}`,
+        p.waiting ? h("div", { class: "warn small" }, `${p.waiting} download${p.waiting === 1 ? "" : "s"} waiting for your OK (Downloads)`) : null,
         p.role === "child" ? h("div", { class: "small muted" },
           `Uses ${p.store}'s music folder and YouTube sign-in. Phone login: ${p.logins.join(", ") || "none"}`) : null),
       p.role === "child" ? [
+        h("button", { class: "primary", onclick: () => viewKidControls(p.name) }, "Controls"),
         h("button", { onclick: async () => {
           const login = p.logins[0];
           if (!login) return toast("No phone login for this account", 5000);
@@ -782,6 +798,92 @@ function peoplePanel(s) {
         } }, "Remove")] : null)),
     h("div", { class: "row", style: "margin-top:10px" }, h("button", { onclick: addChild }, icon("add", "ico lead"), "Add a kids account")));
 }
+// A kids account's controls (PC only). Every change saves at once.
+async function viewKidControls(name) {
+  let c;
+  try { c = await api(`/api/desktop/people/${encodeURIComponent(name)}/controls`); } catch (e) { return failed(e); }
+  const save = async (changes, msg) => {
+    try { c = await api(`/api/desktop/people/${encodeURIComponent(name)}/controls`, { method: "PUT", body: { ...c, ...changes } });
+      if (msg) toast(msg); }
+    catch (e) { toast(e.message, 6000); }
+    const keep = main.scrollTop;  // stay where you were on the page
+    await viewKidControls(name);
+    main.scrollTop = keep;
+  };
+  const row = (label, help, ...controls) => h("div", { class: "setting" },
+    h("div", { class: "label" }, label), h("div", { class: "value" }, help ? h("span", { class: "small muted" }, help) : ""), ...controls);
+  const check = (key, label, help) => row(label, help, h("input", { type: "checkbox", checked: c[key],
+    onchange: (e) => save({ [key]: e.target.checked }, `${label}: ${e.target.checked ? "on" : "off"}`) }));
+  const select = (key, options) => h("select", { onchange: (e) => save({ [key]: e.target.value }) },
+    Object.entries(options).map(([v, l]) => h("option", { value: v, selected: v === c[key] }, l)));
+  const list = (key, label, help, placeholder) => {
+    const input = h("input", { type: "text", placeholder, style: "max-width:240px" });
+    const add = () => { const v = input.value.trim(); if (v) save({ [key]: [...c[key], v] }, `Added “${v}”`); };
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter") add(); });
+    return h("div", { class: "setting" }, h("div", { class: "label" }, label),
+      h("div", { class: "value" }, h("div", { class: "small muted" }, help),
+        h("div", { class: "chips" }, c[key].map((v, i) => h("span", { class: "chip" }, v,
+          h("button", { class: "link", title: "Remove", onclick: () => save({ [key]: c[key].filter((_, j) => j !== i) }) }, " ✕"))))),
+      input, h("button", { onclick: add }, "Add"));
+  };
+
+  const content = h("div", { class: "panel" }, h("h2", {}, "Songs"),
+    row("Explicit songs", "YouTube Music marks explicit songs. Songs without a mark are checked before she gets them.",
+      select("explicit", { block: "Block", allow: "Allow" })),
+    c.explicit === "block" ? check("clean_versions", "Offer clean versions", "When a song is explicit, give her the clean version if YouTube has one") : null,
+    check("lyrics_check", "Check words", "Also block songs whose title or lyrics use strong language (a built-in list, plus your words below)"),
+    c.lyrics_check ? list("extra_words", "Your words", "Extra words to block", "a word") : null,
+    list("blocked_artists", "Blocked artists", "She never gets these artists", "artist name"),
+    c.blocked_songs.length ? h("div", { class: "setting" }, h("div", { class: "label" }, "Blocked songs"),
+      h("div", { class: "value" }, h("div", { class: "chips" }, c.blocked_songs.map((b, i) => h("span", { class: "chip" }, b.title || b.id,
+        h("button", { class: "link", onclick: () => save({ blocked_songs: c.blocked_songs.filter((_, j) => j !== i) }) }, " ✕")))))) : null);
+
+  const getting = h("div", { class: "panel" }, h("h2", {}, "Getting music"),
+    row("New downloads", null, select("downloads", { auto: "Download straight away", approve: "Wait for my OK (Downloads page)" })),
+    row("Download limit", "New songs per day (0 = none)", h("input", { type: "number", min: 0, max: 1000, value: c.daily_limit, style: "width:90px",
+      onchange: (e) => save({ daily_limit: Math.max(0, Math.min(1000, Number(e.target.value) || 0)) }, "Limit saved") })),
+    check("youtube_search", "YouTube search", "Off: she only gets the household's songs and your picks"),
+    check("discovery_play", "Never-ending discovery", "New songs like the ones she plays (filtered like everything else)"));
+
+  const time = (key) => h("input", { type: "time", value: c[key], onchange: (e) => save({ [key]: e.target.value }, "Quiet hours saved") });
+  const when = h("div", { class: "panel" }, h("h2", {}, "Listening"),
+    check("quiet_hours", "Quiet hours", "No music in her account at these times (songs saved on her phone still play)"),
+    c.quiet_hours ? row("From", null, time("quiet_from"), h("span", { class: "muted" }, " to "), time("quiet_to")) : null,
+    check("parent_sees_stats", "You can see her stats", "Her top songs and listening time, on this PC"),
+    c.parent_sees_stats ? h("div", { class: "row" }, h("button", { onclick: () => viewStats("month", name) }, `See ${name}'s stats`)) : null);
+
+  // Picked for her: a shelf on her Discover page
+  const results = h("div", {});
+  const q = h("input", { type: "search", placeholder: "Search YouTube Music: an album, artist or playlist", style: "max-width:360px" });
+  const kind = h("select", {}, [["album", "Albums"], ["artist", "Artists"], ["playlist", "Playlists"], ["song", "Songs"]].map(([v, l]) => h("option", { value: v }, l)));
+  const find = async () => {
+    if (!q.value.trim()) return;
+    results.replaceChildren(h("p", { class: "muted" }, "Searching…"));
+    try {
+      const { items } = await api(`/api/yt/search?type=${kind.value}&limit=12&q=${encodeURIComponent(q.value.trim())}`);
+      const picked = new Set(c.picks.map((x) => x.id));
+      results.replaceChildren(...items.map((it) => h("div", { class: "job" },
+        h("div", {}, h("div", {}, it.title, it.explicit ? h("span", { class: "warn small" }, " · explicit") : null),
+          h("div", { class: "muted small" }, (it.artists || []).join(", ") || it.subtitle || "")),
+        picked.has(it.id) ? h("span", { class: "muted small" }, "Picked")
+          : h("button", { onclick: () => save({ picks: [...c.picks, it] }, `Picked “${it.title}” for ${name}`) }, "Pick"))));
+    } catch (e) { results.replaceChildren(h("p", { class: "warn" }, e.message)); }
+  };
+  q.addEventListener("keydown", (e) => { if (e.key === "Enter") find(); });
+  const picks = h("div", { class: "panel" }, h("h2", {}, `Picked for ${name}`),
+    h("p", { class: "muted small" }, `These show at the top of ${name}'s Discover page. Explicit ones are still filtered out.`),
+    c.picks.length ? c.picks.map((it, i) => h("div", { class: "job" },
+      h("div", {}, h("div", {}, it.title), h("div", { class: "muted small" }, `${it.type} · ${(it.artists || []).join(", ") || it.subtitle || ""}`)),
+      h("button", { onclick: () => save({ picks: c.picks.filter((_, j) => j !== i) }, "Removed") }, "Remove")))
+      : h("p", { class: "muted" }, "Nothing picked yet."),
+    h("div", { class: "row", style: "margin-top:10px" }, q, kind, h("button", { onclick: find }, "Search")), results);
+
+  show(h("button", { onclick: viewSettings }, icon("back", "ico lead"), "Settings"),
+    h("h1", { style: "margin-top:16px" }, `${name}'s controls`),
+    h("p", { class: "muted" }, `${name} uses this PC's music and your YouTube sign-in behind the scenes, but never sees your YouTube. Everything she gets goes through these controls. Changes apply at once.`),
+    content, getting, when, picks);
+}
+
 async function addChild() {
   const name = prompt("Name for the kids account (letters and digits, e.g. emma). It's also their phone login:");
   if (!name) return;

@@ -85,6 +85,7 @@ class YTItem:
     duration_s: int | None = None
     thumbnail: str | None = None
     subtitle: str | None = None
+    explicit: bool | None = None   # YouTube's "E" badge; None = YouTube didn't say (radio results)
 
 
 @dataclass
@@ -101,16 +102,17 @@ def to_item(raw: dict) -> YTItem | None:
     artists = [a["name"] for a in raw.get("artists") or [] if a.get("name")]
     album = raw.get("album") if isinstance(raw.get("album"), dict) else {}
     thumb = _best_thumb(raw.get("thumbnails") or raw.get("thumbnail"))
+    explicit = raw.get("isExplicit") if isinstance(raw.get("isExplicit"), bool) else None
     if raw.get("videoId"):
         is_song = (raw.get("resultType") == "song" or raw.get("videoType") == "MUSIC_VIDEO_TYPE_ATV"
                    or (raw.get("videoType") is None and bool(album)))
         return YTItem("song" if is_song else "video", raw["videoId"], raw.get("title") or raw["videoId"],
                       artists, album.get("name"), album.get("id"), raw.get("year"),
                       raw.get("duration_seconds") or _parse_duration(raw.get("duration") or raw.get("length")),
-                      thumb)
+                      thumb, explicit=explicit)
     if browse.startswith("MPRE"):
         return YTItem("album", browse, raw.get("title") or "", artists, year=raw.get("year"),
-                      thumbnail=thumb, subtitle=raw.get("type"))
+                      thumbnail=thumb, subtitle=raw.get("type"), explicit=explicit)
     if raw.get("playlistId") or browse.startswith("VL"):
         author = raw.get("author")
         if isinstance(author, list):

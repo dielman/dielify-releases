@@ -235,11 +235,24 @@ fun TrackShelf(vm: AppViewModel, title: String, tracks: List<com.dielify.app.net
 
 // --- Discover ---------------------------------------------------------------------------------
 
+/** A message across the top of a screen (e.g. quiet hours in a kids account). */
+@Composable
+fun Notice(text: String) {
+    androidx.compose.material3.Surface(
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        shape = MaterialTheme.shapes.medium,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+    ) {
+        Text(text, Modifier.padding(12.dp), color = MaterialTheme.colorScheme.onSecondaryContainer)
+    }
+}
+
 private data class DiscoverData(
     val home: com.dielify.app.net.HomeFeed,
     val charts: com.dielify.app.net.Charts?,
     val forYou: com.dielify.app.net.ForYou?,
     val mixes: List<com.dielify.app.net.PlaylistSummary>,
+    val me: com.dielify.app.net.Me? = null,
 )
 
 @Composable
@@ -251,10 +264,14 @@ fun DiscoverScreen(vm: AppViewModel) {
                 val charts = runCatching { vm.server.charts() }.getOrNull()
                 val forYou = runCatching { vm.server.forYou() }.getOrNull()
                 val mixes = runCatching { vm.server.mixes().mixes }.getOrDefault(emptyList())
-                DiscoverData(home, charts, forYou, mixes)
-            }) { (home, charts, forYou, mixes) ->
+                val me = runCatching { vm.server.me() }.getOrNull()
+                DiscoverData(home, charts, forYou, mixes, me)
+            }) { (home, charts, forYou, mixes, me) ->
                 LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) {
-                    item(key = "endless") {
+                    me?.notice?.let { notice ->  // e.g. quiet hours a parent set
+                        item(key = "notice") { Notice(notice) }
+                    }
+                    if (me?.discoveryPlay != false) item(key = "endless") {
                         androidx.compose.material3.FilledTonalButton(onClick = { vm.startEndless() },
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                             Icon(Icons.Filled.Explore, null)
@@ -436,8 +453,9 @@ fun DownloadsScreen(vm: AppViewModel) {
             }
             return@Page
         }
-        val running = a.downloads.firstOrNull { it.status != "queued" }
+        val running = a.downloads.firstOrNull { it.status == "downloading" || it.status == "processing" }
         val waiting = a.downloads.filter { it.status == "queued" }
+        val asked = a.downloads.filter { it.status == "approval" }  // a kids account: waiting for a parent
         val total = a.activeTotal ?: a.downloads.size
         val pace = a.secondsPerSong ?: 20.0
         LazyColumn(Modifier.padding(pad).fillMaxSize()) {
@@ -451,6 +469,14 @@ fun DownloadsScreen(vm: AppViewModel) {
                     Modifier.padding(16.dp), color = if (error != null) MaterialTheme.colorScheme.error
                     else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+            if (asked.isNotEmpty()) {
+                item { Section("Waiting for a parent's OK") }
+                items(asked, key = { "a${it.id}" }) { d ->
+                    DownloadRow(d, onCancel = { scope.launch { cancel(vm, d); tick++ } }) {
+                        SmallText("A parent will say yes or no on the PC")
+                    }
+                }
             }
             if (running != null) {
                 item { Section("Now") }

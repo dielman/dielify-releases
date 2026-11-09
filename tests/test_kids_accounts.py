@@ -3,7 +3,8 @@ scenes) YouTube sign-in, has its own library, and never sees the parent's YouTub
 
 import pytest
 
-from dielify import auth, credstore, library, settings
+from dielify import auth, credstore, kids, library, settings
+from dielify.yt_adapter import YTItem
 from test_api import FakeDownloader, login, make_client, setup, wait_done  # noqa: F401
 
 
@@ -41,7 +42,8 @@ def test_add_a_kid_and_what_she_sees(monkeypatch):
             ("josh", "parent", 1, ["josh"]), ("emma", "child", 0, ["emma"])]
 
         # nothing from Josh's YouTube account
-        assert c.get("/api/discover/home", headers=kid).json() == {"shelves": []}
+        shelves = c.get("/api/discover/home", headers=kid).json()["shelves"]   # Kids discovery, not Josh's feed
+        assert [sh["title"] for sh in shelves] == ["On the PC: add to your library"]
         assert c.get("/api/discover/charts", headers=kid).json()["playlists"] == []
         assert c.get("/api/yt/my-playlists", headers=kid).json() == {"items": []}
         assert c.post("/api/playlists/import", headers=kid, json={"yt_id": "PLmine"}).status_code == 403
@@ -57,7 +59,8 @@ def test_add_a_kid_and_what_she_sees(monkeypatch):
         assert c.get("/api/yt/search?q=other", headers=kid).json()["items"]
         assert used == ["josh"]
 
-        # her library starts empty; Josh's song is on the Household shelf
+        # her library starts empty; Josh's song is on the Household shelf (once checked)
+        kids.remember([YTItem("song", "s1", "Song One", explicit=False)])
         assert c.get("/api/library/albums", headers=kid).json()["albums"] == []
         shelf = c.get("/api/library/household", headers=kid).json()["tracks"]
         assert [t["id"] for t in shelf] == [song["track_id"]]
@@ -99,3 +102,58 @@ def test_removing_a_kid_keeps_the_music():
         assert auth.get_user("emma") is None and path.exists()
         assert [t["title"] for t in c.get("/api/library/household", headers=h).json()["tracks"]] == ["Other Song"]
         assert [p["name"] for p in c.get("/api/desktop/status", headers=desk(c)).json()["people"]] == ["josh"]
+
+
+def controls(c, name="emma", **changes) -> dict:
+    cur = c.get(f"/api/desktop/people/{name}/controls", headers=desk(c)).json()
+    r = c.put(f"/api/desktop/people/{name}/controls", headers=desk(c), json={**cur, **changes})
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def test_controls_approvals_limit_quiet_hours_and_stats(monkeypatch):
+    from dielify import lyrics
+    monkeypatch.setattr(lyrics, "from_lrclib", lambda artist, title, *a: {
+        "lines": None, "text": "shit shit" if title == "Song Two" else "la la", "source": "LRCLIB"})
+    kids.remember([YTItem("song", v, v, explicit=False) for v in ("s1", "s2", "s3")])
+    with make_client() as c:
+        h = login(c)
+        kid = add_kid(c)
+        assert c.get("/api/desktop/people/emma/controls", headers=h).status_code == 403   # PC only
+        assert controls(c)["explicit"] == "block"                                         # defaults
+
+        # approval: her request waits until Josh says yes
+        controls(c, downloads="approve")
+        job = c.post("/api/downloads", headers=kid, json={"type": "song", "id": "s1"}).json()["downloads"][0]
+        assert job["status"] == "approval"
+        waiting = c.get("/api/desktop/approvals", headers=desk(c)).json()["approvals"]
+        assert [(a["person"], a["video_id"]) for a in waiting] == [("emma", "s1")]
+        assert c.get("/api/desktop/status", headers=desk(c)).json()["people"][1]["waiting"] == 1
+        c.post("/api/desktop/approvals", headers=desk(c), json={"ids": [job["id"]], "allow": True})
+        assert wait_done(c, kid, job["id"])["status"] == "done"
+
+        # lyrics: downloaded, then out of her library because of the words
+        controls(c, downloads="auto")
+        job = c.post("/api/downloads", headers=kid, json={"type": "song", "id": "s2"}).json()["downloads"][0]
+        done = wait_done(c, kid, job["id"])
+        assert done["status"] == "failed" and "lyrics" in done["error"]
+        assert library.library_for("emma").track_by_video("s2") is None
+
+        # daily limit
+        controls(c, daily_limit=2)
+        job = c.post("/api/downloads", headers=kid, json={"type": "song", "id": "s3"}).json()["downloads"][0]
+        assert job["status"] == "failed" and "limit" in job["error"]
+
+        # quiet hours: no music, and the phone is told why
+        controls(c, quiet_hours=True, quiet_from="00:00", quiet_to="23:59")
+        track = library.library_for("emma").track_by_video("s1")["id"]
+        r = c.get(f"/api/library/tracks/{track}/stream", headers=kid)
+        assert r.status_code == 403 and "Music is off until 23:59" in r.json()["detail"]
+        assert c.get("/api/me", headers=kid).json()["notice"].startswith("Music is off")
+
+        # her stats are private unless the controls say otherwise
+        assert c.get("/api/desktop/people/emma/stats", headers=desk(c)).status_code == 403
+        controls(c, parent_sees_stats=True, youtube_search=False, discovery_play=False)
+        assert c.get("/api/desktop/people/emma/stats", headers=desk(c)).json()["period"] == "month"
+        assert c.get("/api/yt/search?q=song", headers=kid).json()["items"] == []
+        assert c.post("/api/discover/endless", headers=kid, json={"seeds": [], "exclude": [], "count": 5}).status_code == 403

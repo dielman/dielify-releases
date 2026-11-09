@@ -9,7 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, Field
 
 from . import __version__, auth, credstore, winint
@@ -48,6 +48,7 @@ class PersonInfo(BaseModel):
     store: str = Field(description="Whose music folder (and YouTube sign-in) this person uses")
     tracks: int = Field(description="Songs in their library")
     logins: list[str] = Field(description="Their phone logins")
+    waiting: int = Field(0, description="Download requests waiting for a parent's OK")
 
 
 class NewPerson(BaseModel):
@@ -129,6 +130,13 @@ def _profiles(s: settings_mod.Settings) -> list[str]:
     return sorted(names.values(), key=str.casefold)
 
 
+def _waiting(profile: str) -> int:
+    from .library import connect
+    with connect() as conn:
+        return conn.execute("SELECT COUNT(*) FROM downloads WHERE profile = ? AND status = 'approval'",
+                            (profile,)).fetchone()[0]
+
+
 def _signed_in(profile: str) -> bool:
     """A login file that can't be read counts as signed out (and is logged), so one bad
     file can't break every screen."""
@@ -155,7 +163,8 @@ def _status() -> DesktopStatus:
     store = library_mod.person(s.active_profile)["store"]
     people = [PersonInfo(name=p["profile"], role=p["role"], store=p["store"],
                          tracks=library_for(p["profile"], s).stats()["tracks"],
-                         logins=[u.name for u in users if u.profile.casefold() == p["profile"].casefold()])
+                         logins=[u.name for u in users if u.profile.casefold() == p["profile"].casefold()],
+                         waiting=_waiting(p["profile"]) if p["role"] == "child" else 0)
               for p in library_mod.people() if p["store"].casefold() == store.casefold()]
     from . import backup
     folder = Path(s.backup_folder) if s.backup_folder else None
@@ -275,6 +284,97 @@ def remove_child(name: str, s: Session = Depends(desktop_session)) -> Response:
             auth.remove_user(u.name)
     library_mod.forget_person(p["profile"])
     return Response(status_code=204)
+
+
+# --- kids accounts: the parent's controls, approvals, stats -------------------------------
+
+class KidControls(BaseModel):
+    explicit: Literal["block", "allow"] = "block"
+    clean_versions: bool = True
+    lyrics_check: bool = True
+    extra_words: list[str] = []
+    downloads: Literal["auto", "approve"] = "auto"
+    daily_limit: int = Field(50, ge=0, le=1000)
+    youtube_search: bool = True
+    discovery_play: bool = True
+    blocked_artists: list[str] = []
+    blocked_songs: list[dict] = []
+    quiet_hours: bool = False
+    quiet_from: str = Field("21:00", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    quiet_to: str = Field("07:00", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    parent_sees_stats: bool = False
+    picks: list[dict] = Field([], description="The parent's picks: YouTube items (album, artist, playlist, song)")
+
+
+def _child(name: str) -> dict:
+    p = next((p for p in library_mod.people() if p["profile"].casefold() == name.casefold()), None)
+    if p is None or p["role"] != "child":
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No such kids account")
+    return p
+
+
+@router.get("/people/{name}/controls", response_model=KidControls)
+def get_controls(name: str, s: Session = Depends(desktop_session)) -> KidControls:
+    from . import kids
+    from dataclasses import asdict
+    return KidControls(**asdict(kids.load(_child(name)["profile"])))
+
+
+@router.put("/people/{name}/controls", response_model=KidControls)
+def put_controls(name: str, body: KidControls, s: Session = Depends(desktop_session)) -> KidControls:
+    from . import kids, kids_home
+    from dataclasses import asdict
+    profile = _child(name)["profile"]
+    try:
+        c = kids.save(profile, kids.Controls.from_dict(body.model_dump()))
+    except ValueError as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e)) from e
+    kids_home.forget(profile)
+    return KidControls(**asdict(c))
+
+
+class Approval(BaseModel):
+    id: int
+    person: str
+    title: str
+    artist: str | None
+    video_id: str
+    requested_at: float
+
+
+class ApprovalList(BaseModel):
+    approvals: list[Approval]
+
+
+class Decision(BaseModel):
+    ids: list[int] = Field(min_length=1)
+    allow: bool
+
+
+@router.get("/approvals", response_model=ApprovalList)
+def approvals(request: Request, s: Session = Depends(desktop_session)) -> ApprovalList:
+    kids_ = [p["profile"] for p in library_mod.people() if p["role"] == "child" and p["store"] == s.lib.store]
+    return ApprovalList(approvals=[Approval(id=j["id"], person=j["profile"], title=j["title"], artist=j["artist"],
+                                            video_id=j["video_id"], requested_at=j["created_at"])
+                                   for j in request.app.state.queue.approvals(kids_)])
+
+
+@router.post("/approvals", response_model=ApprovalList)
+def decide(body: Decision, request: Request, s: Session = Depends(desktop_session)) -> ApprovalList:
+    request.app.state.queue.decide(body.ids, body.allow)
+    return approvals(request, s)
+
+
+@router.get("/people/{name}/stats")
+def kid_stats(name: str, period: Literal["week", "month", "year", "all"] = "month",
+              limit: int = Query(10, ge=1, le=50), s: Session = Depends(desktop_session)):
+    """A kids account's stats, if its controls let the parent see them."""
+    from . import kids
+    from .custom_api import get_stats
+    p = _child(name)
+    if not kids.load(p["profile"]).parent_sees_stats:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, f"{p['profile']}'s stats are private (Controls)")
+    return get_stats(period, limit, Session(auth.ServerUser(p["profile"], p["profile"], ""), 0))
 
 
 @router.delete("/youtube/{profile}", response_model=DesktopStatus)

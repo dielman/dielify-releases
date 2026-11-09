@@ -29,7 +29,7 @@ lockout = auth.Lockout()
 _bearer = HTTPBearer(auto_error=False)
 
 ItemType = Literal["song", "video", "album", "playlist", "artist"]
-JobStatus = Literal["queued", "downloading", "processing", "done", "failed", "cancelled"]
+JobStatus = Literal["approval", "queued", "downloading", "processing", "done", "failed", "cancelled"]
 
 
 # --- models (the API contract) ---------------------------------------------------
@@ -46,6 +46,7 @@ class Item(BaseModel):
     thumbnail: str | None = None
     subtitle: str | None = None
     library_track_id: int | None = Field(None, description="Set when this song is already downloaded")
+    explicit: bool | None = Field(None, description="YouTube's explicit mark (None: not given)")
 
 
 class Shelf(BaseModel):
@@ -272,10 +273,35 @@ def _ratings(s: Session):
     return Ratings(s.user.profile)
 
 
-def _items(items: list[YTItem], lib: Library) -> list[Item]:
+def _items(items: list[YTItem], lib: Library, lookups: int = 0) -> list[Item]:
+    """API items, marked "in your library". For a kids account, filtered by the parent's
+    controls (kids.py); `lookups` = how many unmarked songs it may check with YouTube."""
+    from . import kids
+    kids.remember(items)
+    if lib.role == "child":
+        items = _kid_filter(lib, lookups).items(items)
     have = lib.video_ids()
     return [Item(**vars(i), library_track_id=have.get(i.id) if i.type in ("song", "video") else None)
             for i in items]
+
+
+def _kid_filter(lib: Library, lookups: int = 0):
+    from . import kids
+    return kids.KidFilter(lib.profile, lambda fn, *a: youtube.call(lib.profile, fn, *a), lookups)
+
+
+def _kid_controls(s: "Session"):
+    from . import kids
+    return kids.load(s.lib.profile) if s.kid else None
+
+
+def _quiet(s: "Session") -> None:
+    """Quiet hours a parent set for a kids account: no music until they end."""
+    from . import kids
+    c = _kid_controls(s)
+    msg = kids.quiet_message(c) if c else None
+    if msg:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, msg)
 
 
 # --- auth -------------------------------------------------------------------------
@@ -321,8 +347,10 @@ def revoke_device(device_id: int, s: Session = Depends(session)) -> Response:
 def discover_home(shelves: int = Query(6, ge=1, le=20), s: Session = Depends(session)) -> HomeFeed:
     """YouTube Music's personalised home feed: mixes, playlists, new releases. Empty for a
     kids account (it's the parent's YouTube)."""
-    if s.kid:
-        return HomeFeed(shelves=[])
+    if s.kid:  # Dielify's own Kids discovery instead
+        from . import kids_home
+        return HomeFeed(shelves=[Shelf(title=sh.title, items=_items(sh.items, s.lib))
+                                 for sh in kids_home.shelves(s.lib, lambda fn, *a: youtube.call(s.lib.profile, fn, *a))])
     feed = youtube.call(s.user.profile, "home", shelves)
     r = _ratings(s)
     return HomeFeed(shelves=[Shelf(title=sh.title, items=_items(r.arrange(sh.items), s.lib)) for sh in feed])
@@ -332,6 +360,9 @@ def discover_home(shelves: int = Query(6, ge=1, le=20), s: Session = Depends(ses
 def discover_similar(video_id: str, limit: int = Query(25, ge=1, le=50),
                      s: Session = Depends(session)) -> ItemList:
     """Songs like this one (its YouTube Music radio)."""
+    if s.kid:  # radio songs carry no explicit mark: fetch more, check some, keep what passes
+        found = youtube.call(s.user.profile, "similar", video_id, min(50, limit * 2))
+        return ItemList(items=_items(_ratings(s).arrange(found), s.lib, lookups=10)[:limit])
     return ItemList(items=_items(_ratings(s).arrange(youtube.call(s.user.profile, "similar", video_id, limit)), s.lib))
 
 
@@ -349,7 +380,11 @@ def discover_charts(country: str = Query("ZZ", min_length=2, max_length=2,
 @router.get("/yt/search", response_model=ItemList, tags=["youtube"])
 def yt_search(q: str = Query(min_length=1), type: Literal["song", "video", "album", "playlist", "artist"] = "song",
               limit: int = Query(20, ge=1, le=50), s: Session = Depends(session)) -> ItemList:
-    return ItemList(items=_items(youtube.call(s.user.profile, "search_items", q, type, limit), s.lib))
+    c = _kid_controls(s)
+    if c and not c.youtube_search:
+        return ItemList(items=[])  # a parent turned YouTube search off for this account
+    # songs and albums come with YouTube's explicit mark; videos don't, so a few are checked
+    return ItemList(items=_items(youtube.call(s.user.profile, "search_items", q, type, limit), s.lib, lookups=5))
 
 
 @router.get("/yt/my-playlists", response_model=ItemList, tags=["youtube"])
@@ -370,7 +405,14 @@ def yt_stream(video_id: str, request: Request, s: Session = Depends(media_sessio
     from . import ytstream
     if not ytstream.VIDEO_ID.match(video_id):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Not a YouTube video id")
+    _quiet(s)
     have = s.lib.video_ids().get(video_id)
+    if not have and s.kid:  # already on the PC for someone else: play the file (if she may)
+        t = s.lib.store_track_by_video(video_id)
+        if t is not None and _kid_filter(s.lib).tracks([t]):
+            path = s.lib.path_of(t)
+            if path.exists():
+                return FileResponse(path, media_type=CONTENT_TYPES.get(path.suffix.lower(), "application/octet-stream"))
     if have:
         path = s.lib.path_of(_track(s, have))
         if path.exists():
@@ -378,6 +420,10 @@ def yt_stream(video_id: str, request: Request, s: Session = Depends(media_sessio
     cfg = settings_mod.load()
     resolve = lambda: youtube.call(s.user.profile, "stream_info", video_id, cfg.quality, cfg.preferred_format)
     info = ytstream.cache.get(s.user.profile, video_id, resolve)
+    if s.kid:
+        reason = _kid_filter(s.lib, lookups=1).why_not(video_id, info.title, [info.artist] if info.artist else [])
+        if reason:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, f"Not available in your account ({reason})")
     range_header = request.headers.get("range")
     if not range_header or range_header.startswith("bytes=0-"):
         # first request for this song: keep it (download next in line)
@@ -402,14 +448,21 @@ def yt_stream(video_id: str, request: Request, s: Session = Depends(media_sessio
 @router.get("/yt/album/{browse_id}", response_model=Collection, tags=["youtube"])
 def yt_album(browse_id: str, s: Session = Depends(session)) -> Collection:
     info, tracks = youtube.call(s.user.profile, "album", browse_id)
-    return Collection(info=_items([info], s.lib)[0], tracks=_items(tracks, s.lib))
+    return _collection(s, info, tracks)
 
 
 @router.get("/yt/playlist/{playlist_id}", response_model=Collection, tags=["youtube"])
 def yt_playlist(playlist_id: str, limit: int = Query(5000, ge=1, le=5000),
                 s: Session = Depends(session)) -> Collection:
     info, tracks = youtube.call(s.user.profile, "playlist", playlist_id, limit)
-    return Collection(info=_items([info], s.lib)[0], tracks=_items(tracks, s.lib))
+    return _collection(s, info, tracks)
+
+
+def _collection(s: Session, info: YTItem, tracks: list[YTItem]) -> Collection:
+    head = _items([info], s.lib)
+    if not head:  # e.g. an explicit album, for a kids account
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Not available in your account")
+    return Collection(info=head[0], tracks=_items(tracks, s.lib, lookups=5))
 
 
 # --- download requests ------------------------------------------------------------
@@ -546,6 +599,9 @@ class Me(BaseModel):
     profile: str
     role: Literal["parent", "child"]
     household: list[str] = Field(description="Everyone sharing this music store")
+    notice: str | None = Field(None, description="For a kids account: e.g. quiet hours now")
+    youtube_search: bool = True
+    discovery_play: bool = True
 
 
 class LibrarySearch(BaseModel):
@@ -906,13 +962,20 @@ def discover_endless(body: EndlessIn, request: Request, s: Session = Depends(ses
     the seeds. They're queued for download so you can check them out; thumbs down on one
     (PUT /ratings) deletes it from the PC again."""
     from . import explore, history
+    c = _kid_controls(s)
+    if c and not c.discovery_play:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "A parent turned discovery play off for this account")
     r = _ratings(s)
     liked = [v for v in body.seeds if r.songs.get(v) == 1]
     seeds = [v for v in body.seeds if v not in liked] + liked  # newest last; liked ones go first
     # nothing heard yet: your most-played songs lately, else a few random library songs
     fallback = history.seeds(s.lib) or [t["video_id"] for t in s.lib.random_tracks(20) if t["video_id"]][:4]
     items = explore.next_songs(s.lib, r, lambda vid, n: youtube.call(s.user.profile, "similar", vid, n),
-                               seeds, set(body.exclude) | set(body.seeds), fallback, body.count)
+                               seeds, set(body.exclude) | set(body.seeds), fallback,
+                               body.count * 3 if s.kid else body.count)
+    if s.kid:  # only songs her controls allow (checked with YouTube where unmarked)
+        allowed = {i.id for i in _items(items, s.lib, lookups=12)}
+        items = [i for i in items if i.id in allowed][:body.count]
     if items:
         explore.remember(s.user.profile, items)
         _queue(request).enqueue(s.user.profile, items, "discovery", "Discovery play", s.user.name)
@@ -970,14 +1033,18 @@ def discover_for_you(s: Session = Depends(session)) -> ForYou:
             if it.id not in have and it.id not in seen:
                 seen.add(it.id)
                 more.append(it)
-    return ForYou(on_repeat=on_repeat, forgotten=forgotten, more_like=_items(r.arrange(more)[:40], s.lib))
+    return ForYou(on_repeat=on_repeat, forgotten=forgotten, more_like=_items(r.arrange(more)[:40], s.lib, lookups=8))
 
 
 @router.get("/me", response_model=Me, tags=["auth"])
 def me(s: Session = Depends(session)) -> Me:
     from .library import people
+    from . import kids
+    c = _kid_controls(s)
     return Me(username=s.user.name, profile=s.lib.profile, role=s.lib.role,
-              household=[p["profile"] for p in people() if p["store"] == s.lib.store])
+              household=[p["profile"] for p in people() if p["store"] == s.lib.store],
+              notice=kids.quiet_message(c) if c else None,
+              youtube_search=c.youtube_search if c else True, discovery_play=c.discovery_play if c else True)
 
 
 @router.get("/library/household", response_model=TrackList, tags=["library"])
@@ -985,13 +1052,26 @@ def library_household(q: str = "", limit: int = Query(200, ge=1, le=1000), offse
                       s: Session = Depends(session)) -> TrackList:
     """Songs already on the PC that aren't in your library (someone else in the household
     has them). Add them with POST /library/add: no download needed."""
-    return TrackList(tracks=[_track_out(t) for t in s.lib.household(q, limit, offset)])
+    rows = s.lib.household(q, limit if not s.kid else 2000, offset)
+    if s.kid:  # only what her controls allow (songs not checked yet wait for the check)
+        rows = _kid_filter(s.lib).tracks(rows)[:limit]
+    return TrackList(tracks=[_track_out(t) for t in rows])
+
+
+def _household_track(s: Session, track_id: int):
+    t = s.lib.household_track(track_id)
+    if t is not None and s.kid and not _kid_filter(s.lib).tracks([t]):
+        return None
+    return t
 
 
 @router.post("/library/add", response_model=Added, tags=["library"])
 def library_add(body: AddSongs, s: Session = Depends(session)) -> Added:
     """Add songs that are already on the PC to your library."""
-    return Added(added=s.lib.add_many(body.track_ids, "household"))
+    ids = body.track_ids
+    if s.kid:
+        ids = [t["id"] for t in _kid_filter(s.lib).tracks(filter(None, map(s.lib.household_track, ids)))]
+    return Added(added=s.lib.add_many(ids, "household"))
 
 
 @router.get("/library/tracks/{track_id}/stream", tags=["library"],
@@ -999,7 +1079,8 @@ def library_add(body: AddSongs, s: Session = Depends(session)) -> Added:
 def library_stream(track_id: int, s: Session = Depends(media_session)) -> FileResponse:
     """The original file (supports Range requests for seeking). Also plays songs on the
     Household shelf (in your household's store, not yet in your library)."""
-    t = s.lib.track(track_id) or s.lib.household_track(track_id)
+    _quiet(s)
+    t = s.lib.track(track_id) or _household_track(s, track_id)
     if t is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No such track")
     path = s.lib.path_of(t)
@@ -1010,7 +1091,7 @@ def library_stream(track_id: int, s: Session = Depends(media_session)) -> FileRe
 
 def _cover_response(s: Session, track_id: int | None, size: int) -> Response:
     from .subsonic_api import _cover_bytes
-    t = (s.lib.track(track_id) or s.lib.household_track(track_id)) if track_id else None
+    t = (s.lib.track(track_id) or _household_track(s, track_id)) if track_id else None
     path = s.lib.path_of(t) if t else None
     data = _cover_bytes(str(path), path.stat().st_mtime, size) if path and path.exists() else None
     if not data:

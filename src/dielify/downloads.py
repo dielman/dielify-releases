@@ -23,6 +23,7 @@ from .yt_adapter import NotSignedIn, Offline, YTItem, YTMusicAdapter
 log = logging.getLogger(__name__)
 
 ACTIVE = ("queued", "downloading", "processing")
+WAITING = ("approval", "queued", "downloading", "processing")  # approval: a kids account's request, waiting for a parent
 FINISHED = ("done", "failed", "cancelled")
 MAX_ATTEMPTS = 3
 RETRY_DELAYS_S = (30, 120)  # wait before the 2nd and 3rd attempt
@@ -108,9 +109,18 @@ class DownloadQueue:
         lib = library_for(profile)
         in_library = lib.video_ids()
         in_store = lib.store_video_ids()  # already on the PC for someone else: no download
+        kid = None
+        if lib.role == "child":  # a kids account: the parent's controls decide (kids.py)
+            from . import kids
+            controls = kids.load(lib.profile)
+            kid = {"filter": kids.KidFilter(lib.profile), "c": controls,
+                   "left": controls.daily_limit - kids.downloads_today(profile)}
         for item in items:
-            if item.id in in_store and item.id not in in_library and lib.add(in_store[item.id], "download"):
-                in_library[item.id] = in_store[item.id]
+            if item.id in in_store and item.id not in in_library:
+                if kid and kid["filter"].why_not(item.id, item.title, item.artists, item.explicit) is not None:
+                    continue
+                if lib.add(in_store[item.id], "download"):
+                    in_library[item.id] = in_store[item.id]
         request_id = uuid.uuid4().hex[:12]
         now = time.time()
         # while the queue is paused (dead sign-in, offline), new requests wait with it
@@ -123,7 +133,7 @@ class DownloadQueue:
                     continue
                 existing = conn.execute(
                     "SELECT id FROM downloads WHERE profile = ? AND video_id = ? AND status IN "
-                    "('queued', 'downloading', 'processing')", (profile, item.id)).fetchone()
+                    "('approval', 'queued', 'downloading', 'processing')", (profile, item.id)).fetchone()
                 if existing:
                     if next_up:
                         conn.execute("UPDATE downloads SET priority = ? WHERE id = ? AND priority = 0",
@@ -131,6 +141,18 @@ class DownloadQueue:
                     ids.append(existing["id"])
                     continue
                 done = item.id in in_library
+                status, error = ("done" if done else "queued"), None if done else hold_reason
+                if kid and not done:
+                    reason = kid["filter"].why_not(item.id, item.title, item.artists, item.explicit)
+                    if reason and reason != "not checked yet":  # unchecked ones are checked before downloading
+                        status, error = "failed", f"Not allowed in your account ({reason})"
+                    elif kid["left"] <= 0:
+                        status, error = "failed", (f"Daily download limit reached ({kid['c'].daily_limit} songs). "
+                                                   "Try again tomorrow.")
+                    else:
+                        kid["left"] -= 1
+                        if kid["c"].downloads == "approve":
+                            status, error = "approval", "Waiting for a parent's OK"
                 ids.append(conn.execute(
                     "INSERT INTO downloads (profile, video_id, title, artist, album, request_id, "
                     "request_type, request_title, requested_by, status, progress, track_id, "
@@ -138,9 +160,9 @@ class DownloadQueue:
                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (profile, item.id, item.title, ", ".join(item.artists) or None, item.album,
                      request_id, request_type, request_title or item.title, requested_by,
-                     "done" if done else "queued", 1.0 if done else 0.0,
+                     status, 1.0 if done else 0.0,
                      in_library.get(item.id), 0.0 if done else hold_until,
-                     None if done else hold_reason, now, now, priority)).lastrowid)
+                     error, now, now, priority)).lastrowid)
         self._wake.set()
         return [j for j in (self.get(profile, i) for i in ids) if j]
 
@@ -149,8 +171,8 @@ class DownloadQueue:
         """active_only: in the order they'll download (the running one first).
         finished_only / everything: newest first."""
         if active_only:
-            where = " AND status IN ('queued', 'downloading', 'processing')"
-            order = f"CASE status WHEN 'queued' THEN 1 ELSE 0 END, {NEXT_ORDER}"  # as _next_job
+            where = " AND status IN ('approval', 'queued', 'downloading', 'processing')"
+            order = f"CASE status WHEN 'queued' THEN 1 WHEN 'approval' THEN 2 ELSE 0 END, {NEXT_ORDER}"  # as _next_job
         else:
             where = " AND status IN ('done', 'failed', 'cancelled')" if finished_only else ""
             order = "id DESC"
@@ -163,7 +185,7 @@ class DownloadQueue:
         """How many are waiting, and how long a song has recently taken (for an estimate)."""
         with connect() as conn:
             active = conn.execute("SELECT COUNT(*) FROM downloads WHERE profile = ? AND status IN "
-                                  "('queued', 'downloading', 'processing')", (profile,)).fetchone()[0]
+                                  "('approval', 'queued', 'downloading', 'processing')", (profile,)).fetchone()[0]
             recent = [r[0] for r in conn.execute(
                 "SELECT updated_at FROM downloads WHERE profile = ? AND status = 'done' AND track_id IS NOT NULL "
                 "AND attempts > 0 ORDER BY updated_at DESC LIMIT 11", (profile,))]
@@ -182,6 +204,25 @@ class DownloadQueue:
             row = conn.execute("SELECT * FROM downloads WHERE id = ? AND profile = ?",
                                (job_id, profile)).fetchone()
         return dict(row) if row else None
+
+    def approvals(self, profiles: list[str]) -> list[dict]:
+        """Kids' download requests waiting for a parent's OK (oldest first)."""
+        if not profiles:
+            return []
+        with connect() as conn:
+            rows = conn.execute(f"SELECT * FROM downloads WHERE status = 'approval' AND profile IN "
+                                f"({','.join('?' * len(profiles))}) ORDER BY id", profiles).fetchall()
+        return [dict(r) for r in rows]
+
+    def decide(self, job_ids: list[int], allow: bool) -> int:
+        with connect() as conn:
+            n = conn.execute(
+                f"UPDATE downloads SET status = ?, error = ?, updated_at = ? WHERE status = 'approval' "
+                f"AND id IN ({','.join('?' * len(job_ids))})",
+                ("queued" if allow else "cancelled", None if allow else "A parent said no",
+                 time.time(), *job_ids)).rowcount
+        self._wake.set()
+        return n
 
     def move_next(self, profile: str, job_id: int) -> dict | None:
         """Move a waiting download to the front of the line."""
@@ -320,6 +361,14 @@ class DownloadQueue:
             log.warning("Profile %s: YouTube sign-in not working; its downloads wait %ds. %s",
                         profile, SIGNIN_WAIT_S, e)
             return
+        lib = library_for(profile)
+        if lib.role == "child":  # checked now if it had no explicit mark yet
+            from . import kids
+            reason = kids.KidFilter(profile, lambda fn, *a: getattr(adapter, fn)(*a), lookups=1).why_not(
+                job["video_id"], job["title"], [a.strip() for a in (job["artist"] or "").split(",") if a.strip()])
+            if reason and reason != "not checked yet":
+                self._set(job_id, status="failed", error=f"Not allowed in your account ({reason})")
+                return
         attempt = job["attempts"] + 1
         self._set(job_id, status="downloading", attempts=attempt, error=None, progress=0.0)
         log.info("Downloading %s (%s), attempt %d", job["video_id"], job["title"], attempt)
@@ -331,6 +380,15 @@ class DownloadQueue:
             track_id = track["id"] if track else lib.index_file(res.path)
             if job_id in self._cancel:  # cancelled at the very end: keep the file, report it
                 log.info("Job %d finished after cancel was requested", job_id)
+            if lib.role == "child":  # the lyrics decide too: kept first, then checked
+                from . import kids
+                self._fetch_lyrics(adapter, job["video_id"], res.info)
+                c = kids.load(profile)
+                if c.lyrics_check and kids.lyrics_bad(job["video_id"], c.extra_words):
+                    lib.remove_track(track_id)  # out of her library (a child never deletes files)
+                    self._set(job_id, status="failed", error="Not allowed in your account (language in the lyrics)",
+                              title=res.info.title, artist=res.info.artist, album=res.info.album)
+                    return
             self._set(job_id, status="done", progress=1.0, track_id=track_id, error=None,
                       title=res.info.title, artist=res.info.artist, album=res.info.album)
             log.info("Done %s -> track %s", job["video_id"], track_id)
