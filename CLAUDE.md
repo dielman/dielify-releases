@@ -132,7 +132,7 @@ src/dielify/
 | 6 | Android app | Find, request and listen on the road | **Done** 2026-11-08 — closed by Josh before the car test ("assume it works"); Android Auto untested |
 | 7 | Polish (scope set by Josh 8 Nov) | Backups to E:, signed phone release with in-app updates, download-next, playlists, music-video fix | **Done** 2026-11-08 — 0.6.0 published; phone self-update to be confirmed with the first Phase 8 release (Josh) |
 | 8 | Listening features (Josh, 8 Nov) | 1 instant play + download, 2 play history + stats, 4 two-way playlist sync, 3 Dielify-made genre/vibe playlists, 5 outside discovery, 6 remote control between devices | In progress (branch `phase-8`) |
-| 9 | Road to 1.0 (Josh, 9 Nov) | Releases 0.9.1-0.9.9 in `docs/ROADMAP.md`: household + kids accounts first, then discovery, library, sound, phone, together, hardening | In progress: 0.9.4 published |
+| 9 | Road to 1.0 (Josh, 9 Nov) | Releases 0.9.1-0.9.9 in `docs/ROADMAP.md`: household + kids accounts first, then discovery, library, sound, phone, together, hardening | In progress: 0.9.4 published, 0.9.5 built |
 
 ## Current status
 
@@ -468,6 +468,28 @@ src/dielify/
   Also for 0.9.5 (Josh: playlists don't belong in Settings): "Keep on this phone" is a switch on
   each playlist's page (replaces the one-off "Save on phone" there); Settings lists only the kept
   playlists, with switches to stop keeping them.
+
+- 0.9.5 Discovery built (9 Nov; version 0.9.5, 167 tests, phone compiles, PC checked in the browser
+  against a dev copy, **not published**, nothing tried on Josh's devices). Includes the three fixes above.
+  - Leave out of my taste: `taste.py`, table `taste_out` (song key like ratings, or playlist id = all its
+    songs). Applied in history.seeds / on_repeat / forgotten / top_artists, mixes (play count 0), nowmix,
+    new releases. Stats still count them. GET/PUT /api/taste. PC: song queue menu + playlist page button +
+    Settings panel; phone: song ⋮ menus, playlist menu, Settings.
+  - Time-of-day mix: `nowmix.py` (plays ±2 h of now, 0.5^hours, weekday/weekend x1.5, 180 days, stable per
+    part of day; >= 15 songs). In GET /api/discover/for-you as `now_mix`; top of Discover in both apps.
+  - New releases: `releases.py` + `artists.py`. Watched = follows + top 20 played artists (history.top_artists).
+    Channel by exact-name artist search (table yt_artists), page read at most once / 20 h by ReleaseWatcher
+    (youtube.background, first run 5 min after start, then every 3 h). artist_releases.first_seen: first look
+    = this year's releases count as new; later looks = new. New for you = last 60 days, minus albums already
+    in your library. Auto-download (prefs new_releases_auto, off by default, never kids) queues only releases
+    found after the first look. Kids: explicit-blocked children see only albums marked not explicit.
+    GET /api/discover/new, PUT /api/discover/new/settings, POST /api/discover/new/refresh, GET/PUT /api/follows.
+  - Artist About: YouTube description + MusicBrainz url-rels (Website, Wikipedia, socials...; https only),
+    table artist_about (30 days). GET /api/artists/about?name=. Subsonic getArtistInfo/2 answer from the cache
+    (biography, lastFmUrl, largeImageUrl) and look it up in the background otherwise. Shared MusicBrainz
+    client (artists.musicbrainz(), now thread-safe).
+  - Fixed: library.connect ran table setup + migrations in parallel threads ("duplicate column name" on a
+    new database); now under a process lock.
 
 ## Backlog (Josh, 8 Nov; after Phase 8 item 6)
 
