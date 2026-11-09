@@ -169,24 +169,29 @@ No crossfade (Josh, 9 Nov: dropped, PC and phone).
 - **Jam**: one shared queue, e.g. in the car. The host plays; others add songs from their
   phones. If a child is in the Jam, every song is filtered for her.
 
-## 0.9.9: Beautification (Josh, 9 Nov: "we need to work on making the app pretty")
+## 0.9.9: Beautification (Josh, 10 Nov: all 27 items)
 
-Draft, to agree with Josh before it starts (he points at what bothers him most):
-- **One look for both apps**: a small design system (colours, type sizes, spacing, corner
-  radii, icon set) used by the PC app and the phone, so they look like the same product.
-- **Real artwork everywhere**: no music-note placeholders. Artist pictures from YouTube
-  Music (already fetched for About), playlist covers made from their songs' album covers
-  (2x2), smart playlists and mixes with generated covers.
-- **Now playing**: full-screen on the PC, big cover with the background tinted from the
-  cover's colours, on the phone too.
-- **Pages with headers**: album, artist and playlist pages with a large header image and
-  the cover colour behind it.
-- **Motion**: smooth screen changes, cover transitions between the player bar and Now
-  playing, button feedback.
-- **Lists and cards**: consistent card sizes, tidy song rows, better empty and loading
-  states (skeletons, not "Loading…").
-- **App icon and installer look** refreshed.
-- Before/after screenshots of every screen for Josh to approve.
+Josh picked everything on the list (artwork, colour, PC, phone, motion, brand, words). Built in
+stages; Josh sees PC screenshots after stage 2 before the phone work starts.
+
+1. **Artwork and colour, on the PC server** (both apps use it):
+   - every cover's main colours worked out once (Pillow) and sent with songs, albums, playlists;
+   - playlist covers = 2x2 grid of their album covers; mixes, Blends, smart playlists get
+     designed covers (colour block + big title); songs/albums without art get a generated one;
+   - artist photos from YouTube Music (fetched once, kept on the PC).
+2. **PC app**: design tokens (one accent, type scale, spacing, radii), the chosen font,
+   side navigation with your playlists, big page headers with the cover's colour behind them,
+   a full-window Now playing (cover-tinted, lyrics beside it), a calmer player bar (rare
+   buttons in one menu), Discover hero, Settings in sections, loading skeletons, page
+   transitions, an animated "playing" marker in lists, shorter words.
+   -> screenshots of every PC screen, before/after, for Josh.
+3. **Phone app**: same tokens and font, Now playing redesign (cover colour, swipe for
+   next/previous, swipe down to close), mini player with progress and swipe, Settings in
+   sections, tighter top bars, cover-to-player animation, playing marker, the widget restyled,
+   Material You or cover colours (Josh's choice).
+4. **Brand**: new app icon and splash screen (Josh picks from options), installer and update
+   screens to match.
+5. **Words pass** on every screen, then publish.
 
 ## 0.9.10: 1.0 hardening
 
