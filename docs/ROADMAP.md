@@ -283,7 +283,7 @@ Also owed from earlier releases: Josh hasn't yet confirmed on his devices most o
   backups -> start with Windows / keep awake -> add a phone (password + install steps) or TV help -> done. Or
   **Restore from a backup**: pick the zip, Dielify restarts itself with --restore (restores before the server opens the
   database), then shows what came back (people, songs, files found, which sign-ins need redoing, music folder picker).
-  Help > Run the setup again. Restart-into-restore not yet tried on a real install.
+  Help > Run the setup again. Josh tried the dist\ installer build (10 Nov): "everything looks good".
 - **Slimmer FFmpeg** (only with Josh's OK to download it; saves about 70 MB per update).
 
 ## Not on the road to 1.0
