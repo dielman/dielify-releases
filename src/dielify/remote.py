@@ -16,12 +16,17 @@ Messages, device -> PC:
   {"type": "transfer", "from": "<device>", "to": "<device>"}
   {"type": "select", "device": "<device>"}  make it the active device (moves the music)
 PC -> device:
-  {"type": "devices", "you": "<device>", "active": "<device>"|null, "devices": [{device, name, kind, state}]}
+  {"type": "devices", "you": "<device>", "active": "<device>"|null, "devices": [{device, name, kind, state}],
+   "kids": [{device, name, kind, state, person}]}   (a parent's devices only: their kids' devices)
   {"type": "command", "from": "<name>", "command": {...}}
   {"type": "error", "message": "..."}
 
 Apps treat an active device that has been paused for IDLE_S (idle_s in the list) as gone
 and play on themselves again, like Spotify, so the phone in the car doesn't start the PC.
+
+Kids (Josh, 10 Nov): a parent's devices also see the devices of the kids accounts in their household and
+may send them KID_ACTIONS (play / pause / skip / seek / volume): never "load", so a parent's device can't
+put songs on a kid's device that skip the kid's controls. A kid never sees or controls a parent's devices.
 
 Commands: {"action": "play"|"pause"|"next"|"previous"}, {"action": "seek", "position_ms"},
 {"action": "jump", "index", "position_ms"} (another song in the queue),
@@ -161,7 +166,7 @@ class Hub:
         self.lock = asyncio.Lock()
 
     def of(self, profile: str) -> list[Device]:
-        return [d for (p, _), d in self.devices.items() if p == profile]
+        return [d for (p, _), d in self.devices.items() if p.lower() == profile.lower()]
 
     async def send(self, d: Device, msg: dict) -> None:
         try:
@@ -169,12 +174,16 @@ class Hub:
         except Exception:  # closed meanwhile: its own loop cleans up
             pass
 
-    async def broadcast(self, profile: str) -> None:
+    async def broadcast(self, profile: str, parents_too: bool = True) -> None:
         devs = self.of(profile)
         listing = [d.public() for d in devs]
         active = self.active.get(profile)
-        await asyncio.gather(*(self.send(d, {"type": "devices", "you": d.device, "active": active, "devices": listing})
-                               for d in devs))
+        kids = [{**k.public(), "person": k.profile} for child in kids_of(profile) for k in self.of(child)]
+        await asyncio.gather(*(self.send(d, {"type": "devices", "you": d.device, "active": active, "devices": listing,
+                                             "kids": kids}) for d in devs))
+        if parents_too:  # a kid's device changed: their parents' lists show it
+            for parent in parents_of(profile):
+                await self.broadcast(parent, parents_too=False)
 
     async def tell(self, dev: Device, sender: str, cmd: dict) -> None:
         """Send a command to a device, remembering pauses: a report saying "playing" that
@@ -236,7 +245,8 @@ class Hub:
             task.add_done_callback(self._tasks.discard)
 
     def find(self, profile: str, device) -> Device | None:
-        return self.devices.get((profile, str(device)))
+        return self.devices.get((profile, str(device))) or next(
+            (d for (p, dev), d in self.devices.items() if p.lower() == profile.lower() and dev == str(device)), None)
 
     async def handle(self, d: Device, msg: dict) -> None:
         kind = msg.get("type")
@@ -258,6 +268,11 @@ class Hub:
             await self.broadcast(d.profile)
         elif kind == "command":
             target, cmd = self.find(d.profile, msg.get("to")), clean_command(msg.get("command"))
+            if target is None and cmd is not None:  # a parent controlling one of their kids' devices
+                target = next((k for child in kids_of(d.profile) if (k := self.find(child, msg.get("to")))), None)
+                if target is not None and cmd["action"] not in KID_ACTIONS:
+                    await self.send(d, {"type": "error", "message": f"On {target.name} you can play, pause, skip and change the volume"})
+                    return
             if target is None or cmd is None:
                 await self.send(d, {"type": "error", "message": "That device isn't connected" if cmd else "Unknown command"})
                 return
@@ -287,6 +302,33 @@ class Hub:
 
 
 hub = Hub()
+
+KID_ACTIONS = {"play", "pause", "next", "previous", "seek", "volume"}
+
+
+def _people() -> list[dict]:
+    from .library import people
+    try:
+        return people()
+    except Exception:  # noqa: BLE001 - no household tables (e.g. a bare test database)
+        return []
+
+
+def kids_of(profile: str) -> list[str]:
+    """The kids accounts a parent may see and control (same household = same music store)."""
+    ps = _people()
+    me = next((p for p in ps if p["profile"].lower() == profile.lower()), None)
+    if me is None or me["role"] != "parent":
+        return []
+    return [p["profile"] for p in ps if p["role"] == "child" and p["store"].lower() == me["store"].lower()]
+
+
+def parents_of(profile: str) -> list[str]:
+    ps = _people()
+    me = next((p for p in ps if p["profile"].lower() == profile.lower()), None)
+    if me is None or me["role"] != "child":
+        return []
+    return [p["profile"] for p in ps if p["role"] == "parent" and p["store"].lower() == me["store"].lower()]
 
 
 def _authenticate(ws: WebSocket) -> tuple[str, bool] | None:

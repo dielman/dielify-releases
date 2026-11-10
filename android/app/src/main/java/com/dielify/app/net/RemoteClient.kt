@@ -57,6 +57,8 @@ data class RemoteDevice(
     val kind: String,
     val state: RemoteState? = null,
     val idleS: Long = 0,
+    /** Set on a kid's device in a parent's list (whose it is). */
+    val person: String? = null,
 )
 
 @Serializable
@@ -69,7 +71,8 @@ data class RemoteCommand(
     val playing: Boolean? = null,
 )
 
-@Serializable private data class DevicesMsg(val you: String, val active: String? = null, val devices: List<RemoteDevice>)
+@Serializable private data class DevicesMsg(val you: String, val active: String? = null, val devices: List<RemoteDevice>,
+                                             val kids: List<RemoteDevice> = emptyList())
 @Serializable private data class CommandMsg(val from: String = "", val command: RemoteCommand)
 
 /** What the phone's player does for remote control (set by the playback service). */
@@ -99,6 +102,9 @@ class RemoteClient(context: Context, private val server: Server) {
     private val _devices = MutableStateFlow<List<RemoteDevice>>(emptyList())
     /** The other devices of this profile (not this phone). */
     val devices: StateFlow<List<RemoteDevice>> = _devices.asStateFlow()
+    private val _kids = MutableStateFlow<List<RemoteDevice>>(emptyList())
+    /** A parent's view of their kids' devices (play / pause / skip / volume only, remote.py). */
+    val kids: StateFlow<List<RemoteDevice>> = _kids.asStateFlow()
     private val _active = MutableStateFlow<String?>(null)
     /** The device that's playing (or last played): Spotify Connect's "active device". */
     val active: StateFlow<String?> = _active.asStateFlow()
@@ -217,6 +223,7 @@ class RemoteClient(context: Context, private val server: Server) {
                 "devices" -> runCatching { Server.json.decodeFromJsonElement(DevicesMsg.serializer(), camel) }.getOrNull()?.let { d ->
                     listedAt = android.os.SystemClock.elapsedRealtime()
                     _devices.value = d.devices.filter { it.device != deviceId }
+                    _kids.value = d.kids
                     _active.value = d.active
                 }
                 "command" -> runCatching { Server.json.decodeFromJsonElement(CommandMsg.serializer(), camel) }.getOrNull()?.let { c ->

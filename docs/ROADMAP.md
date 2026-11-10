@@ -261,6 +261,7 @@ Josh tests in the shed.
 - Before 1.0: **control her devices** (a parent's phone / PC sees and controls what plays on a child's devices)
   and **quiet hours everywhere** (also in Subsonic apps like Symfonium). Not before 1.0: approvals on the
   parent's phone.
+Status (10 Nov): all of the above built (not released).
 
 Also owed from earlier releases: Josh hasn't yet confirmed on his devices most of 0.9.1-0.9.8
 (kids account on his daughter's phone, Jam, Blend, cast, widget, equaliser, new releases).

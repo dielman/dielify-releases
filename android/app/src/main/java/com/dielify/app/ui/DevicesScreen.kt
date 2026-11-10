@@ -17,6 +17,9 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material.icons.filled.Tv
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.Speaker
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -111,6 +114,7 @@ fun DevicePicker(vm: AppViewModel) {
                     )
                 }
             }
+            KidDevices(remote)
             if (!connected) Text(
                 "Connecting to your PC…", Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -145,4 +149,42 @@ private fun androidx.compose.foundation.layout.RowScope.DeviceRow(icon: androidx
         detail?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1) }
     }
     if (on) Icon(Icons.Filled.Check, "Playing here", tint = ConnectGreen)
+}
+
+
+/** A parent sees what plays on their kids' devices: pause / play, next song, volume (never put songs there). */
+@Composable
+private fun KidDevices(remote: com.dielify.app.net.RemoteClient) {
+    val kids by remote.kids.collectAsStateWithLifecycle()
+    kids.groupBy { it.person ?: "" }.forEach { (person, devs) ->
+        Text("$person's devices", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 4.dp))
+        devs.forEach { d ->
+            val st = d.state
+            val song = st?.song
+            Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(when (d.kind) { "pc" -> Icons.Filled.Computer; "tv" -> Icons.Filled.Tv; else -> Icons.Filled.Smartphone }, null)
+                Spacer(Modifier.width(16.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(d.name, style = MaterialTheme.typography.titleMedium)
+                    Text(if (song == null) "Nothing playing" else "${if (st.playing) "Playing" else "Paused"}: ${song.title}",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                }
+                if (song != null) {
+                    androidx.compose.material3.IconButton(onClick = {
+                        remote.command(d.device, com.dielify.app.net.RemoteCommand(if (st.playing) "pause" else "play"))
+                    }) { Icon(if (st.playing) Icons.Filled.Pause else Icons.Filled.PlayArrow, if (st.playing) "Pause" else "Play") }
+                    androidx.compose.material3.IconButton(onClick = {
+                        remote.command(d.device, com.dielify.app.net.RemoteCommand("next"))
+                    }) { Icon(Icons.Filled.SkipNext, "Next song") }
+                }
+            }
+            if (song != null) {
+                var vol by remember(d.device) { mutableFloatStateOf(st.volume) }
+                Slider(value = vol, onValueChange = { vol = it },
+                    onValueChangeFinished = { remote.command(d.device, com.dielify.app.net.RemoteCommand("volume", value = vol)) },
+                    modifier = Modifier.padding(start = 64.dp, end = 24.dp))
+            }
+        }
+    }
 }

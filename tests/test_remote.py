@@ -215,3 +215,49 @@ def test_a_tv_shows_as_a_tv():
         assert kinds == {"Shed TV": "tv", "Odd": "phone"}           # unknown kinds count as phones
         tv.__exit__(None, None, None)
         odd.__exit__(None, None, None)
+
+
+def test_parents_see_and_control_their_kids_devices():
+    """Josh (10 Nov): a parent's devices see and control what plays on their kids' devices."""
+    from dielify import settings
+    settings.set_value("active_profile", "josh")  # the PC's own person: kids share its music (household)
+    with make_client() as c:
+        josh = login(c)
+        r = c.post("/api/desktop/people", headers={"Authorization": f"Bearer {auth.enable_desktop_token()}"},
+                   json={"name": "emma"})
+        emma = login(c, "emma", r.json()["password"], device="emma's phone")
+        parent = connect(c, josh, "p1", "Pixel")
+        devices(parent)
+        kid = connect(c, emma, "k1", "Emma's phone")
+        kid_list = devices(kid)
+        assert kid_list["kids"] == [] and [d["name"] for d in kid_list["devices"]] == ["Emma's phone"]
+        kid.send_json({"type": "state", "state": {"playing": True, "position_ms": 0, "duration_ms": 200000,
+                                                  "volume": 1, "index": 0, "queue": SONGS}})
+        msg = devices(parent)
+        while not msg["kids"] or not (msg["kids"][0]["state"] or {}).get("playing"):
+            msg = devices(parent)
+        assert msg["kids"][0]["person"] == "emma" and msg["kids"][0]["name"] == "Emma's phone"
+        assert [d["name"] for d in msg["devices"]] == ["Pixel"]      # her phone isn't one of his own
+        assert msg["active"] != "k1"                                 # and never his active device
+
+        parent.send_json({"type": "command", "to": "k1", "command": {"action": "pause"}})
+        got = kid.receive_json()
+        while got["type"] != "command":
+            got = kid.receive_json()
+        assert got["command"]["action"] == "pause" and got["from"] == "Pixel"
+
+        # no putting songs on her phone past her controls
+        parent.send_json({"type": "command", "to": "k1", "command": {"action": "load", "queue": SONGS, "index": 0}})
+        err = parent.receive_json()
+        while err["type"] != "error":
+            err = parent.receive_json()
+        assert "pause" in err["message"]
+
+        # she can't see or control his devices
+        kid.send_json({"type": "command", "to": "p1", "command": {"action": "pause"}})
+        err = kid.receive_json()
+        while err["type"] != "error":
+            err = kid.receive_json()
+        assert "isn't connected" in err["message"]
+        for ws in (parent, kid):
+            ws.__exit__(None, None, None)

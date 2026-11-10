@@ -1791,7 +1791,7 @@ function remoteConnect() {
     let m;
     try { m = JSON.parse(e.data); } catch { return; }
     if (m.type === "devices") {
-      remote.you = m.you; remote.active = m.active; remote.devices = m.devices; remote.at = Date.now();
+      remote.you = m.you; remote.active = m.active; remote.devices = m.devices; remote.kids = m.kids || []; remote.at = Date.now();
       paintBar(); renderPicker();
     } else if (m.type === "command") runCommand(m.command, m.from);
     else if (m.type === "error") toast(m.message);
@@ -1856,8 +1856,31 @@ function renderPicker() {
         h("div", { class: "muted small" }, on ? (st.playing ? "Playing" : "Selected") : s ? `Paused: ${s.title}` : "")),
       on ? h("span", { class: "picker-tick" }, "✓") : null);
     }),
-    remote.ws && rows.length < 2 ? h("p", { class: "muted small" }, "Your phone shows up here while Dielify is open or playing on it.") : null]
-    .flat().filter(Boolean));
+    remote.ws && rows.length < 2 ? h("p", { class: "muted small" }, "Your phone shows up here while Dielify is open or playing on it.") : null,
+    kidRows()]
+    .flat(Infinity).filter(Boolean));
+}
+// A parent sees what plays on their kids' devices and can pause, skip or turn it down (remote.py:
+// never put songs there, so their controls still decide what they hear).
+function kidRows() {
+  const kids = remote.kids || [];
+  if (!kids.length) return null;
+  const tell = (d, command) => remoteSend({ type: "command", to: d.device, command });
+  return [...new Set(kids.map((d) => d.person))].map((person) => [
+    h("div", { class: "picker-title", style: "margin-top:12px" }, `${person}'s devices`),
+    kids.filter((d) => d.person === person).map((d) => {
+      const st = d.state || {};
+      const s = st.queue && st.index >= 0 ? st.queue[st.index] : null;
+      const vol = h("input", { type: "range", min: 0, max: 100, value: Math.round((st.volume ?? 1) * 100), style: "width:90px",
+        onchange: (e) => tell(d, { action: "volume", value: Number(e.target.value) / 100 }) });
+      return h("div", { class: "picker-row" },
+        h("span", { class: "picker-icon" }, d.kind === "pc" ? "💻" : d.kind === "tv" ? "📺" : "📱"),
+        h("span", { style: "flex:1;min-width:0" }, h("div", {}, d.name),
+          h("div", { class: "muted small" }, s ? `${st.playing ? "Playing" : "Paused"}: ${s.title}${s.artist ? " · " + s.artist : ""}` : "Nothing playing")),
+        s ? ib(st.playing ? "pause" : "play", st.playing ? "Pause" : "Play", () => tell(d, { action: st.playing ? "pause" : "play" })) : null,
+        s ? ib("next", "Next song", () => tell(d, { action: "next" })) : null,
+        s ? vol : null);
+    })]);
 }
 function closePicker() {
   if (remote.picker) { remote.picker.remove(); remote.picker = null; }

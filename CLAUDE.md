@@ -716,6 +716,16 @@ src/dielify/
     is installed (E:\Android\Sdk\extras\google\auto) but the phone emulator only has a stub Android Auto
     (gearhead 1.2 stub; the real one needs a Play Store sign-in): run the DHU against Josh's phone instead (wireless
     debugging + AA developer mode "Start head unit server").
+  - **Kids controls (Josh's 10 Nov decisions) built, not released:** f50ffc0 = a Settings tab per child (app.js
+    kidTab, settingsTab may be a tab name; People panel button "<name>'s controls" opens it), explicit = allow
+    toggle, Controls defaults lyrics_check False / parent_sees_stats True, quiet hours refuse Subsonic stream for a
+    child (error 50). Then parents control kids' devices: remote.py kids_of / parents_of (people(): same store),
+    the "devices" message carries "kids" [{..., person}] for parents (a kid's change re-broadcasts to the
+    parents), a parent's command may target a kid's device with KID_ACTIONS only (play/pause/next/previous/seek/
+    volume, never load), a kid can't reach a parent's devices, a kid's device never becomes the parent's active
+    one. PC: "<name>'s devices" in the Play on panel (pause/play, next, volume); phone: KidDevices in the device
+    sheet. Tested: 197 tests; PC panel in the browser against a pretend kid phone (build/fake_kid_phone.py):
+    Pause reached it. Phone sheet built, not seen on screen.
 
 ## Backlog (Josh, 8 Nov; after Phase 8 item 6)
 
