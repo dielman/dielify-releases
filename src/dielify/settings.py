@@ -37,6 +37,7 @@ class Settings:
     # False = nobody has chosen yet: Dielify turns backups on itself (next to the music
     # folder). Set once a folder is picked or backups are turned off, so "off" stays off.
     backup_chosen: bool = False
+    setup_done: bool = False       # the first-start wizard was finished (or skipped)
 
     def __post_init__(self) -> None:
         if not self.library_root:

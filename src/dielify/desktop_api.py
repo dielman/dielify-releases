@@ -6,6 +6,7 @@ phones and other devices get 403.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Literal
 
@@ -77,6 +78,7 @@ class DesktopStatus(BaseModel):
     last_backup: str | None = None
     last_backup_at: float | None = None
     backup_error: str | None = None
+    setup_needed: bool = Field(False, description="Show the first-start wizard")
 
 
 class DesktopChange(BaseModel):
@@ -181,7 +183,96 @@ def _status() -> DesktopStatus:
         cache_limit_gb=s.cache_limit_gb, offline=s.offline, keep_awake=s.keep_awake, start_with_windows=winint.start_with_windows(),
         server_port=s.server_port,
         addresses=[f"http://{a}:{s.server_port}" for a in bind_addresses(s) if not a.startswith("127.")],
-        phone_users=users, people=people)
+        phone_users=users, people=people, setup_needed=setup_needed(s))
+
+
+# --- first start ---------------------------------------------------------------------------
+def setup_needed(s: settings_mod.Settings | None = None) -> bool:
+    """A new install: nobody has finished the wizard, there is no YouTube sign-in and no song.
+    (Installs from before the wizard have a sign-in or songs, so they never see it.)"""
+    s = s or settings_mod.load()
+    if s.setup_done or credstore.list_profiles():
+        return False
+    with library_mod.connect() as conn:
+        return conn.execute("SELECT 1 FROM tracks LIMIT 1").fetchone() is None
+
+
+class SetupName(BaseModel):
+    name: str = Field(min_length=1, max_length=40)
+
+
+@router.post("/setup/name", response_model=DesktopStatus)
+def setup_name(body: SetupName, s: Session = Depends(desktop_session)) -> DesktopStatus:
+    """The wizard's "What's your name?": renames the empty first profile ("default")."""
+    name = body.name.strip()
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", name):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Use letters and numbers (and - or _), no spaces")
+    if not setup_needed():
+        raise HTTPException(status.HTTP_409_CONFLICT, "Dielify is already set up: add people in Settings > People & phones")
+    cfg = settings_mod.load()
+    old = cfg.active_profile
+    if old.casefold() != name.casefold():
+        with library_mod.connect() as conn:  # the old name was never used: nothing to carry over
+            conn.execute("DELETE FROM people WHERE profile = ? COLLATE NOCASE", (old,))
+        try:
+            cfg.profile_library(old).rmdir()  # only if empty
+        except OSError:
+            pass
+    cfg.profile_library(name).mkdir(parents=True, exist_ok=True)
+    settings_mod.set_value("active_profile", name)
+    return _status()
+
+
+@router.post("/setup/done", response_model=DesktopStatus)
+def setup_done(s: Session = Depends(desktop_session)) -> DesktopStatus:
+    settings_mod.set_value("setup_done", "true")
+    return _status()
+
+
+class RestoredPerson(BaseModel):
+    name: str
+    role: str
+    songs: int
+    youtube: bool | None = Field(None, description="Their YouTube sign-in works on this PC (parents only)")
+
+
+class Restored(BaseModel):
+    people: list[RestoredPerson]
+    songs: int
+    files_found: int
+    playlists: int
+    plays: int
+    library_root: str
+    phone_logins: int
+    phone_logins_readable: int = Field(description="How many still work here (DPAPI: same PC + Windows user)")
+
+
+@router.get("/setup/restored", response_model=Restored)
+def restored(s: Session = Depends(desktop_session)) -> Restored:
+    """What came back from a backup (the wizard's last page after a restore)."""
+    cfg = settings_mod.load()
+    people, found, total = [], 0, 0
+    for p in library_mod.people():
+        lib = library_for(p["profile"], cfg)
+        youtube_ok = None
+        if p["role"] == "parent":
+            try:
+                youtube_ok = bool(credstore.load(p["profile"]))
+            except Exception:  # noqa: BLE001 - another PC / Windows user: DPAPI can't read it
+                youtube_ok = False
+        people.append(RestoredPerson(name=p["profile"], role=p["role"], songs=lib.stats()["tracks"], youtube=youtube_ok))
+    with library_mod.connect() as conn:
+        stores = {p["store"] for p in library_mod.people()} or {cfg.active_profile}
+        for store in stores:
+            lib = library_for(store, cfg)
+            for t in conn.execute("SELECT * FROM tracks WHERE profile = ? COLLATE NOCASE", (store,)):
+                total += 1
+                found += lib.path_of(t).exists()
+        playlists = conn.execute("SELECT COUNT(*) FROM playlists").fetchone()[0]
+        plays = conn.execute("SELECT COUNT(*) FROM plays").fetchone()[0]
+    logins, readable = len(credstore.list_profiles(auth.STORE)), len(auth.list_users())
+    return Restored(people=people, songs=total, files_found=found, playlists=playlists, plays=plays,
+                    library_root=cfg.library_root, phone_logins=logins, phone_logins_readable=readable)
 
 
 @router.get("/status", response_model=DesktopStatus)

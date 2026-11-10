@@ -54,6 +54,7 @@ const ICONS = {
   library: "M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9h-4v4h-2v-4H9V9h4V5h2v4h4v2z",
   groups: "M12 12.75c1.63 0 3.07.39 4.24.9 1.08.48 1.76 1.56 1.76 2.73V18H6v-1.61c0-1.18.68-2.26 1.76-2.73 1.17-.52 2.61-.91 4.24-.91zM4 13c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm1.13 1.1c-.37-.06-.74-.1-1.13-.1-.99 0-1.93.21-2.78.58C.48 14.9 0 15.62 0 16.43V18h4.5v-1.61c0-.83.23-1.61.63-2.29zM20 13c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm4 3.43c0-.81-.48-1.53-1.22-1.85-.85-.37-1.79-.58-2.78-.58-.39 0-.76.04-1.13.1.4.68.63 1.46.63 2.29V18H24v-1.57zM12 6c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3z",
   insights: "M21 8c-1.45 0-2.26 1.44-1.93 2.51l-3.55 3.56c-.3-.09-.74-.09-1.04 0l-2.55-2.55C12.27 10.45 11.46 9 10 9c-1.45 0-2.27 1.44-1.93 2.52l-4.56 4.55C2.44 15.74 1 16.55 1 18c0 1.1.9 2 2 2 1.45 0 2.26-1.44 1.93-2.51l4.55-4.56c.3.09.74.09 1.04 0l2.55 2.55C12.73 16.55 13.54 18 15 18c1.45 0 2.27-1.44 1.93-2.52l3.56-3.55c1.07.33 2.51-.48 2.51-1.93 0-1.1-.9-2-2-2z",
+  help: "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z",
   settings: "M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.488.488 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z",
   search: "M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z",
   volume: "M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z",
@@ -219,7 +220,7 @@ function go(v, ...args) {
   backStack.length = 0;  // a new section: nothing to go back to
   document.querySelectorAll("#nav button").forEach((b) => b.classList.toggle("active", b.dataset.view === v));
   $("search-input").placeholder = v === "discover" ? "Search YouTube Music" : "Search your library";
-  ({ library: viewLibrary, discover: viewDiscover, downloads: viewDownloads, stats: viewStats, settings: viewSettings, jam: viewJam })[v](...args);
+  ({ library: viewLibrary, discover: viewDiscover, downloads: viewDownloads, stats: viewStats, settings: viewSettings, jam: viewJam, help: viewHelp })[v](...args);
 }
 $("search").addEventListener("submit", (e) => {
   e.preventDefault();
@@ -2388,14 +2389,257 @@ function openRoute(r) {
   if (what === "recap") { view = "stats"; document.querySelectorAll("#nav button").forEach((b) => b.classList.toggle("active", b.dataset.view === "stats")); return viewRecap(); }
   if (what === "jam") return viewJam();
   if (what === "nowplaying") { go("discover"); return setTimeout(openNowPlaying, 1500); }
+  if (what === "help") return viewHelp(arg);
   return go(["discover", "stats", "settings", "downloads"].includes(what) ? what : "discover");
+}
+
+// --- first start: the setup wizard (0.9.11) ---------------------------------------------------
+// Shown over the whole window on a new install (status.setup_needed), or after a restore
+// (go=restored). Every step saves at once, so closing the window halfway loses nothing.
+const SETUP_STEPS = ["Welcome", "Your name", "YouTube Music", "Music folder", "Backups", "This PC", "Phones & TVs", "Done"];
+function setupShell(step, ...body) {
+  let box = $("setup");
+  if (!box) { box = h("div", { id: "setup", class: "setup" }); document.body.append(box); }
+  const dots = step === null ? null : h("div", { class: "setup-dots" },
+    SETUP_STEPS.map((label, i) => h("span", { class: i < step ? "done" : i === step ? "on" : "", title: label })));
+  box.replaceChildren(h("div", { class: "setup-card" },
+    h("div", { class: "setup-brand" }, h("img", { src: "logo.svg", alt: "" }), "Dielify"), dots, ...body));
+  box.scrollTop = 0;
+  const first = box.querySelector("input[type=text]");
+  if (first) first.focus();
+}
+function closeSetup() { const box = $("setup"); if (box) box.remove(); }
+const setupNav = (back, next, nextLabel = "Next", plain = false) => h("div", { class: "setup-nav" },
+  back ? h("button", { onclick: back }, icon("back", "ico lead"), "Back") : h("span"),
+  h("button", { class: plain ? "" : "primary", onclick: next }, nextLabel));
+const setupHelp = (id, label = "More help") => h("button", { class: "link", onclick: () => viewHelp(id, true) }, label);
+const setupSave = async (body) => { try { await api("/api/desktop/settings", { method: "PUT", body }); } catch (e) { toast(e.message, 6000); } };
+
+async function setupStep(step) {
+  const s = await refreshStatus();
+  const app = desktopApp();
+  const next = () => setupStep(step + 1);
+  const back = () => setupStep(step - 1);
+  const p = s.profiles.find((x) => x.name === s.active_profile) || { youtube_signed_in: false, library_path: s.library_root };
+  if (step === 0) return setupShell(0,
+    h("h1", {}, "Welcome to Dielify"),
+    h("p", { class: "lead" }, "Your music from YouTube Music, kept on this PC: it plays here, on your phones and on your TVs, even with no internet."),
+    h("p", { class: "muted" }, "Setting up takes about five minutes. You need your Google account with YouTube Music Premium."),
+    h("div", { class: "setup-choices" },
+      h("button", { class: "choice primary", onclick: next }, h("b", {}, "Set up Dielify"), h("span", {}, "A fresh start on this PC")),
+      h("button", { class: "choice", onclick: setupRestore }, h("b", {}, "Restore from a backup"),
+        h("span", {}, "Moving to a new PC, or starting again? Bring back your people, playlists and history"))));
+  if (step === 1 && !s.setup_needed) return setupShell(1, h("h1", {}, "Your name"),
+    h("p", { class: "muted" }, `Dielify is set up for ${s.active_profile}. Add more people in Settings > People & phones.`), setupNav(back, next));
+  if (step === 1) {
+    const input = h("input", { type: "text", value: s.active_profile === "default" ? "" : s.active_profile, placeholder: "e.g. sam", maxlength: 40 });
+    const save = async () => {
+      const name = input.value.trim();
+      if (!name) return toast("Type a name first");
+      try { await api("/api/desktop/setup/name", { method: "POST", body: { name } }); next(); }
+      catch (e) { toast(e.message, 6000); }
+    };
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter") save(); });
+    return setupShell(1, h("h1", {}, "What's your name?"),
+      h("p", { class: "muted" }, "Your music, likes and playlists go under this name. Letters and numbers, no spaces. Other people can be added later, each with their own library."),
+      input, setupNav(back, save));
+  }
+  if (step === 2) {
+    const signIn = async (e) => {
+      if (!app) return toast("Sign in from the Dielify app on the PC, not from a browser.");
+      e.target.disabled = true;
+      toast("A sign-in window has opened. Sign in there.", 6000);
+      const r = await app.sign_in(s.active_profile, false);
+      if (r.ok) toast(`Signed in as ${r.account}`);
+      else if (r.error) toast(r.error, 8000);
+      setupStep(2);
+    };
+    return setupShell(2, h("h1", {}, "Sign in to YouTube Music"),
+      p.youtube_signed_in
+        ? h("p", { class: "ok big" }, "Signed in ✓")
+        : h("ol", { class: "setup-steps" },
+            h("li", {}, "Press Sign in. A window opens on YouTube Music."),
+            h("li", {}, "Sign in with your Google account as usual."),
+            h("li", {}, "When your YouTube Music home page shows, press the ", h("b", {}, "Use this account"), " bar at the top.")),
+      h("div", { class: "row" }, h("button", { class: p.youtube_signed_in ? "" : "primary", onclick: signIn }, p.youtube_signed_in ? "Sign in again" : "Sign in")),
+      h("p", { class: "muted small" }, "Dielify keeps the sign-in encrypted on this PC, readable only by your Windows account. It never leaves this PC."),
+      setupNav(back, next, p.youtube_signed_in ? "Next" : "Skip for now", !p.youtube_signed_in));
+  }
+  if (step === 3) return setupShell(3, h("h1", {}, "Where your music goes"),
+    h("p", { class: "muted" }, "Songs are saved as normal music files with their covers, in folders by artist and album. A big drive is best: a thousand songs take about 8 GB."),
+    h("div", { class: "setup-value" }, s.library_root),
+    app ? h("div", { class: "row" }, h("button", { onclick: async () => {
+      const dir = await app.pick_folder();
+      if (dir) { await setupSave({ library_root: dir }); setupStep(3); }
+    } }, "Choose another folder…")) : null,
+    setupNav(back, next));
+  if (step === 4) return setupShell(4, h("h1", {}, "Backups"),
+    h("p", { class: "muted" }, "Once a day Dielify copies its own data: people, likes, playlists, history, settings and logins. Not the music files themselves, which carry their own details. The last 14 copies are kept."),
+    s.backup_folder
+      ? [h("div", { class: "setup-value" }, s.backup_folder),
+         h("div", { class: "row" },
+           app ? h("button", { onclick: async () => {
+             const dir = await app.pick_folder();
+             if (dir) { await setupSave({ backup_folder: dir }); setupStep(4); }
+           } }, "Choose another folder…") : null,
+           h("button", { class: "link", onclick: async () => { await setupSave({ backup_folder: "" }); setupStep(4); } }, "Turn backups off")),
+         h("p", { class: "muted small" }, "Tip: a folder on another drive (or a cloud folder like OneDrive) keeps the backups safe if this drive fails.")]
+      : [h("p", { class: "warn" }, "Backups are off."),
+         h("div", { class: "row" }, h("button", { class: "primary", onclick: async () => { await setupSave({ backup_folder: s.backup_suggested }); setupStep(4); } },
+           `Turn on (${s.backup_suggested})`))],
+    setupNav(back, next));
+  if (step === 5) {
+    const tick = (key, on, label, help) => h("label", { class: "setup-tick" },
+      h("input", { type: "checkbox", checked: on, onchange: async (e) => { await setupSave({ [key]: e.target.checked }); } }),
+      h("span", {}, h("b", {}, label), h("span", { class: "muted small" }, help)));
+    return setupShell(5, h("h1", {}, "This PC"),
+      h("p", { class: "muted" }, "Phones and TVs play from this PC, so it helps if Dielify is always running."),
+      tick("start_with_windows", s.start_with_windows, "Start with Windows", "Dielify waits in the tray (by the clock) when you sign in to Windows."),
+      tick("keep_awake", s.keep_awake, "Keep this PC awake", "Windows won't sleep while idle, so your phone can always reach it. The screen can still turn off."),
+      setupNav(back, next));
+  }
+  if (step === 6) return setupShell(6, h("h1", {}, "Phones and TVs"),
+    h("p", { class: "muted" }, "Each phone signs in with a phone login made here. You can do this now or later in Settings > People & phones."),
+    h("div", { class: "setup-choices" },
+      h("button", { class: "choice", onclick: async () => {
+        const name = prompt("Name for this phone login (e.g. your first name):", s.active_profile);
+        if (!name) return;
+        try { setupPassword(await api("/api/desktop/phone-users", { method: "POST", body: { name: name.trim() } })); }
+        catch (e) { toast(e.message, 6000); }
+      } }, h("b", {}, "Add a phone"), h("span", {}, "Make a phone login, then install the app on the phone")),
+      h("button", { class: "choice", onclick: () => viewHelp("tv", true) }, h("b", {}, "Add a TV"), h("span", {}, "How to put Dielify on a Google TV"))),
+    h("p", { class: "muted small" }, "Away from home, phones reach this PC through Tailscale. ", setupHelp("away", "How to set it up")),
+    setupNav(back, next));
+  return setupShell(7, h("h1", {}, "All set"),
+    h("p", { class: "lead" }, p.youtube_signed_in
+      ? "Discover shows your YouTube Music home. Search at the top for any song, album or artist: press play to listen, or the download button to keep it."
+      : "Sign in to YouTube Music in Settings > Music & YouTube when you're ready: until then Dielify plays the music already in your folder."),
+    h("p", { class: "muted" }, "Help is in the side bar whenever you need it: adding people and kids accounts, phones, TVs, backups."),
+    setupNav(back, finishSetup, "Start listening"));
+}
+
+// the password page, inside the wizard (showPassword's Done would leave it)
+function setupPassword(login) {
+  setupShell(6, h("h1", {}, "Phone login"),
+    h("p", {}, "Install Dielify on the phone, then type these into it. The password is shown only this once."),
+    h("ol", { class: "setup-steps" },
+      h("li", {}, "On the phone, open the web browser at ", h("b", {}, "github.com/dielman/dielify-releases/releases/latest"), "."),
+      h("li", {}, "Under Assets, tap the Dielify .apk file, open it and allow installing. If Play Protect offers to scan it, let it."),
+      h("li", {}, "Open Dielify, type the details below and Sign in. Allow Nearby devices when asked.")),
+    [...(status.addresses || [])].sort((x, y) => /\/\/100\./.test(x) - /\/\/100\./.test(y)).map((a) => h("div", { class: "setting" },
+      h("div", { class: "label" }, /^http:\/\/100\./.test(a) ? "Tailscale address" : "Home address"), h("div", { class: "value" }, a.replace(/^http:\/\//, "")))),
+    h("div", { class: "setting" }, h("div", { class: "label" }, "Phone login name"), h("div", { class: "value secret" }, login.name)),
+    h("div", { class: "setting" }, h("div", { class: "label" }, "Password"), h("div", { class: "value secret" }, login.password)),
+    setupNav(null, () => setupStep(6), "Done"));
+}
+
+async function finishSetup() {
+  try { await api("/api/desktop/setup/done", { method: "POST" }); } catch (e) { return toast(e.message, 6000); }
+  closeSetup();
+  await refreshStatus();
+  go(status.offline ? "library" : "discover");
+}
+
+async function setupRestore() {
+  const app = desktopApp();
+  let file = null;
+  const paint = () => setupShell(0, h("h1", {}, "Restore from a backup"),
+    h("p", { class: "muted" }, "Choose a Dielify backup (a file named dielify-backup-… .zip). Dielify restarts, puts the backup back, and shows what came back."),
+    status.setup_needed ? null : h("p", { class: "warn" }, "This replaces Dielify's data on this PC with the backup's. A copy of today's data is kept next to the backup."),
+    h("ol", { class: "setup-steps" },
+      h("li", {}, "Copy your backup folder to this PC first if it's on a stick or another drive (or choose it there)."),
+      h("li", {}, "Put your music folder where it was, or choose its new place after the restore.")),
+    file ? h("div", { class: "setup-value" }, file) : null,
+    h("div", { class: "row" }, app
+      ? h("button", { class: file ? "" : "primary", onclick: async () => { file = await app.pick_backup() || file; paint(); } }, file ? "Choose another…" : "Choose backup file…")
+      : h("p", { class: "warn" }, "Restore from the Dielify app on the PC.")),
+    setupNav(() => setupStep(0), async (e) => {
+      if (!file) return toast("Choose a backup file first");
+      e.target.disabled = true;
+      const r = await app.restore_backup(file);
+      if (!r.ok) { e.target.disabled = false; return toast(r.error, 8000); }
+      setupShell(null, h("h1", {}, "Restoring…"), h("p", { class: "muted" }, "Dielify closes and opens again by itself in a few seconds."));
+    }, "Restore and restart"));
+  paint();
+}
+
+// after a restore: what came back, and what needs doing on this PC
+async function setupRestored() {
+  let r;
+  try { r = await api("/api/desktop/setup/restored"); } catch (e) { return setupShell(null, h("h1", {}, "Restored"), h("p", { class: "warn" }, e.message), setupNav(null, finishSetup, "Continue")); }
+  const s = await refreshStatus();
+  const app = desktopApp();
+  const missing = r.songs - r.files_found;
+  const line = (ok, text, ...more) => h("div", { class: "setup-check" }, h("span", { class: ok ? "ok" : "warn" }, ok ? "✓" : "!"), h("div", {}, text, ...more));
+  const n = (x, one) => `${x.toLocaleString()} ${one}${x === 1 ? "" : "s"}`;
+  setupShell(null, h("h1", {}, "Your backup is back"),
+    line(true, `${n(r.people.length, "person")}: ${r.people.map((p) => p.name + (p.role === "child" ? " (kids account)" : "")).join(", ")}`),
+    line(true, `${n(r.songs, "song")}, ${n(r.playlists, "playlist")}, ${n(r.plays, "play")} of history`),
+    line(!missing, missing
+      ? `${n(missing, "song")} aren't in the music folder (${r.library_root}). If the music is somewhere else on this PC, choose that folder.`
+      : `All the music files are in ${r.library_root}`,
+      missing && app ? h("div", {}, h("button", { onclick: async () => {
+        const dir = await app.pick_folder();
+        if (dir) { await setupSave({ library_root: dir }); setupRestored(); }
+      } }, "Choose the music folder…")) : null),
+    ...r.people.filter((p) => p.youtube !== null).map((p) => line(p.youtube, p.youtube
+      ? `${p.name}'s YouTube sign-in works`
+      : `${p.name} needs to sign in to YouTube again (sign-ins only move with the same Windows account)`,
+      !p.youtube && app && p.name === s.active_profile ? h("div", {}, h("button", { class: "primary", onclick: async () => {
+        toast("A sign-in window has opened. Sign in there.", 6000);
+        const res = await app.sign_in(p.name, false);
+        if (!res.ok && res.error) toast(res.error, 8000);
+        setupRestored();
+      } }, "Sign in")) : null)),
+    r.phone_logins ? line(r.phone_logins_readable === r.phone_logins, r.phone_logins_readable === r.phone_logins
+      ? `${n(r.phone_logins, "phone login")} still work${r.phone_logins === 1 ? "s" : ""}`
+      : `Phone logins don't work on this PC: make new ones in Settings > People & phones, and sign the phones in again`) : null,
+    setupNav(null, finishSetup, "Start listening"));
+}
+
+// --- help pages ----------------------------------------------------------------------------------
+function viewHelp(topic, fromSetup = false) {
+  const t = HELP.find((x) => x.id === topic);
+  const draw = (block) => {
+    if (typeof block === "string") return h("p", {}, block);
+    const [kind, ...rest] = block;
+    if (kind === "steps") return h("ol", { class: "help-steps" }, rest.map((x) => h("li", {}, x)));
+    if (kind === "need") return h("div", { class: "help-need" }, h("b", {}, "You need"), h("ul", {}, rest.map((x) => h("li", {}, x))));
+    if (kind === "note") return h("div", { class: "help-note" }, rest[0]);
+    if (kind === "go") return fromSetup ? null : h("div", { class: "row" }, h("button", { onclick: () => {
+      const [what, tab] = rest[1].split(":");
+      if (what === "settings") { settingsTab = tab || 0; go("settings"); } else openRoute(rest[1]);
+    } }, rest[0]));
+    return null;
+  };
+  if (fromSetup) {  // inside the wizard: the page, then back to where you were
+    const step = SETUP_STEPS.indexOf("Phones & TVs");
+    return setupShell(step, h("h1", {}, t.title), h("div", { class: "help" }, t.blocks.map(draw)), setupNav(() => setupStep(step), () => setupStep(step), "Back to setup"));
+  }
+  view = "help";
+  document.querySelectorAll("#nav button").forEach((b) => b.classList.toggle("active", b.dataset.view === "help"));
+  if (!t) {
+    enter("help", "Help", () => viewHelp());
+    return show(h("h1", {}, "Help"),
+      h("div", { class: "help-list" }, HELP.map((x) => h("button", { class: "help-topic", onclick: () => viewHelp(x.id) },
+        h("b", {}, x.title), h("span", { class: "muted" }, x.short)))),
+      h("div", { class: "row", style: "margin-top:16px" }, h("button", { onclick: () => setupStep(0) }, "Run the setup again")));
+  }
+  enter(`help:${t.id}`, t.title, () => viewHelp(t.id), true);
+  show(h("div", { class: "row" }, backButton("Help", () => viewHelp())), h("h1", {}, t.title), h("div", { class: "help" }, t.blocks.map(draw)));
 }
 
 // --- start ----------------------------------------------------------------------------------------
 if (!KEY) show(h("p", { class: "pad warn" }, "Open Dielify from its desktop app."));
 else {
   // opens on Discover; in offline mode (no YouTube) on your library instead
-  refreshStatus().then(() => GO ? openRoute(GO) : go(status.offline ? "library" : "discover")).catch(() => go("library"));
+  refreshStatus().then(() => {
+    if (GO !== "restored") GO ? openRoute(GO) : go(status.offline ? "library" : "discover");
+    else go("library");
+    if (GO === "restored") setupRestored();           // the wizard restarted Dielify into a restore
+    else if (GO && GO.startsWith("setup")) setupStep(Number(GO.split(":")[1]) || 0);  // screenshots
+    else if (status.setup_needed) setupStep(0);       // a new install
+  }).catch(() => go("library"));
   pollDownloads(); remoteConnect(); refreshRatings(); paintSide();
   $("update-pill").addEventListener("click", () => go("settings"));
   // the app checks in the background shortly after starting; pick up the result

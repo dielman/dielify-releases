@@ -276,7 +276,14 @@ Also owed from earlier releases: Josh hasn't yet confirmed on his devices most o
   Follow-up (Josh, 10 Nov): **backups on by default** (built): the first start picks <music folder's parent>\Dielify-backups;
   picking a folder or Turn off is remembered (settings.backup_chosen), so off stays off.
 - **Help pages** in the app for a non-technical person: first setup, adding a person, kids
-  controls.
+  controls. Built 10 Nov (not released): Help in the PC side bar (ui/help.js: first setup, phone, away from home,
+  add a person, kids controls, add a TV, play on another device, backups, troubleshooting).
+- **First-start wizard** (Josh, 10 Nov, built, not released): a new install opens on it (no sign-in, no songs, not
+  finished before): welcome -> your name (renames the empty "default" profile) -> YouTube sign-in -> music folder ->
+  backups -> start with Windows / keep awake -> add a phone (password + install steps) or TV help -> done. Or
+  **Restore from a backup**: pick the zip, Dielify restarts itself with --restore (restores before the server opens the
+  database), then shows what came back (people, songs, files found, which sign-ins need redoing, music folder picker).
+  Help > Run the setup again. Restart-into-restore not yet tried on a real install.
 - **Slimmer FFmpeg** (only with Josh's OK to download it; saves about 70 MB per update).
 
 ## Not on the road to 1.0

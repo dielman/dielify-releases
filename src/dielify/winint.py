@@ -35,6 +35,19 @@ def claim_single_instance() -> bool:
     return ctypes.get_last_error() != ERROR_ALREADY_EXISTS
 
 
+def claim_single_instance_wait(timeout_s: float = 60) -> bool:
+    """claim_single_instance, waiting for a closing copy (restore restarts the app)."""
+    import time
+    end = time.monotonic() + timeout_s
+    while True:
+        if claim_single_instance():
+            return True
+        _kernel32.CloseHandle(_mutex)  # our handle would keep the mutex alive
+        if time.monotonic() > end:
+            return False
+        time.sleep(0.5)
+
+
 def another_instance_running() -> bool:
     """True if the desktop app is running (for tools that need it closed)."""
     SYNCHRONIZE = 0x00100000

@@ -114,6 +114,21 @@ def _replace(src: Path, dst: Path, tries: int = 20) -> None:
             time.sleep(0.25)
 
 
+def check(zip_path: Path) -> str | None:
+    """None if this is a Dielify backup, else what's wrong (in words for the wizard)."""
+    try:
+        with zipfile.ZipFile(zip_path) as z:
+            if "dielify.db" not in z.namelist():
+                return "That file isn't a Dielify backup."
+            if z.testzip() is not None:
+                return "That backup is damaged."
+    except FileNotFoundError:
+        return "That file can't be found."
+    except (zipfile.BadZipFile, OSError):
+        return "That file isn't a Dielify backup."
+    return None
+
+
 def restore(zip_path: Path) -> Path:
     """Put a backup's database, settings and login files back. Dielify must be closed.
     The current data is backed up first (into the same folder as `zip_path`); returns
@@ -122,7 +137,10 @@ def restore(zip_path: Path) -> Path:
         if "dielify.db" not in z.namelist():
             raise ValueError(f"{zip_path} isn't a Dielify backup (no dielify.db inside)")
     # before touching anything; no pruning, which could delete the backup being restored
-    safety = make_backup(zip_path.parent, prune=False)
+    try:
+        safety = make_backup(zip_path.parent, prune=False)
+    except OSError:  # e.g. a read-only stick: keep it in Dielify's own folder instead
+        safety = make_backup(app_data_dir() / "before-restore", prune=False)
     with zipfile.ZipFile(zip_path) as z:
         names = z.namelist()
         data = app_data_dir()

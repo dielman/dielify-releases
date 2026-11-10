@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+import subprocess
 import sys
 import threading
 import time
@@ -67,6 +68,7 @@ class Bridge:
     def __init__(self):
         self._window: webview.Window | None = None  # underscore: pywebview must not expose it to JS
         self._signin_lock = threading.Lock()
+        self._quit = None  # set by main(): closes the app (restore restarts it)
 
     def pick_folder(self) -> str | None:
         result = self._window.create_file_dialog(webview.FileDialog.FOLDER)
@@ -77,6 +79,29 @@ class Bridge:
         folder = settings_mod.load().profile_library()
         folder.mkdir(parents=True, exist_ok=True)
         os.startfile(folder)  # a directory: Explorer opens it, nothing runs
+
+    def pick_backup(self) -> str | None:
+        """The wizard's "Restore from a backup": choose a backup file."""
+        from . import backup
+        start = settings_mod.load().backup_folder or str(backup.suggested_folder())
+        result = self._window.create_file_dialog(
+            webview.FileDialog.OPEN, directory=start if Path(start).is_dir() else "",
+            file_types=("Dielify backups (dielify-backup-*.zip)", "All files (*.*)"))
+        return result[0] if result else None
+
+    def restore_backup(self, path: str) -> dict:
+        """Check the file, then restart Dielify, which restores it before anything opens the
+        database (restoring under a running server isn't safe)."""
+        from . import backup
+        problem = backup.check(Path(path))
+        if problem:
+            return {"ok": False, "error": problem}
+        cmd = ([sys.executable] if getattr(sys, "frozen", False) else [sys.executable, "-m", "dielify.desktop"])
+        subprocess.Popen([*cmd, "--restore", str(Path(path))], close_fds=True,
+                         creationflags=getattr(subprocess, "DETACHED_PROCESS", 0))
+        if self._quit:
+            threading.Timer(0.5, self._quit).start()
+        return {"ok": True}
 
     def clear_sign_in(self) -> None:
         """Forget any Google cookies in the main window (it never needs them)."""
@@ -220,6 +245,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--tray", action="store_true", help="start hidden in the tray")
     p.add_argument("--signin", metavar="PROFILE", help=argparse.SUPPRESS)  # internal
     p.add_argument("--result", help=argparse.SUPPRESS)
+    p.add_argument("--restore", metavar="BACKUP", help=argparse.SUPPRESS)  # from the wizard
     args = p.parse_args(argv)
     if args.signin:
         from . import server
@@ -227,7 +253,13 @@ def main(argv: list[str] | None = None) -> int:
         return signin_main(args.signin, args.result)
 
     use_bundled_tools()
-    if not winint.claim_single_instance():
+    if args.restore:
+        # the wizard started us and is closing: wait for it, then restore before anything
+        # opens the database
+        if not winint.claim_single_instance_wait(60):
+            winint.message_box("Dielify couldn't restore the backup: the old window didn't close.")
+            return 1
+    elif not winint.claim_single_instance():
         winint.signal_show()  # already running: bring its window forward
         return 0
 
@@ -237,6 +269,15 @@ def main(argv: list[str] | None = None) -> int:
         out = open(log_file.with_name("desktop.log"), "a", encoding="utf-8", buffering=1)
         sys.stdout = sys.stdout or out
         sys.stderr = sys.stderr or out
+    go = ""
+    if args.restore:
+        from . import backup
+        try:
+            backup.restore(Path(args.restore))
+            go = "&go=restored"
+        except Exception as e:  # noqa: BLE001
+            logging.getLogger(__name__).exception("Restore failed")
+            winint.message_box(f"Dielify couldn't restore that backup: {e}\n\nA copy of the data from before is in the backup's folder.")
     s = settings_mod.load()
     token = auth.enable_desktop_token()
     try:
@@ -248,7 +289,7 @@ def main(argv: list[str] | None = None) -> int:
 
     bridge = Bridge()
     window = webview.create_window(
-        "Dielify", f"http://127.0.0.1:{s.server_port}/ui/#t={token}", js_api=bridge,
+        "Dielify", f"http://127.0.0.1:{s.server_port}/ui/#t={token}{go}", js_api=bridge,
         width=1200, height=800, min_size=(860, 560), hidden=args.tray, background_color="#111214")
     bridge._window = window
     quitting = threading.Event()
@@ -274,6 +315,7 @@ def main(argv: list[str] | None = None) -> int:
     # cookies kept rotating and spoiled the saved sign-in. This window needs none.
     window.events.loaded += lambda: window.clear_cookies()
     tray = _make_tray(show, quit_app)
+    bridge._quit = quit_app
 
     from .updater import updater
     # The installer waits for Dielify to close; give the window a moment to show
