@@ -18,7 +18,7 @@ count up the last digit: 0.9.1, 0.9.2 ... then 1.0.0.
 | 0.9.8 | Together | shared household playlists, Blend, Jam |
 | 0.9.9 | Beautification | one design, real artwork, new icon; lyrics removed, Discover cached (published 10 Nov) |
 | 0.9.10 | TV | Dielify on the Google TV in the shed: TV screens, QR sign-in approved from a phone, phone as remote, Jam host (published 10 Nov) |
-| 0.9.11 | 1.0 hardening | clean-PC install, car test, security review (incl. TV pairing), restore drill, help pages |
+| 0.9.11 | 1.0 hardening | security review, restore drill, first-start wizard + help, kids controls, PC updates TVs, log fixes, smaller installer (published 10 Nov) |
 | 1.0.0 | Release | the last 0.9 build, renamed, once Josh is happy |
 
 Multi-user goes first because every later feature has to know whose library, whose taste
@@ -246,7 +246,9 @@ Steps: 1 pairing + announcing + PC code entry + phone scanner -> 2 TV app (find 
 Library / Search, playback, Now playing) -> 3 Play on / Jam / idle display -> 4 install on the TV,
 Josh tests in the shed.
 
-## 0.9.11: 1.0 hardening
+## 0.9.11: 1.0 hardening (published 10 Nov)
+
+Still owed by Josh before 1.0: the car check of the new Android Auto layout, and confirming 0.9.1-0.9.11 on his devices.
 
 **Kids controls, decided by Josh (10 Nov)**, to build in 0.9.11:
 - **Each child gets their own tab in PC Settings** (next to Playback, People & phones...) holding all of their
