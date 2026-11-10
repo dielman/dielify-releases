@@ -248,6 +248,20 @@ Josh tests in the shed.
 
 ## 0.9.11: 1.0 hardening
 
+**Kids controls, decided by Josh (10 Nov)**, to build in 0.9.11:
+- **Each child gets their own tab in PC Settings** (next to Playback, People & phones...) holding all of their
+  controls, instead of the Controls page reached from People & phones.
+- Explicit songs: an allow / don't-allow **toggle** (default: don't allow). Clean versions: on.
+- Check words (titles): **off by default** (was on).
+- New downloads: straight away. Download limit: a number Josh sets per child (default 50). YouTube search: all of
+  YouTube Music. Never-ending discovery: on. Jams: on.
+- Quiet hours: set per child in their tab (default off). Blend: per child in their tab ("some kids are old
+  enough, some aren't"; default off).
+- Parent can see the child's stats: **on by default** (was off).
+- Before 1.0: **control her devices** (a parent's phone / PC sees and controls what plays on a child's devices)
+  and **quiet hours everywhere** (also in Subsonic apps like Symfonium). Not before 1.0: approvals on the
+  parent's phone.
+
 Also owed from earlier releases: Josh hasn't yet confirmed on his devices most of 0.9.1-0.9.8
 (kids account on his daughter's phone, Jam, Blend, cast, widget, equaliser, new releases).
 
@@ -270,4 +284,4 @@ audiobooks, a second PC / second household.
 ## Still to decide
 
 - ~~Where the child uses Dielify~~: her phone, at home (Josh, 9 Nov).
-- The defaults in the parent controls table above (Josh to confirm or change).
+- ~~The defaults in the parent controls table above~~: decided 10 Nov, see 0.9.11.

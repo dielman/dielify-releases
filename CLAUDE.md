@@ -782,11 +782,14 @@ src/dielify/
   Premium)
 - Auto-download while streaming, or on demand only
 - Default cache size limit and eviction behaviour (setting exists, not enforced yet)
-- Where the daughter uses Dielify (her phone / the family PC / her own computer), and
-  the kids-controls defaults (docs/ROADMAP.md, 0.9.3)
 - Wake-on-LAN wanted?
 
 ## Decisions log
+
+- 2026-11-10 (Josh): **kids controls** settled (details in docs/ROADMAP.md 0.9.11): a Settings tab per child with all
+  their controls; explicit = allow/don't toggle (default don't); title word check off by default; parent sees stats
+  on by default; download limit, quiet hours and Blend set per child; build parent control of a child's devices
+  and quiet hours in Subsonic apps before 1.0.
 
 - 2026-11-10 (Josh): **no lyrics in Dielify** (removed from server, PC and phone; don't bring them back
   without asking). Discover's YouTube parts are cached for 10 minutes.
