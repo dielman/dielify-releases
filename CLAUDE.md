@@ -702,6 +702,10 @@ src/dielify/
     the installer started MainActivity = **phone screens on the TV**: fixed, MainActivity hands over to TvActivity
     when FEATURE_LEANBACK (checked on the TCL TV). Not known yet: whether the EKO has a kids profile (if not, it
     updates itself from the PC; if so, updates need the stick).
+    Opening from the apps row then still showed the phone screens (the open phone task was brought back): TvActivity
+    now has its own taskAffinity (checked on the TCL: installer-style start and app-row start both open the TV
+    screens). **Josh set the EKO up (signed in), 10 Nov.** It runs the stick copy (without these two fixes); they
+    reach it with the next version: the EKO must install it itself from the PC (no adb over its Ethernet).
 
 ## Backlog (Josh, 8 Nov; after Phase 8 item 6)
 
