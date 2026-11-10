@@ -48,7 +48,7 @@ const HELP = [
         "On this PC: download Tailscale from tailscale.com/download, install it, then click its tray icon > Log in.",
         "On the phone: install Tailscale from the Play Store and log in with the same account.",
         "Within a minute, Settings > People & phones > Phone apps shows a second address, Away from home (Tailscale), starting with http://100.",
-        "Phones that sign in from now on: type that address as the Tailscale address when signing in. A phone already signed in: on this PC press New password for its login (Settings > People & phones), then on the phone Settings > Sign out of this phone, and sign in again with both addresses.",
+        "Phones pick up the new address by themselves the next time they connect at home (Dielify > Settings > Your PC lists both).",
         "Test it: turn off the phone's Wi-Fi and play a song."],
       ["note", "Keep Tailscale switched on in the phone's Tailscale app. If this PC sleeps, nothing can reach it: Settings > This PC > Keep this PC awake."],
     ],

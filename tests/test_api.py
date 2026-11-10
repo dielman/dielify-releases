@@ -524,3 +524,13 @@ def test_clear_finished_downloads_keeps_failed_and_waiting():
         left = {d["video_id"]: d["status"] for d in c.get("/api/downloads", headers=h).json()["downloads"]}
         assert left == {"c": "failed", "d": "queued"}
         assert c.post("/api/downloads/clear-finished").status_code == 401
+
+
+def test_phones_learn_the_pcs_addresses(monkeypatch):
+    """0.9.11: a phone signed in at home learns the Tailscale address from /api/me."""
+    from dielify import server
+    monkeypatch.setattr(server, "LISTENING", {"127.0.0.1", "100.73.1.2", "192.168.1.249"})
+    with make_client() as client:
+        me = client.get("/api/me", headers=login(client)).json()
+    port = settings.load().server_port
+    assert me["addresses"] == [f"192.168.1.249:{port}", f"100.73.1.2:{port}"]

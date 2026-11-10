@@ -230,6 +230,17 @@ def _config(queue: DownloadQueue | None = None) -> uvicorn.Config:
 ADDRESS_CHECK_S = 30
 
 
+# Every address the server listens on right now (filled by AddressWatcher). Phones learn
+# them from /api/me, so a phone that signed in at home also knows the Tailscale address.
+LISTENING: set[str] = set()
+
+
+def phone_addresses(port: int) -> list[str]:
+    """"ip:port" for each non-loopback address this PC listens on, home network first."""
+    ips = [a for a in LISTENING if not a.startswith("127.") and a != "::1"]
+    return [f"{a}:{port}" for a in sorted(ips, key=lambda a: (a.startswith("100."), a))]
+
+
 class AddressWatcher:
     """Also listen on addresses that appear after start-up. Tailscale often connects
     after Dielify has started with Windows; without this, phones away from home could
@@ -238,6 +249,7 @@ class AddressWatcher:
 
     def __init__(self, s: Settings, app, bound: list[str]):
         self.s, self.app, self.bound = s, app, set(bound)
+        LISTENING.update(self.bound)
         self.extra: list[uvicorn.Server] = []
         self._stop = threading.Event()
         from .announce import Announcer
@@ -268,6 +280,7 @@ class AddressWatcher:
                              name=f"dielify-server-{addr}").start()
             self.extra.append(srv)
             self.bound.add(addr)
+            LISTENING.add(addr)
             added.append(addr)
             log.info("Now also listening on %s:%d", addr, self.s.server_port)
         return added

@@ -78,6 +78,7 @@ data class Track(
     val notice: String? = null,
     @SerialName("youtube_search") val youtubeSearch: Boolean = true,
     @SerialName("discovery_play") val discoveryPlay: Boolean = true,
+    val addresses: List<String> = emptyList(),
 ) {
     val shared get() = household.size > 1
 }

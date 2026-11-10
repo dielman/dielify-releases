@@ -751,6 +751,8 @@ class Me(BaseModel):
     notice: str | None = Field(None, description="For a kids account: e.g. quiet hours now")
     youtube_search: bool = True
     discovery_play: bool = True
+    addresses: list[str] = Field(default_factory=list, description="This PC's addresses (ip:port), home network "
+                                 "first, then Tailscale: phones add any they don't know yet")
 
 
 class LibrarySearch(BaseModel):
@@ -1688,11 +1690,13 @@ def android_app_file(s: Session = Depends(session)) -> FileResponse:
 def me(s: Session = Depends(session)) -> Me:
     from .library import people
     from . import kids
+    from . import server as _server_mod  # (server imports this module)
     c = _kid_controls(s)
     return Me(username=s.user.name, profile=s.lib.profile, role=s.lib.role,
               household=[p["profile"] for p in people() if p["store"] == s.lib.store],
               notice=kids.quiet_message(c) if c else None,
-              youtube_search=c.youtube_search if c else True, discovery_play=c.discovery_play if c else True)
+              youtube_search=c.youtube_search if c else True, discovery_play=c.discovery_play if c else True,
+              addresses=_server_mod.phone_addresses(settings_mod.load().server_port))
 
 
 @router.get("/library/household", response_model=TrackList, tags=["library"])

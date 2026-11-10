@@ -9,10 +9,13 @@ import android.os.Build
 import android.util.Log
 import com.dielify.app.Account
 import com.dielify.app.AccountStore
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -54,6 +57,8 @@ class Server(private val context: Context, private val accounts: AccountStore) {
     @Volatile var account: Account? = accounts.load()
         private set
     @Volatile private var base: HttpUrl? = null
+    @Volatile private var learnedVia: HttpUrl? = null
+    private val background = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val pickLock = Mutex()
     private val _link = MutableStateFlow<Link>(Link.Unknown)
     val link: StateFlow<Link> = _link.asStateFlow()
@@ -122,7 +127,27 @@ class Server(private val context: Context, private val accounts: AccountStore) {
         }
         base = found
         _link.value = Link.Up("${found.host}:${found.port}", isTailscale(found.host))
+        if (account != null && learnedVia != found) {
+            learnedVia = found
+            background.launch { learnAddresses() }
+        }
         found
+    }
+
+    /**
+     * Keep any of the PC's addresses the phone doesn't know yet (0.9.11): a phone signed in at
+     * home picks up the Tailscale address once the PC has one, with no new sign-in.
+     */
+    private suspend fun learnAddresses() {
+        val fromPc = runCatching { me().addresses }.getOrNull() ?: return
+        val acc = account ?: return
+        val merged = mergeAddresses(acc.addresses, fromPc)
+        if (merged != acc.addresses) {
+            val updated = acc.copy(addresses = merged)
+            accounts.save(updated)
+            account = updated
+            Log.i(TAG, "Learned the PC's addresses: $merged")
+        }
     }
 
     private suspend fun current(): HttpUrl {
@@ -212,6 +237,8 @@ class Server(private val context: Context, private val accounts: AccountStore) {
         val acc = Account(addresses, result.username, result.profile, result.deviceId, result.token)
         accounts.save(acc)
         account = acc
+        learnedVia = target
+        background.launch { learnAddresses() }
         return acc
     }
 
@@ -420,6 +447,16 @@ class Server(private val context: Context, private val accounts: AccountStore) {
 
         fun isServer(url: HttpUrl, addresses: List<String>): Boolean =
             addresses.mapNotNull(::parseAddress).any { it.host == url.host && it.port == url.port }
+
+        /** Known addresses plus new ones from the PC; home-network ones before Tailscale. */
+        fun mergeAddresses(known: List<String>, fromPc: List<String>): List<String> {
+            val all = known.toMutableList()
+            for (a in fromPc) {
+                val u = parseAddress(a) ?: continue
+                if (all.none { k -> parseAddress(k)?.let { it.host == u.host && it.port == u.port } == true }) all += a
+            }
+            return all.sortedBy { parseAddress(it)?.host?.let(::isTailscale) == true }
+        }
 
         /** Tailscale hands out addresses in 100.64.0.0/10. */
         fun isTailscale(host: String): Boolean {

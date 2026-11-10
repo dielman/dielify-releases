@@ -284,6 +284,10 @@ Also owed from earlier releases: Josh hasn't yet confirmed on his devices most o
   **Restore from a backup**: pick the zip, Dielify restarts itself with --restore (restores before the server opens the
   database), then shows what came back (people, songs, files found, which sign-ins need redoing, music folder picker).
   Help > Run the setup again. Josh tried the dist\ installer build (10 Nov): "everything looks good".
+- **Phones learn the PC's addresses** (built 10 Nov, not released): /api/me gives every address the PC listens on
+  (server.LISTENING, home network first); the phone keeps any it doesn't know (Server.learnAddresses, after sign-in
+  and whenever it finds the PC), so a phone signed in at home gets the Tailscale address without signing in again.
+  Checked on the emulator. Works once both the PC and the phone run this version.
 - **Slimmer FFmpeg** (only with Josh's OK to download it; saves about 70 MB per update).
 
 ## Not on the road to 1.0
