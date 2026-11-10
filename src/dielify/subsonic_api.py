@@ -473,6 +473,11 @@ def _track(ctx: Ctx):
 @api("stream", "download")
 def stream(ctx: Ctx) -> Response:
     # The original file, always: no transcoding (maxBitRate/format are ignored).
+    if ctx.lib.role == "child":  # quiet hours a parent set apply in Subsonic apps too (Josh, 10 Nov)
+        from . import kids
+        msg = kids.quiet_message(kids.load(ctx.lib.profile))
+        if msg:
+            raise ApiError(NOT_AUTHORIZED, msg)
     t = _track(ctx)
     path = ctx.lib.path_of(t)
     if not path.exists():

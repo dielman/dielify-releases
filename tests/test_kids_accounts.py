@@ -153,9 +153,28 @@ def test_controls_approvals_limit_quiet_hours_and_stats(monkeypatch):
         assert r.status_code == 403 and "Music is off until 23:59" in r.json()["detail"]
         assert c.get("/api/me", headers=kid).json()["notice"].startswith("Music is off")
 
-        # her stats are private unless the controls say otherwise
-        assert c.get("/api/desktop/people/emma/stats", headers=desk(c)).status_code == 403
-        controls(c, parent_sees_stats=True, youtube_search=False, discovery_play=False)
+        # the parent sees her stats unless the controls say otherwise (default on: Josh, 10 Nov)
         assert c.get("/api/desktop/people/emma/stats", headers=desk(c)).json()["period"] == "month"
+        controls(c, parent_sees_stats=False, youtube_search=False, discovery_play=False)
+        assert c.get("/api/desktop/people/emma/stats", headers=desk(c)).status_code == 403
         assert c.get("/api/yt/search?q=song", headers=kid).json()["items"] == []
         assert c.post("/api/discover/endless", headers=kid, json={"seeds": [], "exclude": [], "count": 5}).status_code == 403
+
+
+def test_quiet_hours_in_subsonic_apps():
+    """Josh (10 Nov): quiet hours also stop music in Symfonium and other Subsonic apps."""
+    kids.remember([YTItem("song", "s1", "s1", explicit=False)])
+    with make_client() as c:
+        login(c)
+        r = c.post("/api/desktop/people", headers=desk(c), json={"name": "emma"})
+        pw = r.json()["password"]
+        kid = login(c, "emma", pw, device="emma's phone")
+        job = c.post("/api/downloads", headers=kid, json={"type": "song", "id": "s1"}).json()["downloads"][0]
+        track = wait_done(c, kid, job["id"])["track_id"]
+        rest = {"u": "emma", "p": pw, "v": "1.16.1", "c": "test", "f": "json", "id": f"tr-{track}"}
+        assert c.get("/rest/stream", params=rest).status_code == 200                  # no quiet hours yet
+        cur = c.get("/api/desktop/people/emma/controls", headers=desk(c)).json()
+        c.put("/api/desktop/people/emma/controls", headers=desk(c),
+              json={**cur, "quiet_hours": True, "quiet_from": "00:00", "quiet_to": "23:59"})
+        r = c.get("/rest/stream", params=rest).json()["subsonic-response"]
+        assert r["status"] == "failed" and r["error"]["code"] == 50 and "Music is off" in r["error"]["message"]

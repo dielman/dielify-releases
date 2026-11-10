@@ -1184,16 +1184,19 @@ async function viewSettings() {
       ["Your taste", [ratingsPanel(), tastePanel(), await newReleasesPanel()]],
       ["This PC", [windows, backups, about]],
     ];
+    // each kids account has its own tab with all of their controls (Josh, 10 Nov)
+    for (const p of (s.people || []).filter((x) => x.role === "child")) sections.push([p.name, await kidTab(p.name)]);
     const body = h("div", {});
     const tabs = h("div", { class: "tabs settings-tabs" });
     const pick = (i) => {
-      settingsTab = i;
+      settingsTab = sections[i][0];
       tabs.querySelectorAll("button").forEach((b, k) => b.classList.toggle("active", k === i));
       body.replaceChildren(...sections[i][1].filter(Boolean));
     };
     tabs.replaceChildren(...sections.map(([label], i) => h("button", { onclick: () => pick(i) }, label)));
     show(h("h1", {}, "Settings"), tabs, body);
-    pick(Math.min(settingsTab, sections.length - 1));
+    const start = typeof settingsTab === "string" ? sections.findIndex(([label]) => label === settingsTab) : settingsTab;
+    pick(Math.max(0, Math.min(start, sections.length - 1)));
   } catch (e) { failed(e); }
 }
 
@@ -1279,7 +1282,7 @@ function peoplePanel(s) {
         p.role === "child" ? h("div", { class: "small muted" },
           `Uses ${p.store}'s music folder and YouTube sign-in. Phone login: ${p.logins.join(", ") || "none"}`) : null),
       p.role === "child" ? [
-        h("button", { class: "primary", onclick: () => viewKidControls(p.name) }, "Controls"),
+        h("button", { class: "primary", onclick: () => { settingsTab = p.name; viewSettings(); } }, `${p.name}'s controls`),
         h("button", { onclick: async () => {
           const login = p.logins[0];
           if (!login) return toast("No phone login for this account", 5000);
@@ -1294,16 +1297,19 @@ function peoplePanel(s) {
         } }, "Remove")] : null)),
     h("div", { class: "row", style: "margin-top:10px" }, h("button", { onclick: addChild }, icon("add", "ico lead"), "Add a kids account")));
 }
-// A kids account's controls (PC only). Every change saves at once.
-async function viewKidControls(name) {
+// A kids account's controls: its own tab in Settings (PC only). Every change saves at once.
+function viewKidControls(name) { settingsTab = name; viewSettings(); }
+async function kidTab(name) {
   let c;
-  try { c = await api(`/api/desktop/people/${encodeURIComponent(name)}/controls`); } catch (e) { return failed(e); }
+  try { c = await api(`/api/desktop/people/${encodeURIComponent(name)}/controls`); }
+  catch (e) { return [h("div", { class: "panel" }, h("p", { class: "warn" }, e.message))]; }
   const save = async (changes, msg) => {
     try { c = await api(`/api/desktop/people/${encodeURIComponent(name)}/controls`, { method: "PUT", body: { ...c, ...changes } });
       if (msg) toast(msg); }
     catch (e) { toast(e.message, 6000); }
     const keep = main.scrollTop;  // stay where you were on the page
-    await viewKidControls(name);
+    settingsTab = name;
+    await viewSettings();
     main.scrollTop = keep;
   };
   const row = (label, help, ...controls) => h("div", { class: "setting" },
@@ -1324,12 +1330,13 @@ async function viewKidControls(name) {
   };
 
   const content = h("div", { class: "panel" }, h("h2", {}, "Songs"),
-    row("Explicit songs", "YouTube Music marks explicit songs. Songs without a mark are checked before she gets them.",
-      select("explicit", { block: "Block", allow: "Allow" })),
-    c.explicit === "block" ? check("clean_versions", "Offer clean versions", "When a song is explicit, give her the clean version if YouTube has one") : null,
+    row("Allow explicit songs", `YouTube Music marks explicit songs. While this is off, songs without a mark are checked before ${name} gets them.`,
+      h("input", { type: "checkbox", checked: c.explicit === "allow",
+        onchange: (e) => save({ explicit: e.target.checked ? "allow" : "block" }, `Explicit songs: ${e.target.checked ? "allowed" : "not allowed"}`) })),
+    c.explicit === "block" ? check("clean_versions", "Offer clean versions", `When a song is explicit, give ${name} the clean version if YouTube has one`) : null,
     check("lyrics_check", "Check words", "Also block songs whose title uses strong language (a built-in list, plus your words below)"),
     c.lyrics_check ? list("extra_words", "Your words", "Extra words to block", "a word") : null,
-    list("blocked_artists", "Blocked artists", "She never gets these artists", "artist name"),
+    list("blocked_artists", "Blocked artists", `${name} never gets these artists`, "artist name"),
     c.blocked_songs.length ? h("div", { class: "setting" }, h("div", { class: "label" }, "Blocked songs"),
       h("div", { class: "value" }, h("div", { class: "chips" }, c.blocked_songs.map((b, i) => h("span", { class: "chip" }, b.title || b.id,
         h("button", { class: "link", onclick: () => save({ blocked_songs: c.blocked_songs.filter((_, j) => j !== i) }) }, " ✕")))))) : null);
@@ -1338,16 +1345,16 @@ async function viewKidControls(name) {
     row("New downloads", null, select("downloads", { auto: "Download straight away", approve: "Wait for my OK (Downloads page)" })),
     row("Download limit", "New songs per day (0 = none)", h("input", { type: "number", min: 0, max: 1000, value: c.daily_limit, style: "width:90px",
       onchange: (e) => save({ daily_limit: Math.max(0, Math.min(1000, Number(e.target.value) || 0)) }, "Limit saved") })),
-    check("youtube_search", "YouTube search", "Off: she only gets the household's songs and your picks"),
-    check("discovery_play", "Never-ending discovery", "New songs like the ones she plays (filtered like everything else)"));
+    check("youtube_search", "YouTube search", `Off: ${name} only gets the household's songs and your picks`),
+    check("discovery_play", "Never-ending discovery", `New songs like the ones ${name} plays (filtered like everything else)`));
 
   const time = (key) => h("input", { type: "time", value: c[key], onchange: (e) => save({ [key]: e.target.value }, "Quiet hours saved") });
   const when = h("div", { class: "panel" }, h("h2", {}, "Listening"),
-    check("quiet_hours", "Quiet hours", "No music in her account at these times (songs saved on her phone still play)"),
+    check("quiet_hours", "Quiet hours", `No music for ${name} at these times, in Dielify and in other music apps (songs saved on the phone still play)`),
     c.quiet_hours ? row("From", null, time("quiet_from"), h("span", { class: "muted" }, " to "), time("quiet_to")) : null,
-    check("blend", "Blend", "She may make a weekly Blend playlist with someone in the household (filtered for her)"),
-    check("jam", "Jams", "She may join a Jam (every song in it then has to pass her controls)"),
-    check("parent_sees_stats", "You can see her stats", "Her top songs and listening time, on this PC"),
+    check("blend", "Blend", `${name} may make a weekly Blend playlist with someone in the household (filtered for them)`),
+    check("jam", "Jams", `${name} may join a Jam (every song in it then has to pass these controls)`),
+    check("parent_sees_stats", `You can see ${name}'s stats`, "Top songs and listening time, on this PC"),
     c.parent_sees_stats ? h("div", { class: "row" }, h("button", { onclick: () => viewStats("month", name) }, `See ${name}'s stats`)) : null);
 
   // Picked for her: a shelf on her Discover page
@@ -1376,10 +1383,10 @@ async function viewKidControls(name) {
       : h("p", { class: "muted" }, "Nothing picked yet."),
     h("div", { class: "row", style: "margin-top:10px" }, q, kind, h("button", { onclick: find }, "Search")), results);
 
-  show(h("button", { onclick: viewSettings }, icon("back", "ico lead"), "Settings"),
-    h("h1", { style: "margin-top:16px" }, `${name}'s controls`),
-    h("p", { class: "muted" }, `${name} uses this PC's music and your YouTube sign-in behind the scenes, but never sees your YouTube. Everything she gets goes through these controls. Changes apply at once.`),
-    content, getting, when, picks);
+  const intro = h("div", { class: "panel" }, h("h2", {}, `${name}'s controls`),
+    h("p", { class: "muted" }, `${name} uses this PC's music and your YouTube sign-in behind the scenes, but never sees your YouTube. `
+      + "Everything they get goes through these controls. Changes apply at once."));
+  return [intro, content, getting, when, picks];
 }
 
 async function addChild() {

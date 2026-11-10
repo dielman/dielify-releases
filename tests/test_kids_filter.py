@@ -61,6 +61,7 @@ def test_explicit_songs_are_hidden_and_unmarked_ones_checked(kid):
 def test_blocked_artists_songs_titles_and_albums(kid):
     c = kids.load(kid)
     c.blocked_artists, c.blocked_songs = ["The Bad Band"], [{"id": "b2", "title": "No"}]
+    c.lyrics_check = True  # the title word check (off by default)
     kids.save(kid, c)
     f = kids.KidFilter(kid)
     items = [song("b1", "Ok", "the bad band", explicit=False), song("b2", "No", explicit=False),
@@ -72,6 +73,8 @@ def test_blocked_artists_songs_titles_and_albums(kid):
 
 
 def test_words_in_titles(kid):
+    assert not kids.Controls().lyrics_check                   # off unless a parent turns it on (Josh, 10 Nov)
+    kids.save(kid, kids.Controls(lyrics_check=True))
     f = kids.KidFilter(kid)
     items = [song("l1", "La la fucking la", explicit=False), song("l2", "La la la", explicit=False)]
     assert [i.id for i in f.items(items)] == ["l2"]

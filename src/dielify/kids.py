@@ -33,7 +33,8 @@ Call = Callable[..., object]  # call("search_items", q, "song", 5) -> list[YTIte
 class Controls:
     explicit: str = "block"            # block | allow
     clean_versions: bool = True        # when blocked: offer the clean version instead, if YouTube has one
-    lyrics_check: bool = True          # also block songs whose title uses words on the list (name kept from when lyrics were checked too)
+    lyrics_check: bool = False         # also block songs whose title uses words on the list (off by default: Josh,
+                                       # 10 Nov; the name is kept from when lyrics were checked too)
     extra_words: list[str] = field(default_factory=list)
     downloads: str = "auto"            # auto | approve (new downloads wait for a parent's OK)
     daily_limit: int = 50              # new downloads per day (0 = none)
@@ -44,7 +45,7 @@ class Controls:
     quiet_hours: bool = False
     quiet_from: str = "21:00"
     quiet_to: str = "07:00"
-    parent_sees_stats: bool = False
+    parent_sees_stats: bool = True     # on by default (Josh, 10 Nov)
     blend: bool = False                # may make a Blend with someone in the household (0.9.8)
     jam: bool = True                   # may join a Jam (songs in it are filtered for her)
     picks: list[dict] = field(default_factory=list)  # the parent's picks: YTItem dicts (albums, artists, playlists, songs)
