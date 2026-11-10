@@ -342,7 +342,7 @@ def _authenticate(ws: WebSocket) -> tuple[str, bool] | None:
     token = header[7:] if header.lower().startswith("bearer ") else ws.query_params.get("token")
     if not token:
         return None
-    if auth.is_desktop_token(token):
+    if auth.is_desktop_token(token, client):
         return settings_mod.load().active_profile, True
     found = auth.check_token(token)
     if found is None:

@@ -99,7 +99,7 @@ def test_refused_wrong_secret_expiry_and_limits(monkeypatch):
             start(c)
         assert c.post("/api/pair/start", json={"device_name": "x"}).status_code == 429
         pairing.forget_all()
-        pairing._state.starts["testclient"] = [pairing.time.time()] * pairing.STARTS_PER_ADDRESS
+        pairing._state.starts["127.0.0.1"] = [pairing.time.time()] * pairing.STARTS_PER_ADDRESS
         assert c.post("/api/pair/start", json={"device_name": "x"}).status_code == 429
 
 

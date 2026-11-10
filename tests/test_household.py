@@ -127,7 +127,7 @@ def test_a_child_cannot_reach_the_parents_songs(household, monkeypatch):
     josh, kid = household
     auth.add_user("josh", "josh", password="pw1")
     auth.add_user("daughter", "daughter", password="pw2")
-    client = TestClient(create_app())
+    client = TestClient(create_app(), client=("127.0.0.1", 50000))
 
     def call(user, pw, method, **params):
         token = hashlib.md5((pw + "z").encode()).hexdigest()

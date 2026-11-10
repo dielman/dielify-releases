@@ -105,7 +105,7 @@ def setup(monkeypatch, tmp_path):
 def make_client(fake=None, factory=None):
     fake = fake or FakeDownloader()
     queue = DownloadQueue(adapter_factory=factory or (lambda profile: fake))
-    return TestClient(create_app(queue))
+    return TestClient(create_app(queue), client=("127.0.0.1", 50000))
 
 
 def login(c, user="josh", password="sesame", device="test") -> dict:
@@ -322,7 +322,7 @@ def test_interrupted_jobs_resume_after_restart():
     job = queue.enqueue("josh", [item("s3")], "song")[0]
     with connect() as conn:  # as if the PC was switched off mid-download
         conn.execute("UPDATE downloads SET status = 'downloading', progress = 0.4 WHERE id = ?", (job["id"],))
-    with TestClient(create_app(queue)) as c:
+    with TestClient(create_app(queue), client=("127.0.0.1", 50000)) as c:
         h = login(c)
         assert wait_done(c, h, job["id"])["status"] == "done"
 

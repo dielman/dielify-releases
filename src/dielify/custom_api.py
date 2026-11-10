@@ -204,7 +204,7 @@ def session(request: Request,
     client = _client(request)
     if lockout.is_locked(client):
         raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "Too many failed logins. Try again later.")
-    if creds and auth.is_desktop_token(creds.credentials):
+    if creds and auth.is_desktop_token(creds.credentials, client):
         # the desktop window on this PC: acts for the active profile
         profile = settings_mod.load().active_profile
         return Session(auth.ServerUser("desktop", profile, ""), 0, desktop=True)
@@ -553,8 +553,29 @@ def yt_album(browse_id: str, s: Session = Depends(session)) -> Collection:
 @router.get("/yt/playlist/{playlist_id}", response_model=Collection, tags=["youtube"])
 def yt_playlist(playlist_id: str, limit: int = Query(5000, ge=1, le=5000),
                 s: Session = Depends(session)) -> Collection:
+    if s.kid and _parents_own_playlist(s, playlist_id):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Not available in your account")
     info, tracks = youtube.call(s.user.profile, "playlist", playlist_id, limit)
     return _collection(s, info, tracks)
+
+
+# A kids account uses the parent's YouTube sign-in behind the scenes, but never sees anything of
+# the parent's account (Josh, 9 Nov). Found in the 0.9.11 security review: asking for playlist "LM"
+# returned the parent's Liked Music. Personal lists: Liked Music (LM), Episodes for later (SE), the
+# personal "My Mix" / supermix lists (RDTMAK...), and every playlist in the parent's library.
+PERSONAL_PLAYLIST_PREFIXES = ("LM", "SE", "RDTMAK")
+
+
+def _parents_own_playlist(s: Session, playlist_id: str) -> bool:
+    pid = playlist_id[2:] if playlist_id.startswith("VL") else playlist_id
+    if pid in ("LM", "SE") or pid.startswith(PERSONAL_PLAYLIST_PREFIXES[2]):
+        return True
+    owner = signin_of(s.lib.profile)
+    try:
+        mine = _cached_feed((owner.lower(), "Parent's playlists", 0), lambda: youtube.call(owner, "my_playlists"))
+    except HTTPException:
+        return True  # can't tell: keep it out
+    return any(pid == (i.id[2:] if i.id.startswith("VL") else i.id) for i in mine)
 
 
 def _collection(s: Session, info: YTItem, tracks: list[YTItem]) -> Collection:

@@ -121,7 +121,7 @@ def create_app(queue: DownloadQueue | None = None) -> FastAPI:
         from .auth import is_desktop_token
         from .paths import app_data_dir
         bearer = request.headers.get("authorization", "")[7:] or request.query_params.get("token")
-        if is_desktop_token(bearer):
+        if is_desktop_token(bearer, request.client.host if request.client else None):
             detail = (f"Dielify hit an error: {type(exc).__name__}: {exc}  "
                       f"(details in {app_data_dir() / 'logs' / 'server.log'})")
         else:

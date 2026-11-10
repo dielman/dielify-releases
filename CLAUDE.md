@@ -726,6 +726,12 @@ src/dielify/
     one. PC: "<name>'s devices" in the Play on panel (pause/play, next, volume); phone: KidDevices in the device
     sheet. Tested: 197 tests; PC panel in the browser against a pretend kid phone (build/fake_kid_phone.py):
     Pause reached it. Phone sheet built, not seen on screen.
+  - **Security review (0.9.11 item) done 10 Nov:** docs/SECURITY-REVIEW-0.9.11.md. Fixed: a kids account could
+    read the parent's YouTube playlists (/api/yt/playlist/LM ran on his sign-in): `_parents_own_playlist` blocks
+    LM / SE / RDTMAK... / his library's playlists for kids; the PC app's key only works from 127.0.0.1 / ::1
+    (auth.is_desktop_token(token, client)); tests now use TestClient(client=("127.0.0.1", 50000)).
+    tests/test_cross_people.py: a second household probes 23 id endpoints + Subsonic, kid vs parent. 202 tests.
+    Accepted risks listed there (plain HTTP on home Wi-Fi, TV USB debugging, open cover provider).
 
 ## Backlog (Josh, 8 Nov; after Phase 8 item 6)
 

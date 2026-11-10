@@ -269,7 +269,7 @@ Also owed from earlier releases: Josh hasn't yet confirmed on his devices most o
 - **Clean-PC install test** (Windows Sandbox): install, sign in, play offline, no
   terminal. Owed since Phase 4.
 - **Android Auto test** in the car (Josh).
-- **Security review** of the multi-user and kids code (`/security-review` plus the
+- **Security review** (done 10 Nov: docs/SECURITY-REVIEW-0.9.11.md, 2 fixes) of the multi-user and kids code (`/security-review` plus the
   cross-profile tests), and a check that the parent's YouTube login can't leak to a child
   device.
 - **Restore drill**: restore last night's backup onto a test copy.

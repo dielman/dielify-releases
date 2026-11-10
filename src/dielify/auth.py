@@ -237,5 +237,12 @@ def enable_desktop_token() -> str:
     return _desktop_token
 
 
-def is_desktop_token(token: str | None) -> bool:
+LOCAL_CLIENTS = {"127.0.0.1", "::1"}
+
+
+def is_desktop_token(token: str | None, client: str | None = None) -> bool:
+    """The desktop window's key, and (when `client` is given) only from this PC itself: the window
+    always talks to 127.0.0.1, so a copy of the key is useless from anywhere else (0.9.11 review)."""
+    if client is not None and client not in LOCAL_CLIENTS:
+        return False
     return bool(token and _desktop_token and hmac.compare_digest(token, _desktop_token))

@@ -33,7 +33,7 @@ def setup(monkeypatch, tmp_path, sample_info):
 @pytest.fixture
 def client():
     queue = DownloadQueue(adapter_factory=lambda profile: FakeDownloader())
-    with TestClient(create_app(queue)) as c:
+    with TestClient(create_app(queue), client=("127.0.0.1", 50000)) as c:
         c.desk = {"Authorization": f"Bearer {auth.enable_desktop_token()}"}
         yield c
 
@@ -136,7 +136,7 @@ def test_unexpected_error_is_explained_to_the_desktop_only(monkeypatch):
     queue = DownloadQueue(adapter_factory=lambda profile: FakeDownloader())
     app = create_app(queue)
     monkeypatch.setattr(desktop_api, "_status", lambda: (_ for _ in ()).throw(RuntimeError("disk on fire")))
-    with TestClient(app, raise_server_exceptions=False) as c:
+    with TestClient(app, raise_server_exceptions=False, client=("127.0.0.1", 50000)) as c:
         desk = {"Authorization": f"Bearer {auth.enable_desktop_token()}"}
         r = c.get("/api/desktop/status", headers=desk)
         assert r.status_code == 500
