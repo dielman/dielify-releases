@@ -706,6 +706,16 @@ src/dielify/
     now has its own taskAffinity (checked on the TCL: installer-style start and app-row start both open the TV
     screens). **Josh set the EKO up (signed in), 10 Nov.** It runs the stick copy (without these two fixes); they
     reach it with the next version: the EKO must install it itself from the PC (no adb over its Ethernet).
+  - **Android Auto** (Josh tested in his car 10 Nov: works, but "it's shit, make it like the phone"). Android Auto
+    draws media apps itself; rebuilt the browse tree (5014f73): root tabs Home / Library / Playlists / On this phone,
+    Home = now mix as one play-all tile + Made for you + New for you (albums) + Recently added + More like your top
+    songs with group titles (MediaConstants content-style extras, grids for covers), Library = Recently added /
+    Albums / Artists, search (onSearch / onGetSearchResult, SEARCH_SUPPORTED) and voice play (requestMetadata
+    .searchQuery), ArtProvider serves playlist / artist covers and YouTube thumbnails (web/<base64>, only ytimg /
+    googleusercontent / ggpht). **Not seen on a car screen yet** (Josh: check in the car later). The Desktop Head Unit
+    is installed (E:\Android\Sdk\extras\google\auto) but the phone emulator only has a stub Android Auto
+    (gearhead 1.2 stub; the real one needs a Play Store sign-in): run the DHU against Josh's phone instead (wireless
+    debugging + AA developer mode "Start head unit server").
 
 ## Backlog (Josh, 8 Nov; after Phase 8 item 6)
 
