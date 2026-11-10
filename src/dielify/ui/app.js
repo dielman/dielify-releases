@@ -1246,7 +1246,7 @@ function tvsPanel() {
     h("p", { class: "muted" }, "This PC installs Dielify's updates on your TVs by itself (a few minutes after it updates, then every "
       + "6 hours; not while a TV is playing). The TV needs USB debugging on: Settings > System > Developer options."),
     ...(r.adb ? [] : [h("p", { class: "warn" }, "The Android tools (adb) aren't on this PC, so it can't update TVs.")]),
-    r.tvs.length ? r.tvs.map((tv) => h("div", { class: "setting" },
+    ...(r.tvs.length ? r.tvs.map((tv) => h("div", { class: "setting" },
       h("div", { class: "label" }, tv.name),
       h("div", { class: "value" }, `${tv.address} · seen ${when(tv.last_seen)}`,
         h("div", { class: "small muted" }, tv.result ? `${tv.result} (${when(tv.checked)})` : "Not checked yet")),
@@ -1254,7 +1254,7 @@ function tvsPanel() {
         if (!confirm(`Forget ${tv.name}? The PC stops updating it (it's remembered again when it next connects).`)) return;
         await api(`/api/desktop/tvs/${encodeURIComponent(tv.address)}`, { method: "DELETE" }); load();
       } }, "Forget")))
-      : h("p", { class: "muted" }, "No TVs yet. Open Dielify on a TV, then press Add a TV below."),
+      : [h("p", { class: "muted" }, "No TVs yet. Open Dielify on a TV, then press Add a TV below.")]),
     h("div", { class: "row", style: "margin-top:10px" },
       h("button", { onclick: () => addTv() }, icon("tv", "ico lead"), "Add a TV"),
       r.tvs.length ? h("button", { onclick: async (e) => {
