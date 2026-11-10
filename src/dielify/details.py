@@ -3,8 +3,8 @@
 When YouTube answered a song lookup with an empty page (it does for a minute now and then),
 downloads before 0.9.11 saved the song as a plain video: in "Singles", without album, track
 number or year (33 songs in Josh's log on 9 Nov). The adapter now asks again; this worker
-repairs the songs already saved that way. Each song in "Singles" with no year and no track
-number is looked up once more at quiet moments. If YouTube Music now gives its album, the
+repairs the songs already saved that way, and the ones whose album lookup failed (right
+folder, but no year or track number). Each song with no year and no track number is looked up once more at quiet moments. If YouTube Music now gives its album, the
 file's tags and cover are rewritten and it moves to its album folder; the song keeps its id,
 so libraries, playlists, ratings and play counts stay with it. Real music videos (not in
 YouTube Music's catalogue) stay as they are. Each song is checked once (table details_checked).
@@ -25,8 +25,8 @@ log = logging.getLogger(__name__)
 def candidates(limit: int = 20) -> list:
     with connect() as conn:
         return conn.execute(
-            "SELECT t.* FROM tracks t JOIN albums al ON al.id = t.album_id "
-            "WHERE al.name = 'Singles' AND t.year IS NULL AND t.track_no IS NULL AND t.video_id IS NOT NULL "
+            "SELECT t.* FROM tracks t "
+            "WHERE t.year IS NULL AND t.track_no IS NULL AND t.video_id IS NOT NULL "
             "AND t.video_id NOT IN (SELECT video_id FROM details_checked) ORDER BY t.id LIMIT ?",
             (limit,)).fetchall()
 
@@ -54,12 +54,16 @@ def fix(track, call) -> str:
         return "file missing"
     base = lib.root / library_relpath(info)
     new = base.with_name(base.name + old.suffix.lower())
+    if new == old and info.year is None and not info.track_number:
+        _done(track["video_id"], "nothing new")
+        return "nothing new"
     if new.exists() and new != old:
         _done(track["video_id"], "already there")
         return "already there"
     cover = prepare_cover(call(track["profile"], "fetch_cover", info.cover_url))
     new.parent.mkdir(parents=True, exist_ok=True)
-    os.replace(old, new)  # fails while the song is being read on Windows: next round
+    if new != old:
+        os.replace(old, new)  # fails while the song is being read on Windows: next round
     tag_file(new, info, cover)
     lib.moved(track["id"], new)
     for folder in (old.parent, old.parent.parent):  # "Singles", then the artist, if now empty

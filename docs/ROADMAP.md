@@ -291,7 +291,7 @@ Also owed from earlier releases: Josh hasn't yet confirmed on his devices most o
 - **Log check** (10 Nov, Josh's real server.log, read-only; built, not released):
   - YouTube's empty answers (JSONDecodeError) are now asked again for song, video, album lookups and search, not
     only the home feed. Before, a song looked up during one became a plain video: "Singles", no album, track number
-    or year (33 songs on 9 Nov, ~22 still like that). `details.py` repairs those: each "Singles" song with no year
+    or year (33 songs on 9 Nov, ~22 still like that). `details.py` repairs those (and songs whose album lookup failed): each song with no year
     and no track number is looked up once more at quiet moments (10 min after start, then every 6 h until done);
     with an album now, tags + cover are rewritten and the file moves to its album folder, same track id (plays,
     playlists, ratings kept). Real music videos stay; each song checked once (table details_checked).
