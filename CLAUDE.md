@@ -696,6 +696,12 @@ src/dielify/
     /api/desktop/tvs/{address}. The TV app's update screen says the PC installs updates when it can't. Needs the
     TV's USB debugging left on (only this PC is allowed: Josh pressed Allow once). Checked against the real TV:
     "Up to date (0.9.10)". 195 tests.
+  - Second TV (10 Nov): **EKO** Google TV at 192.168.1.95, on Ethernet (its Wi-Fi is a different network). Port 5555
+    refused; its Wireless debugging switches itself off on Ethernet (Android allows it on Wi-Fi only), so the PC
+    can't reach it with adb. Installed from Josh's Ventoy USB stick (G:\Dielify-0.9.10.apk). Opening the app from
+    the installer started MainActivity = **phone screens on the TV**: fixed, MainActivity hands over to TvActivity
+    when FEATURE_LEANBACK (checked on the TCL TV). Not known yet: whether the EKO has a kids profile (if not, it
+    updates itself from the PC; if so, updates need the stick).
 
 ## Backlog (Josh, 8 Nov; after Phase 8 item 6)
 

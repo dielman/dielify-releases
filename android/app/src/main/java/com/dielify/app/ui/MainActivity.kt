@@ -40,6 +40,13 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        // On a TV the phone screens never open: an installer's or file manager's "Open" starts this
+        // activity (the TV's own app row starts TvActivity). Found on Josh's second TV, 10 Nov 2026.
+        if (packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_LEANBACK)) {
+            startActivity(android.content.Intent(this, com.dielify.app.tv.TvActivity::class.java))
+            finish()
+            return
+        }
         openPairLink(intent)
         setContent {
             DielifyTheme {
