@@ -817,6 +817,9 @@ src/dielify/
 
 ## Decisions log
 
+- 2026-11-10 (Josh): **FFmpeg essentials build** in the installer (dielify-build-toolsfmpeg beside the repo,
+  picked up by packaging/build.py; installer 127 -> 95 MB).
+
 - 2026-11-10 (Josh): **first-start wizard** with **restore from a backup** in it (desktop.py --restore restarts the
   app and restores before the server starts); help pages in the PC app. Settings.setup_done; installs with a
   YouTube sign-in or songs never see the wizard.

@@ -34,7 +34,17 @@ def iscc() -> Path:
     sys.exit("Inno Setup 6 not found: winget install -e --id JRSoftware.InnoSetup")
 
 
+# FFmpeg's "essentials" build (gyan.dev, the winget package Gyan.FFmpeg.Essentials, checked
+# against its SHA-256), unzipped beside the repo: half the size of the full build and has all
+# Dielify uses (remuxing to .opus / .m4a, the ebur128 loudness filter). Josh OK'd it 10 Nov.
+ESSENTIALS = ROOT.parent / "dielify-build-tools" / "ffmpeg"
+
+
 def tool_dir(name: str) -> Path:
+    if name == "ffmpeg":
+        found = sorted(ESSENTIALS.glob("ffmpeg-*-essentials_build/bin/ffmpeg.exe"))
+        if found:
+            return found[-1].parent
     exe = shutil.which(name)
     if not exe:
         sys.exit(f"{name} not found on PATH (it's bundled into the installer from there)")

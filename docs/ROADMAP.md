@@ -299,7 +299,9 @@ Also owed from earlier releases: Josh hasn't yet confirmed on his devices most o
     recovered on their retry, instant play gave a 502 after 35 s).
   - Windows' "connection forcibly closed" asyncio errors (63, harmless: phones dropping connections) are left out
     of the log. The yt-dlp "Unable to download API page: 403" warnings are harmless (downloads finished).
-- **Slimmer FFmpeg** (only with Josh's OK to download it; saves about 70 MB per update).
+- **Slimmer FFmpeg** (done 10 Nov, Josh's OK): FFmpeg 9.0.1 essentials (gyan.dev zip, SHA-256 = winget's) in
+  E:\Legit\Code\dielify-build-toolsfmpeg, used by packaging/build.py. ffmpeg.exe 228 -> 103 MB; installer 127 -> 95 MB.
+  Checked: all 214 tests with it, a real Opus and AAC remux, ebur128 filter present.
 
 ## Not on the road to 1.0
 
