@@ -132,7 +132,7 @@ src/dielify/
 | 6 | Android app | Find, request and listen on the road | **Done** 2026-11-08 — closed by Josh before the car test ("assume it works"); Android Auto untested |
 | 7 | Polish (scope set by Josh 8 Nov) | Backups to E:, signed phone release with in-app updates, download-next, playlists, music-video fix | **Done** 2026-11-08 — 0.6.0 published; phone self-update to be confirmed with the first Phase 8 release (Josh) |
 | 8 | Listening features (Josh, 8 Nov) | 1 instant play + download, 2 play history + stats, 4 two-way playlist sync, 3 Dielify-made genre/vibe playlists, 5 outside discovery, 6 remote control between devices | In progress (branch `phase-8`) |
-| 9 | Road to 1.0 (Josh, 9 Nov) | Releases 0.9.1-0.9.9 in `docs/ROADMAP.md`: household + kids accounts first, then discovery, library, sound, phone, together, hardening | In progress: 0.9.9 published |
+| 9 | Road to 1.0 (Josh, 9 Nov) | Releases 0.9.1-0.9.9 in `docs/ROADMAP.md`: household + kids accounts first, then discovery, library, sound, phone, together, hardening | In progress: 0.9.10 published |
 
 ## Current status
 
@@ -614,7 +614,8 @@ src/dielify/
     copy; offline mode bypasses it. _YouTube: background jobs wait while any person's call runs or waits, then
     QUIET_S (3 s) after it ends; person calls over 5 s are logged ("YouTube <fn> for <profile> took N s").
 
-- **0.9.10 TV** (Josh, 10 Nov; plan in docs/ROADMAP.md; hardening moved to 0.9.11). Decisions: one APK for phone
+- **Published v0.9.10** TV (10 Nov; 190 tests; installer 127 MB carrying the 8 MB phone/TV app, same file as the
+  GitHub APK; tag v0.9.10 on phase-8). Details below. **0.9.10 TV** (Josh, 10 Nov; plan in docs/ROADMAP.md; hardening moved to 0.9.11). Decisions: one APK for phone
   + TV; QR sign-in approved from a phone, a **parent picks the person**; Android TV emulator OK'd (Google TV,
   API 36, x86_64, installed: `android sdk install system-images/android-36/google-tv/x86_64` with
   E:\Android\Sdk\cmdline-tools\latest\bin\android.exe, the new CLI; sdkmanager.bat now forwards to it and

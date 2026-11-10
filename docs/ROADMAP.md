@@ -17,7 +17,7 @@ count up the last digit: 0.9.1, 0.9.2 ... then 1.0.0.
 | 0.9.7 | Sound + phone extras | equaliser, cast to speakers, home-screen widget (no crossfade: Josh, 9 Nov) |
 | 0.9.8 | Together | shared household playlists, Blend, Jam |
 | 0.9.9 | Beautification | one design, real artwork, new icon; lyrics removed, Discover cached (published 10 Nov) |
-| 0.9.10 | TV | Dielify on the Google TV in the shed: TV screens, QR sign-in approved from a phone, phone as remote, Jam host |
+| 0.9.10 | TV | Dielify on the Google TV in the shed: TV screens, QR sign-in approved from a phone, phone as remote, Jam host (published 10 Nov) |
 | 0.9.11 | 1.0 hardening | clean-PC install, car test, security review (incl. TV pairing), restore drill, help pages |
 | 1.0.0 | Release | the last 0.9 build, renamed, once Josh is happy |
 
@@ -235,8 +235,7 @@ image was OK'd (Google TV, Android 16, x86_64; installed on E:).
 - **Install**: Developer options + Wireless debugging on the TV, then installed from the PC over
   Wi-Fi (adb). Updates: the same in-app updater as the phone.
 
-Status (10 Nov): steps 1-4 done: built, checked on the emulators, and running on Josh's TCL Google TV
-(installed from this PC; updates now come from the PC). Not released yet. Also fixed: phone Jam
+Status (10 Nov): steps 1-4 done, running on Josh's TCL Google TV. **Published 10 Nov (v0.9.10).** Also fixed: phone Jam
 songs were refused by the PC since 0.9.8 (missing "type").
 Also (Josh, 10 Nov): phones and TVs get app updates from the PC first (the installer carries the
 phone/TV app), GitHub only as the fallback: Josh's TV can't reach GitHub.
