@@ -679,6 +679,8 @@ src/dielify/
     test: the emulator CAN see the real PC's mDNS announcement and auto-pairs with it (made 2 unused codes on
     Josh's PC); type the test copy's address first. Also removed a corrupted control-character line from
     dielify.iss [InstallDelete].
+    **Confirmed by Josh (10 Nov):** after installing the dist\ PC build that carries the app, his real TV's
+    Check for updates says "Up to date" (from the PC, no GitHub error). TV app works with his remote.
 
 ## Backlog (Josh, 8 Nov; after Phase 8 item 6)
 

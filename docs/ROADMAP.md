@@ -235,7 +235,8 @@ image was OK'd (Google TV, Android 16, x86_64; installed on E:).
 - **Install**: Developer options + Wireless debugging on the TV, then installed from the PC over
   Wi-Fi (adb). Updates: the same in-app updater as the phone.
 
-Status (10 Nov): steps 1-3 built and checked on the emulators (not released). Also fixed: phone Jam
+Status (10 Nov): steps 1-4 done: built, checked on the emulators, and running on Josh's TCL Google TV
+(installed from this PC; updates now come from the PC). Not released yet. Also fixed: phone Jam
 songs were refused by the PC since 0.9.8 (missing "type").
 Also (Josh, 10 Nov): phones and TVs get app updates from the PC first (the installer carries the
 phone/TV app), GitHub only as the fallback: Josh's TV can't reach GitHub.
