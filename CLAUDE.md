@@ -812,6 +812,9 @@ src/dielify/
 
 ## Decisions log
 
+- 2026-11-10 (Josh): **no HTTPS on the home network**: plain HTTP at home is an accepted risk (Tailscale
+  encrypts away from home). See docs/SECURITY-REVIEW-0.9.11.md.
+
 - 2026-11-10 (Josh): **kids controls** settled (details in docs/ROADMAP.md 0.9.11): a Settings tab per child with all
   their controls; explicit = allow/don't toggle (default don't); title word check off by default; parent sees stats
   on by default; download limit, quiet hours and Blend set per child; build parent control of a child's devices

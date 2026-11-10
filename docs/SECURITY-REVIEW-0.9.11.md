@@ -61,7 +61,7 @@ the PC exposes on the network. Code at phase-8 after 7643cfd.
 
 ## Accepted risks (Josh to know, not fixed)
 
-- **Home Wi-Fi traffic is plain HTTP.**
+- **Home Wi-Fi traffic is plain HTTP** (Josh, 10 Nov: leave it).
   - Someone already on the home network could read device keys and music as they pass. Tailscale traffic
     is encrypted.
   - Fixing it would mean HTTPS with a self-made certificate on the PC and pinning it in the apps. It's a
