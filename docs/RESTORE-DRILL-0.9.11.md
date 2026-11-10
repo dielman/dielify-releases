@@ -7,7 +7,8 @@ folder, and it only reads the music folder.
 ## Found first
 
 **Backups were switched off** on Josh's PC (no backup folder set), so no backup existed. Josh turned
-them on (Settings > This PC > Backups, folder on E:) and made one with Back up now.
+them on (Settings > This PC > Backups, folder on E:) and made one with Back up now. Since then backups are
+on by default: a new install backs up next to the music folder unless someone turns them off.
 
 ## What came back
 

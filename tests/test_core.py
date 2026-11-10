@@ -349,3 +349,17 @@ def test_youtube_mixes_load_one_page_not_5000_songs():
     a.playlist("RDTMAK5uy_kset8DisdE7LSD4TNjEVvrKRTmG7a56sY")
     a.playlist("PLmyOwnPlaylist")
     assert asked == [("RDTMAK5uy_kset8DisdE7LSD4TNjEVvrKRTmG7a56sY", 100), ("PLmyOwnPlaylist", 5000)]
+
+
+def test_backups_are_on_by_default_but_off_stays_off(tmp_path):
+    """Josh, 10 Nov: new installs back up from the start (beside the music folder)."""
+    from dielify import backup, settings as settings_mod
+    settings_mod.set_value("library_root", str(tmp_path / "Music"))
+    assert settings_mod.load().backup_folder == ""
+    assert backup.ensure_default() == tmp_path / "Dielify-backups"
+    s = settings_mod.load()
+    assert s.backup_folder == str(tmp_path / "Dielify-backups") and s.backup_chosen
+    # someone turns them off: that choice sticks
+    settings_mod.set_value("backup_folder", "")
+    assert backup.ensure_default() is None
+    assert settings_mod.load().backup_folder == ""

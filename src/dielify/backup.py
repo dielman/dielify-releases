@@ -143,6 +143,25 @@ def restore(zip_path: Path) -> Path:
     return safety
 
 
+def suggested_folder(s: settings_mod.Settings | None = None) -> Path:
+    """Where backups go unless someone picks a folder: beside the music folder."""
+    s = s or settings_mod.load()
+    root = Path(s.library_root) if s.library_root else None
+    return (root.parent if root and root.parent != root else Path.home()) / "Dielify-backups"
+
+
+def ensure_default() -> Path | None:
+    """Backups are on by default: the first time, use the suggested folder."""
+    s = settings_mod.load()
+    if s.backup_folder or s.backup_chosen:
+        return Path(s.backup_folder) if s.backup_folder else None
+    folder = suggested_folder(s)
+    settings_mod.set_value("backup_folder", str(folder))
+    settings_mod.set_value("backup_chosen", "true")
+    log.info("Backups turned on by default: %s", folder)
+    return folder
+
+
 class BackupScheduler:
     """Checks hourly; backs up when the last backup is over a day old."""
 
@@ -174,6 +193,10 @@ class BackupScheduler:
             self._stop.wait(3600)
 
     def start(self) -> None:
+        try:
+            ensure_default()
+        except Exception:  # never take the app down over a backup
+            log.exception("Couldn't turn on backups")
         threading.Thread(target=self._loop, daemon=True, name="dielify-backup").start()
 
     def stop(self) -> None:

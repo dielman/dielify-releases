@@ -169,8 +169,7 @@ def _status() -> DesktopStatus:
     from . import backup
     folder = Path(s.backup_folder) if s.backup_folder else None
     last = backup.last_backup(folder) if folder else None
-    root = Path(s.library_root) if s.library_root else None
-    suggested = str((root.parent if root and root.parent != root else Path.home()) / "Dielify-backups")
+    suggested = str(backup.suggested_folder(s))
     return DesktopStatus(
         backup_folder=s.backup_folder, backup_suggested=suggested,
         last_backup=str(last) if last else None, last_backup_at=last.stat().st_mtime if last else None,
@@ -216,6 +215,8 @@ def change(body: DesktopChange, s: Session = Depends(desktop_session)) -> Deskto
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Names can use letters, numbers, - and _ only")
     for key, value in changes.items():
         settings_mod.set_value(key, str(value))
+    if "backup_folder" in changes:  # a choice, incl. "off": never turned on by default again
+        settings_mod.set_value("backup_chosen", "true")
     if changes.get("backup_folder"):
         from . import backup
         backup.scheduler.run_once()  # first backup straight away

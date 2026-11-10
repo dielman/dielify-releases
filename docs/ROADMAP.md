@@ -273,6 +273,8 @@ Also owed from earlier releases: Josh hasn't yet confirmed on his devices most o
   cross-profile tests), and a check that the parent's YouTube login can't leak to a child
   device.
 - **Restore drill** (done 10 Nov, passed: docs/RESTORE-DRILL-0.9.11.md; backups had been off): restore last night's backup onto a test copy.
+  Follow-up (Josh, 10 Nov): **backups on by default** (built): the first start picks <music folder's parent>\Dielify-backups;
+  picking a folder or Turn off is remembered (settings.backup_chosen), so off stays off.
 - **Help pages** in the app for a non-technical person: first setup, adding a person, kids
   controls.
 - **Slimmer FFmpeg** (only with Josh's OK to download it; saves about 70 MB per update).

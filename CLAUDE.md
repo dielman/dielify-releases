@@ -817,6 +817,10 @@ src/dielify/
 
 ## Decisions log
 
+- 2026-11-10 (Josh): **backups on by default** for new installs (and installs that never chose):
+  backup.ensure_default() at start uses the suggested folder beside the music folder; Turn off sticks
+  (settings.backup_chosen). Not released yet.
+
 - 2026-11-10 (Josh): **no HTTPS on the home network**: plain HTTP at home is an accepted risk (Tailscale
   encrypts away from home). See docs/SECURITY-REVIEW-0.9.11.md.
 

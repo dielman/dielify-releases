@@ -34,6 +34,9 @@ class Settings:
     offline: bool = False          # True = never contact YouTube; the library still plays
     keep_awake: bool = False       # stop Windows sleeping when idle, so phones can reach it
     backup_folder: str = ""        # daily backups of Dielify's data go here; "" = off
+    # False = nobody has chosen yet: Dielify turns backups on itself (next to the music
+    # folder). Set once a folder is picked or backups are turned off, so "off" stays off.
+    backup_chosen: bool = False
 
     def __post_init__(self) -> None:
         if not self.library_root:
