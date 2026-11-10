@@ -30,6 +30,18 @@ data class AndroidRelease(
     val url: String,
     val sha256: String,
     val size: Long,
+    /** Downloaded from the PC (with this device's sign-in), not from GitHub. */
+    @kotlinx.serialization.Transient val fromPc: Boolean = false,
+)
+
+/** What the PC hands out (GET /api/app/android, appshare.py). */
+@Serializable
+data class PcApp(
+    val version: String,
+    @SerialName("version_code") val versionCode: Int,
+    val sha256: String,
+    val size: Long,
+    val url: String,
 )
 
 @Serializable
@@ -46,15 +58,16 @@ sealed interface UpdateState {
 }
 
 /**
- * Updates for the phone app, from the same GitHub release as the PC app.
+ * Updates for the phone / TV app. First from the PC (its installer carries the app of the same
+ * version, 0.9.10; Josh's TV can't reach GitHub at all), else from the GitHub release.
  *
- * Safety: the download comes over HTTPS from GitHub, its SHA-256 must match the manifest,
- * and Android itself refuses an update that isn't signed with the same key as the
- * installed app (the key never leaves Josh's PC). You confirm every install.
+ * Safety: the file's SHA-256 must match what the PC (or the GitHub manifest) says, and Android
+ * itself refuses an update that isn't signed with the same key as the installed app (the key
+ * never leaves Josh's PC). You confirm every install.
  */
 private val GITHUB_FILE = Regex("""^https://github\.com/([^/]+)/([^/]+)/releases/(?:latest/download|download/([^/]+))/([^/?#]+)$""")
 
-class AppUpdater(private val context: Context) {
+class AppUpdater(private val context: Context, private val server: Server) {
     private val http = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS).readTimeout(60, TimeUnit.SECONDS).build()
     private val _state = MutableStateFlow<UpdateState>(UpdateState.Idle)
@@ -97,6 +110,15 @@ class AppUpdater(private val context: Context) {
         val now = System.currentTimeMillis()
         if (!force && now - prefs.getLong("last_check", 0) < 24 * 3600_000L && _state.value !is UpdateState.Idle) return
         _state.value = UpdateState.Checking
+        // 1. the PC: it carries the app that goes with it
+        val pc = withContext(Dispatchers.IO) { fromPc() }
+        if (pc != null) {
+            prefs.edit().putLong("last_check", now).apply()
+            _state.value = if (pc.versionCode > BuildConfig.VERSION_CODE) UpdateState.Available(pc, "From your PC")
+            else UpdateState.UpToDate
+            return
+        }
+        // 2. GitHub (the PC couldn't be reached, or has no app to hand out)
         _state.value = try {
             val m = withContext(Dispatchers.IO) {
                 open(BuildConfig.MANIFEST_URL).use { r ->
@@ -109,8 +131,19 @@ class AppUpdater(private val context: Context) {
             if (a != null && a.versionCode > BuildConfig.VERSION_CODE) UpdateState.Available(a, m.notes)
             else UpdateState.UpToDate
         } catch (e: Exception) {
-            UpdateState.Failed("Couldn't check for updates (${e.message ?: e.javaClass.simpleName})")
+            UpdateState.Failed("Couldn't check for updates: your PC didn't answer and GitHub can't be reached " +
+                "from here (${e.message ?: e.javaClass.simpleName}). Music still works.")
         }
+    }
+
+    /** The PC's copy of the app, or null (not signed in, PC not reachable, or it has none). */
+    private suspend fun fromPc(): AndroidRelease? = try {
+        if (server.account == null) null
+        else server.androidApp().let { a ->
+            server.url(a.url)?.let { AndroidRelease(a.version, a.versionCode, it, a.sha256, a.size, fromPc = true) }
+        }
+    } catch (e: Exception) {
+        null
     }
 
     /** Android asks once whether Dielify may install updates. */
@@ -127,8 +160,10 @@ class AppUpdater(private val context: Context) {
         val apk = File(dir, "Dielify-${release.version}.apk")
         return try {
             withContext(Dispatchers.IO) {
-                open(release.url).use { r ->
-                    if (!r.isSuccessful) throw IllegalStateException("GitHub answered HTTP ${r.code}")
+                (if (release.fromPc) server.http.newCall(Request.Builder().url(release.url).build()).execute()
+                 else open(release.url)).use { r ->
+                    if (!r.isSuccessful) throw IllegalStateException(
+                        (if (release.fromPc) "your PC" else "GitHub") + " answered HTTP ${r.code}")
                     val digest = MessageDigest.getInstance("SHA-256")
                     var done = 0L
                     r.body.byteStream().use { input ->

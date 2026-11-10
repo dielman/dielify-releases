@@ -391,6 +391,8 @@ class Server(private val context: Context, private val accounts: AccountStore) {
         send("POST", "api/pair/" + java.net.URLEncoder.encode(code, "UTF-8") + "/approve",
             json.encodeToString(PairApproveIn.serializer(), PairApproveIn(person))))
     suspend fun pairRefuse(code: String) { send("POST", "api/pair/" + java.net.URLEncoder.encode(code, "UTF-8") + "/refuse") }
+    /** The phone / TV app the PC carries (0.9.10: updates come from the PC first). */
+    suspend fun androidApp(): com.dielify.app.update.PcApp = get("api/app/android")
     /** Songs to keep on the phone automatically (Settings). */
     suspend fun keepList(liked: Boolean, top: Int, playlists: Set<Long>): List<Track> =
         get<TrackList>("api/keep?liked=$liked&top=$top&playlists=" + playlists.joinToString(",")).tracks

@@ -1630,6 +1630,39 @@ def set_taste(body: TasteIn, s: Session = Depends(session)) -> TasteList:
     return list_taste(s)
 
 
+# --- 0.9.10: phone / TV app updates from the PC (appshare.py) ----------------------------------
+
+class AndroidApp(BaseModel):
+    version: str
+    version_code: int = Field(description="Android's versionCode (0.9.10 -> 910)")
+    sha256: str
+    size: int
+    url: str = Field(description="Where to download it from this PC (needs your sign-in)")
+
+
+@router.get("/app/android", response_model=AndroidApp, tags=["updates"],
+            responses={404: {"description": "This PC has no phone app to hand out"}})
+def android_app(s: Session = Depends(session)) -> AndroidApp:
+    """The phone / TV app this PC carries (it comes with the PC installer). Apps check here
+    before GitHub."""
+    from . import appshare
+    a = appshare.available()
+    if a is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "This PC has no phone app to hand out")
+    return AndroidApp(version=a["version"], version_code=a["version_code"], sha256=a["sha256"], size=a["size"],
+                      url="/api/app/android/apk")
+
+
+@router.get("/app/android/apk", tags=["updates"], responses={200: {"content": {"application/vnd.android.package-archive": {}}}})
+def android_app_file(s: Session = Depends(session)) -> FileResponse:
+    from . import appshare
+    a = appshare.available()
+    if a is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "This PC has no phone app to hand out")
+    return FileResponse(a["path"], media_type="application/vnd.android.package-archive",
+                        filename=f"Dielify-{a['version']}.apk")
+
+
 @router.get("/me", response_model=Me, tags=["auth"])
 def me(s: Session = Depends(session)) -> Me:
     from .library import people

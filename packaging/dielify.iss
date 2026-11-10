@@ -43,12 +43,15 @@ Source: "..\dist\Dielify\*"; DestDir: "{app}"; Flags: recursesubdirs createallsu
 Source: "{#FFmpegDir}\ffmpeg.exe"; DestDir: "{app}\bin"; Flags: ignoreversion
 ; no ffprobe (0.9): yt-dlp manages without it, and it was a third of every update
 Source: "{#DenoDir}\deno.exe"; DestDir: "{app}\bin"; Flags: ignoreversion
+; The phone / TV app, handed out by the PC to phones and TVs (appshare.py, 0.9.10)
+#if FileExists(AddBackslash(SourcePath) + "..\dist\android\Dielify.apk")
+Source: "..\dist\android\*"; DestDir: "{app}\android"; Flags: ignoreversion
+#endif
 
 [InstallDelete]
 ; Files from an older version that the new one no longer has.
 Type: filesandordirs; Name: "{app}\_internal"
 Type: files; Name: "{app}\bin\ffprobe.exe"
-Type: files; Name: "{app}infprobe.exe"
 
 [Icons]
 Name: "{autoprograms}\Dielify"; Filename: "{app}\Dielify.exe"

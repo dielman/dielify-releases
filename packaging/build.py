@@ -11,6 +11,7 @@ Deno on PATH (they're copied from there into the installer).
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import shutil
 import subprocess
@@ -65,8 +66,28 @@ def run(cmd: list) -> None:
     subprocess.run(cmd, cwd=ROOT, check=True)
 
 
+def android_app() -> None:
+    """The phone / TV app of the same version, for the installer to carry (appshare.py): phones and
+    TVs update from the PC first. Skipped (with a note) on a PC without the Android signing key."""
+    sys.path.insert(0, str(ROOT / "tools"))
+    import release  # noqa: E402
+    from dielify import appshare  # noqa: E402
+    out = ROOT / "dist" / "android"
+    shutil.rmtree(out, ignore_errors=True)  # never carry an app of another version
+    if not release.ANDROID_KEYSTORE.exists():
+        print("No Android signing key here: the installer won't carry the phone app")
+        return
+    apk = release.build_android()
+    out.mkdir(parents=True)
+    shutil.copyfile(apk, out / appshare.APK)
+    info = appshare.describe(out / appshare.APK, __version__)
+    (out / appshare.INFO).write_text(json.dumps(info, indent=2), encoding="utf-8")
+    print(f"Phone app for the installer: {out / appshare.APK}")
+
+
 def main() -> None:
     print(f"Building Dielify {__version__}")
+    android_app()
     make_icon()
     make_version_info()
     run([sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean", "--log-level", "WARN",

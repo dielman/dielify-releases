@@ -53,7 +53,6 @@ import com.dielify.app.net.YtCollection
 import com.dielify.app.ui.AppViewModel
 import com.dielify.app.ui.Cover
 import com.dielify.app.ui.Thumb
-import com.dielify.app.ui.UpdateSection
 import com.dielify.app.ui.formatDuration
 import com.dielify.app.ui.hexColor
 import com.dielify.app.ui.tintBrush
@@ -398,7 +397,7 @@ fun TvSettings(vm: AppViewModel) {
         item { Line("Plays the music of", account?.profile ?: "") }
         item { Line("Your PC", when (val l = link) { is Link.Up -> l.address; Link.Down -> "Can't reach it right now"; Link.Unknown -> "…" }) }
         item { Line("App version", BuildConfig.VERSION_NAME) }
-        item { Column(Modifier.width(420.dp)) { UpdateSection(vm) } }
+        item { TvUpdates(vm) }
         item {
             Text("To sign this TV out (or sign it in for someone else), sign out here, then scan the new code with a parent's phone.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(560.dp))

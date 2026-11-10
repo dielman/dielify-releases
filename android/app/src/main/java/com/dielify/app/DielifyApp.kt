@@ -48,7 +48,7 @@ class DielifyApp : Application(), SingletonImageLoader.Factory {
         accounts = AccountStore(this)
         server = Server(this, accounts)
         saved = SavedSongs(this)
-        updater = AppUpdater(this)
+        updater = AppUpdater(this, server)
         plays = PlayReporter(this, server)
         if (keep.enabled) keep.schedule()
         // Google Cast (speakers): needs Google Play services; without it there's just no cast button

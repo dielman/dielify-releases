@@ -664,6 +664,21 @@ src/dielify/
     not the published one) is on the TV. **Crash found on the real TV:** KeyEvent.isMediaSessionKey is API 31+, so
     the first remote key crashed the app on Android 11 (emulators were 36/37). Fixed with our own MEDIA_KEYS set;
     lint showed no other NewApi problems. Test on the real TV (or an API 30 emulator), not only new emulators.
+  - **Phone / TV updates from the PC first** (Josh, 10 Nov: "they are compiled there to begin with"; his TV can't
+    reach GitHub at all: TCP to github.com / api.github.com times out from the TV, though it pings them and Google
+    works; cause unknown, likely router/TCL). packaging/build.py now builds the signed APK first (tools/release.py
+    build_android) into dist/android/ (Dielify.apk + Dielify.json: version, version_code, sha256, size); the
+    installer copies it to {app}\android (#if FileExists). `appshare.py` finds it (DIELIFY_ANDROID_DIR for tests,
+    {app}\android when frozen, dist/android in a dev copy) and only serves it when size + SHA-256 match;
+    GET /api/app/android + /api/app/android/apk (signed-in devices). AppUpdater(context, server): asks the PC first
+    (if it answers, its word is final: Available "From your PC" or UpToDate), GitHub only when the PC can't be
+    reached or has none; PC downloads go through server.http (sign-in), SHA-256 + size checked, Android checks the
+    signature. TV Settings has its own TvUpdates button that keeps the remote's selection. publish no longer
+    rebuilds the APK if build.py made it. Tested: TV emulator on a signed 0.9.9 updated itself to a signed
+    "0.9.10" test build served by the test PC (909 -> 910, Android's installer prompt, no GitHub). Lesson from that
+    test: the emulator CAN see the real PC's mDNS announcement and auto-pairs with it (made 2 unused codes on
+    Josh's PC); type the test copy's address first. Also removed a corrupted control-character line from
+    dielify.iss [InstallDelete].
 
 ## Backlog (Josh, 8 Nov; after Phase 8 item 6)
 

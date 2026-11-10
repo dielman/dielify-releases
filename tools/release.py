@@ -203,7 +203,7 @@ def cmd_publish(args) -> None:
     apk = None
     if ANDROID_KEYSTORE.exists():
         apk = ROOT / "dist" / f"Dielify-{__version__}.apk"
-        if not args.skip_build or not apk.exists():
+        if not apk.exists():  # packaging/build.py builds it (the installer carries it too)
             apk = build_android()
     apk_url = f"https://github.com/{repo}/releases/download/{tag}/{apk.name}" if apk else None
     man, sig = write_manifest(setup, url, args.notes, key, apk, apk_url)
