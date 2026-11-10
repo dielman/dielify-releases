@@ -1,5 +1,8 @@
 package com.dielify.app.playback
 
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.async
+import androidx.media3.session.MediaConstants
 import android.content.SharedPreferences
 import android.app.PendingIntent
 import android.content.Intent
@@ -540,59 +543,193 @@ class PlaybackService : MediaLibraryService() {
     }
 
     // --- the browse tree (Android Auto) ---------------------------------------------------------
+    // Android Auto draws every media app itself (driver safety): an app only gives it tabs (the root's
+    // children, at most 4), lists, covers and layout hints. So this mirrors the phone app's layout:
+    // Home (Discover), Library, Playlists, On this phone; covers as grids, sections with titles.
 
-    private fun folder(id: String, title: String): MediaItem = MediaItem.Builder()
-        .setMediaId(id)
-        .setMediaMetadata(
-            MediaMetadata.Builder().setTitle(title).setIsBrowsable(true).setIsPlayable(false)
-                .setMediaType(MediaMetadata.MEDIA_TYPE_FOLDER_ALBUMS).build()
-        ).build()
+    private fun style(b: android.os.Bundle = android.os.Bundle(), browsable: Int? = null, single: Int? = null,
+                      group: String? = null): android.os.Bundle = b.apply {
+        browsable?.let { putInt(MediaConstants.EXTRAS_KEY_CONTENT_STYLE_BROWSABLE, it) }
+        single?.let { putInt(MediaConstants.EXTRAS_KEY_CONTENT_STYLE_SINGLE_ITEM, it) }
+        group?.let { putString(MediaConstants.EXTRAS_KEY_CONTENT_STYLE_GROUP_TITLE, it) }
+    }
 
-    private fun albumItem(a: Album): MediaItem = MediaItem.Builder()
+    private val grid = MediaConstants.EXTRAS_VALUE_CONTENT_STYLE_GRID_ITEM
+    private val list = MediaConstants.EXTRAS_VALUE_CONTENT_STYLE_LIST_ITEM
+
+    /** A tab or a folder. [children]: how what's inside is shown (covers in a grid by default). */
+    private fun folder(id: String, title: String, children: Int = grid, art: Uri? = null, group: String? = null): MediaItem =
+        MediaItem.Builder()
+            .setMediaId(id)
+            .setMediaMetadata(
+                MediaMetadata.Builder().setTitle(title).setIsBrowsable(true).setIsPlayable(false)
+                    .setMediaType(MediaMetadata.MEDIA_TYPE_FOLDER_MIXED)
+                    .setArtworkUri(art)
+                    .setExtras(style(browsable = children, group = group))
+                    .build()
+            ).build()
+
+    private fun albumItem(a: Album, group: String? = null): MediaItem = MediaItem.Builder()
         .setMediaId("$ALBUM${a.id}")
         .setMediaMetadata(
             MediaMetadata.Builder().setTitle(a.name).setArtist(a.artist).setAlbumTitle(a.name)
+                .setSubtitle(a.artist)
                 .setIsBrowsable(true).setIsPlayable(false)
                 .setMediaType(MediaMetadata.MEDIA_TYPE_ALBUM)
-                .setArtworkUri(a.coverUrl?.let { ArtProvider.albumArt(a.id) })
+                .setArtworkUri(ArtProvider.albumArt(a.id))
+                .setExtras(style(single = grid, group = group))
                 .build()
         ).build()
 
-    private fun songs(tracks: List<Track>): List<MediaItem> {
-        val items = tracks.map(MediaItems::fromTrack)
-        items.forEach { known[it.mediaId] = it; siblings[it.mediaId] = items }
-        return items
+    private fun playlistItem(p: com.dielify.app.net.PlaylistSummary, group: String? = null): MediaItem = MediaItem.Builder()
+        .setMediaId("$PLAYLIST${p.id}")
+        .setMediaMetadata(
+            MediaMetadata.Builder().setTitle(p.name)
+                .setSubtitle(p.description?.takeIf { it.isNotBlank() } ?: "${p.count} songs")
+                .setIsBrowsable(true).setIsPlayable(false)
+                .setMediaType(MediaMetadata.MEDIA_TYPE_PLAYLIST)
+                .setArtworkUri(if (p.coverUrl != null) ArtProvider.playlistArt(p.id) else p.thumbnail?.let(ArtProvider::webArt))
+                .setExtras(style(single = grid, group = group))
+                .build()
+        ).build()
+
+    /** A YouTube Music album or playlist (New for you, More like your top songs). */
+    private fun ytItem(i: com.dielify.app.net.Item, group: String? = null): MediaItem = MediaItem.Builder()
+        .setMediaId((if (i.type == "album") YT_ALBUM else YT_PLAYLIST) + i.id)
+        .setMediaMetadata(
+            MediaMetadata.Builder().setTitle(i.title)
+                .setSubtitle(i.subtitle ?: i.artistText.ifEmpty { null })
+                .setIsBrowsable(true).setIsPlayable(false)
+                .setMediaType(if (i.type == "album") MediaMetadata.MEDIA_TYPE_ALBUM else MediaMetadata.MEDIA_TYPE_PLAYLIST)
+                .setArtworkUri(i.thumbnail?.let(ArtProvider::webArt))
+                .setExtras(style(single = grid, group = group))
+                .build()
+        ).build()
+
+    private fun artistItem(a: com.dielify.app.net.Artist): MediaItem = MediaItem.Builder()
+        .setMediaId("$ARTIST${a.id}")
+        .setMediaMetadata(
+            MediaMetadata.Builder().setTitle(a.name).setSubtitle("${a.albumCount} album${if (a.albumCount == 1) "" else "s"}")
+                .setIsBrowsable(true).setIsPlayable(false)
+                .setMediaType(MediaMetadata.MEDIA_TYPE_ARTIST)
+                .setArtworkUri(ArtProvider.artistArt(a.id))
+                .setExtras(style(browsable = grid))
+                .build()
+        ).build()
+
+    /** One tile that plays a whole list (the "Made for right now" mix). */
+    private fun playAllItem(id: String, title: String, subtitle: String, songs: List<MediaItem>, group: String): MediaItem {
+        collections[id] = songs
+        songs.forEach { known[it.mediaId] = it }
+        return MediaItem.Builder().setMediaId(id)
+            .setMediaMetadata(
+                MediaMetadata.Builder().setTitle(title).setSubtitle(subtitle)
+                    .setIsBrowsable(false).setIsPlayable(true)
+                    .setMediaType(MediaMetadata.MEDIA_TYPE_PLAYLIST)
+                    .setArtworkUri(songs.firstOrNull()?.mediaMetadata?.artworkUri)
+                    .setExtras(style(single = grid, group = group))
+                    .build()
+            ).build()
+    }
+
+    private fun songs(tracks: List<Track>): List<MediaItem> = remember(tracks.map(MediaItems::fromTrack))
+    private fun ytSongs(items: List<com.dielify.app.net.Item>): List<MediaItem> =
+        remember(items.filter { it.isSong }.map(MediaItems::fromItem))
+
+    private fun remember(items: List<MediaItem>, group: String? = null): List<MediaItem> {
+        val shown = if (group == null) items else items.map { m ->
+            m.buildUpon().setMediaMetadata(m.mediaMetadata.buildUpon()
+                .setExtras(style(android.os.Bundle(m.mediaMetadata.extras ?: android.os.Bundle()), group = group)).build()).build()
+        }
+        shown.forEach { known[it.mediaId] = it; siblings[it.mediaId] = shown }
+        return shown
     }
 
     private suspend fun children(parentId: String): List<MediaItem> {
         val server = dielify.server
         val saved = dielify.saved
+        fun <T> safe(block: suspend () -> T): suspend () -> T? = { runCatching { block() }.getOrNull() }
         return when {
             parentId == ROOT -> listOf(
-                folder(RECENT, "Recently added"),
-                folder(ALBUMS, "Albums"),
+                folder(HOME, "Home"),
+                folder(LIBRARY, "Library", children = list),
+                folder(PLAYLISTS, "Playlists"),
                 folder(PHONE, "On this phone"),
             )
-            parentId == RECENT -> runCatching { server.recentAlbums().take(100).map(::albumItem) }.getOrDefault(emptyList())
-            parentId == ALBUMS -> runCatching { server.albums().map(::albumItem) }.getOrDefault(emptyList())
+            parentId == HOME -> coroutineScope {
+                val forYou = async { safe { server.forYou() }() }
+                val mixes = async { safe { server.mixes().mixes }() }
+                val fresh = async { safe { server.newReleases().items }() }
+                val recent = async { safe { server.recentAlbums().take(12) }() }
+                buildList {
+                    forYou.await()?.nowMix?.takeIf { it.tracks.isNotEmpty() }?.let { m ->
+                        add(playAllItem(NOW_MIX, m.title, m.description, songs(m.tracks), "Made for right now"))
+                    }
+                    mixes.await()?.forEach { add(playlistItem(it, "Made for you")) }
+                    fresh.await()?.filter { it.type == "album" }?.take(12)?.forEach { add(ytItem(it, "New for you")) }
+                    recent.await()?.forEach { add(albumItem(it, "Recently added")) }
+                    forYou.await()?.moreLike?.take(10)?.forEach { add(ytItem(it, "More like your top songs")) }
+                }
+            }
+            parentId == LIBRARY -> listOf(
+                folder(RECENT, "Recently added"),
+                folder(ALBUMS, "Albums"),
+                folder(ARTISTS, "Artists", children = list),
+            )
+            parentId == RECENT -> runCatching { server.recentAlbums().take(100).map { albumItem(it) } }.getOrDefault(emptyList())
+            parentId == ALBUMS -> runCatching { server.albums().map { albumItem(it) } }.getOrDefault(emptyList())
+            parentId == ARTISTS -> runCatching { server.artists().map(::artistItem) }.getOrDefault(emptyList())
+            parentId == PLAYLISTS -> runCatching {
+                val all = server.playlists()
+                all.filter { it.kind == "user" }.map { playlistItem(it, "Your playlists") } +
+                    all.filter { it.kind != "user" }.map { playlistItem(it, "Made for you") }
+            }.getOrDefault(emptyList())
             parentId == PHONE -> groupAlbums(saved.songs.value.values).mapIndexed { i, a ->
                 MediaItem.Builder().setMediaId("$PHONE_ALBUM$i")
                     .setMediaMetadata(
-                        MediaMetadata.Builder().setTitle(a.album).setArtist(a.artist).setAlbumTitle(a.album)
+                        MediaMetadata.Builder().setTitle(a.album).setArtist(a.artist).setAlbumTitle(a.album).setSubtitle(a.artist)
                             .setIsBrowsable(true).setIsPlayable(false)
                             .setMediaType(MediaMetadata.MEDIA_TYPE_ALBUM)
                             .setArtworkUri(a.tracks.first().coverUrl?.let { ArtProvider.trackArt(a.tracks.first().id) })
+                            .setExtras(style(single = grid))
                             .build()
                     ).build()
             }
             parentId.startsWith(ALBUM) -> parentId.removePrefix(ALBUM).toLongOrNull()
                 ?.let { id -> runCatching { songs(server.album(id).tracks) }.getOrNull() } ?: emptyList()
+            parentId.startsWith(ARTIST) -> parentId.removePrefix(ARTIST).toLongOrNull()
+                ?.let { id -> runCatching { server.artist(id).albums.map { albumItem(it) } }.getOrNull() } ?: emptyList()
+            parentId.startsWith(PLAYLIST) -> parentId.removePrefix(PLAYLIST).toLongOrNull()
+                ?.let { id -> runCatching { ytSongs(server.playlist(id).entries.map { it.item }) }.getOrNull() } ?: emptyList()
+            parentId.startsWith(YT_ALBUM) -> runCatching { ytSongs(server.ytAlbum(parentId.removePrefix(YT_ALBUM)).tracks) }
+                .getOrDefault(emptyList())
+            parentId.startsWith(YT_PLAYLIST) -> runCatching { ytSongs(server.ytPlaylist(parentId.removePrefix(YT_PLAYLIST)).tracks) }
+                .getOrDefault(emptyList())
             parentId.startsWith(PHONE_ALBUM) -> parentId.removePrefix(PHONE_ALBUM).toIntOrNull()
                 ?.let { groupAlbums(saved.songs.value.values).getOrNull(it) }
                 ?.let { songs(it.tracks) } ?: emptyList()
             else -> emptyList()
         }
     }
+
+    /** Search in the car (typed or spoken): your songs and albums first, then YouTube Music. */
+    private suspend fun search(query: String): List<MediaItem> = coroutineScope {
+        val server = dielify.server
+        val lib = async { runCatching { server.search(query) }.getOrNull() }
+        val yt = async { runCatching { server.ytSearch(query, "song") }.getOrDefault(emptyList()) }
+        val l = lib.await()
+        buildList {
+            if (l != null) {
+                addAll(remember(l.tracks.take(20).map(MediaItems::fromTrack), "Your songs"))
+                l.albums.take(10).forEach { add(albumItem(it, "Your albums")) }
+            }
+            addAll(remember(yt.await().filter { it.isSong }.take(20).map(MediaItems::fromItem), "On YouTube Music"))
+        }
+    }
+
+    private val searchResults = ConcurrentHashMap<String, List<MediaItem>>()
+    /** Tiles that play a whole list (mediaId -> its songs). */
+    private val collections = ConcurrentHashMap<String, List<MediaItem>>()
 
     private fun <T> later(block: suspend () -> T): ListenableFuture<T> {
         val f = SettableFuture.create<T>()
@@ -650,7 +787,40 @@ class PlaybackService : MediaLibraryService() {
             browser: MediaSession.ControllerInfo,
             params: LibraryParams?,
         ): ListenableFuture<LibraryResult<MediaItem>> =
-            Futures.immediateFuture(LibraryResult.ofItem(folder(ROOT, "Dielify"), params))
+            Futures.immediateFuture(LibraryResult.ofItem(folder(ROOT, "Dielify"), LibraryParams.Builder()
+                .setExtras(android.os.Bundle().apply {
+                    putBoolean("android.media.browse.SEARCH_SUPPORTED", true)   // the car's search button
+                    putInt(MediaConstants.EXTRAS_KEY_CONTENT_STYLE_BROWSABLE, grid)
+                    putInt(MediaConstants.EXTRAS_KEY_CONTENT_STYLE_PLAYABLE, list)
+                }).build()))
+
+        override fun onSearch(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            query: String,
+            params: LibraryParams?,
+        ): ListenableFuture<LibraryResult<Void>> {
+            scope.launch {
+                val found = search(query)
+                searchResults[query] = found
+                session.notifySearchResultChanged(browser, query, found.size, params)
+            }
+            return Futures.immediateFuture(LibraryResult.ofVoid())
+        }
+
+        override fun onGetSearchResult(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            query: String,
+            page: Int,
+            pageSize: Int,
+            params: LibraryParams?,
+        ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> = later {
+            val all = searchResults[query] ?: search(query).also { searchResults[query] = it }
+            val from = (page.toLong() * pageSize).coerceAtMost(all.size.toLong()).toInt()
+            val to = (from.toLong() + pageSize).coerceAtMost(all.size.toLong()).toInt()
+            LibraryResult.ofItemList(ImmutableList.copyOf(all.subList(from, to)), params)
+        }
 
         override fun onGetChildren(
             session: MediaLibrarySession,
@@ -692,6 +862,16 @@ class PlaybackService : MediaLibraryService() {
             startIndex: Int,
             startPositionMs: Long,
         ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> {
+            // "Hey Google, play <something> on Dielify": the car sends only the words
+            val spoken = mediaItems.singleOrNull()?.requestMetadata?.searchQuery
+            if (spoken != null && mediaItems[0].mediaId.isEmpty()) return later {
+                val songs = search(spoken).filter { it.mediaMetadata.isPlayable == true }
+                MediaSession.MediaItemsWithStartPosition(songs.map { MediaItems.restore(it) }, 0, 0L)
+            }
+            // A "play the whole list" tile (Made for right now)
+            if (mediaItems.size == 1) collections[mediaItems[0].mediaId]?.let { all ->
+                return Futures.immediateFuture(MediaSession.MediaItemsWithStartPosition(all.map { MediaItems.restore(it) }, 0, 0L))
+            }
             // One song tapped in the car: play the album it was listed in, starting there.
             if (mediaItems.size == 1 && mediaItems[0].mediaMetadata.title == null) {
                 val id = mediaItems[0].mediaId
@@ -778,10 +958,19 @@ class PlaybackService : MediaLibraryService() {
         @Volatile var current: PlaybackService? = null
 
         const val ROOT = "root"
+        const val HOME = "home"
+        const val LIBRARY = "library"
+        const val PLAYLISTS = "playlists"
         const val RECENT = "recent"
         const val ALBUMS = "albums"
+        const val ARTISTS = "artists"
         const val PHONE = "phone"
+        const val NOW_MIX = "now-mix"
         const val ALBUM = "album:"
+        const val ARTIST = "artist:"
+        const val PLAYLIST = "playlist:"
+        const val YT_ALBUM = "yt-album:"
+        const val YT_PLAYLIST = "yt-playlist:"
         const val PHONE_ALBUM = "phone-album:"
         val TRUSTED_CONTROLLERS = setOf("com.android.systemui", "com.google.android.projection.gearhead")
         const val BUFFER_MS = 15 * 60_000
