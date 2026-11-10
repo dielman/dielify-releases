@@ -138,6 +138,8 @@ def pair_approve(code: str, body: ApproveIn, s: Session = Depends(session)) -> A
         p = pairing.approve(code, make_token)
     except pairing.PairError as e:
         _fail(e)
+    from . import tvupdate
+    tvupdate.remember(p.address, p.device_name)  # the PC installs its updates later
     return Approved(device_name=p.device_name, person=match)
 
 

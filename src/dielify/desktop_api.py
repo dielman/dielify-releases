@@ -463,3 +463,51 @@ def update_install(s: Session = Depends(desktop_session)) -> UpdateInfo:
     except (UpdateError, OSError) as e:  # OSError includes download/network errors
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e)) from e
     return UpdateInfo(**updater.as_dict())
+
+
+# --- 0.9.10: the PC installs app updates on the TVs (tvupdate.py) ------------------------------
+
+class Tv(BaseModel):
+    address: str
+    name: str
+    last_seen: float | None = None
+    version_code: int | None = Field(None, description="Dielify's version on the TV when last checked")
+    result: str | None = Field(None, description="What happened last time the PC checked it")
+    checked: float | None = None
+
+
+class Tvs(BaseModel):
+    tvs: list[Tv]
+    app_version: str | None = Field(None, description="The TV app this PC carries")
+    adb: bool = Field(description="False: the Android tools (adb) aren't on this PC, so it can't update TVs")
+
+
+def _tvs() -> Tvs:
+    from . import appshare, tvupdate
+    app = appshare.available()
+    return Tvs(tvs=[Tv(address=ip, **{k: v.get(k) for k in ("name", "last_seen", "version_code", "result", "checked")})
+                    for ip, v in sorted(tvupdate.known().items())],
+               app_version=app["version"] if app else None, adb=tvupdate.find_adb() is not None)
+
+
+@router.get("/tvs", response_model=Tvs)
+def tvs(s: Session = Depends(desktop_session)) -> Tvs:
+    """The TVs this PC knows (every TV that connected), for Settings > People & phones."""
+    return _tvs()
+
+
+@router.post("/tvs/update", response_model=Tvs)
+def tvs_update(s: Session = Depends(desktop_session)) -> Tvs:
+    """Install the TV app this PC carries on every TV that's older (not ones playing music)."""
+    from . import tvupdate
+    from .remote import tv_playing
+    tvupdate.update_all(tv_playing)
+    return _tvs()
+
+
+@router.delete("/tvs/{address}", status_code=204)
+def tvs_forget(address: str, s: Session = Depends(desktop_session)) -> Response:
+    from . import tvupdate
+    if not tvupdate.forget(address):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No such TV")
+    return Response(status_code=204)

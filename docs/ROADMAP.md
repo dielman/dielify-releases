@@ -239,6 +239,8 @@ Status (10 Nov): steps 1-4 done, running on Josh's TCL Google TV. **Published 10
 songs were refused by the PC since 0.9.8 (missing "type").
 Also (Josh, 10 Nov): phones and TVs get app updates from the PC first (the installer carries the
 phone/TV app), GitHub only as the fallback: Josh's TV can't reach GitHub.
+After 0.9.10 (Josh): the PC installs app updates on TVs over the network (adb), because a kids profile on
+Josh's TV blocks it installing apps. Ships with the next release.
 
 Steps: 1 pairing + announcing + PC code entry + phone scanner -> 2 TV app (find PC, sign in, Home /
 Library / Search, playback, Now playing) -> 3 Play on / Jam / idle display -> 4 install on the TV,

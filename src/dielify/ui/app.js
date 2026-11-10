@@ -1125,7 +1125,7 @@ async function viewSettings() {
         toggle("keep_awake", s.keep_awake, "The PC will stay awake", "The PC may sleep again")));
 
     const phones = h("div", { class: "panel" }, h("h2", {}, "Phone apps"),
-      h("p", { class: "muted" }, "Phones can play your library (Symfonium, or the Dielify app later). Server address:"),
+      h("p", { class: "muted" }, "Phones and TVs play your library with the Dielify app (or Symfonium). This PC's address:"),
       s.addresses.length
         ? s.addresses.map((a) => h("div", { class: "setting" },
             h("div", { class: "label" }, /^http:\/\/100\./.test(a) ? "Away from home (Tailscale)" : "On home Wi-Fi"),
@@ -1146,8 +1146,7 @@ async function viewSettings() {
           if (!confirm(`Remove the phone login ${u.name}? Its phones are signed out.`)) return;
           await api(`/api/desktop/phone-users/${encodeURIComponent(u.name)}`, { method: "DELETE" }); viewSettings();
         } }, "Remove"))),
-      h("div", { class: "row", style: "margin-top:10px" }, h("button", { onclick: addPhoneUser }, "Add phone login"),
-        h("button", { onclick: () => addTv() }, icon("tv", "ico lead"), "Add a TV")));
+      h("div", { class: "row", style: "margin-top:10px" }, h("button", { onclick: addPhoneUser }, "Add phone login")));
 
     const when = (t) => new Date(t * 1000).toLocaleString();
     const backups = h("div", { class: "panel" }, h("h2", {}, "Backups"),
@@ -1181,7 +1180,7 @@ async function viewSettings() {
     const sections = [
       ["Playback", [playbackPanel()]],
       ["Music & YouTube", [youtube, music]],
-      ["People & phones", [peoplePanel(s), phones]],
+      ["People & phones", [peoplePanel(s), phones, tvsPanel()]],
       ["Your taste", [ratingsPanel(), tastePanel(), await newReleasesPanel()]],
       ["This PC", [windows, backups, about]],
     ];
@@ -1238,6 +1237,36 @@ async function updateSetting(setting) {
 // People sharing this PC's music: you (parent) and kids accounts. A kids account uses this
 // PC's music folder and YouTube sign-in behind the scenes, has its own library, and never
 // sees your YouTube (home feed, charts, your playlists).
+// TVs: the PC installs Dielify's updates on them (tvupdate.py): a kids profile on Josh's TV stops it
+// installing them itself. Needs the TV's USB debugging on and the Android tools (adb) on this PC.
+function tvsPanel() {
+  const box = h("div", { class: "panel" }, h("h2", {}, "TVs"), h("p", { class: "muted" }, "Loading…"));
+  const when = (t) => (t ? new Date(t * 1000).toLocaleString() : "never");
+  const paint = (r) => box.replaceChildren(h("h2", {}, "TVs"),
+    h("p", { class: "muted" }, "This PC installs Dielify's updates on your TVs by itself (a few minutes after it updates, then every "
+      + "6 hours; not while a TV is playing). The TV needs USB debugging on: Settings > System > Developer options."),
+    ...(r.adb ? [] : [h("p", { class: "warn" }, "The Android tools (adb) aren't on this PC, so it can't update TVs.")]),
+    r.tvs.length ? r.tvs.map((tv) => h("div", { class: "setting" },
+      h("div", { class: "label" }, tv.name),
+      h("div", { class: "value" }, `${tv.address} · seen ${when(tv.last_seen)}`,
+        h("div", { class: "small muted" }, tv.result ? `${tv.result} (${when(tv.checked)})` : "Not checked yet")),
+      h("button", { class: "link", onclick: async () => {
+        if (!confirm(`Forget ${tv.name}? The PC stops updating it (it's remembered again when it next connects).`)) return;
+        await api(`/api/desktop/tvs/${encodeURIComponent(tv.address)}`, { method: "DELETE" }); load();
+      } }, "Forget")))
+      : h("p", { class: "muted" }, "No TVs yet. Open Dielify on a TV, then press Add a TV below."),
+    h("div", { class: "row", style: "margin-top:10px" },
+      h("button", { onclick: () => addTv() }, icon("tv", "ico lead"), "Add a TV"),
+      r.tvs.length ? h("button", { onclick: async (e) => {
+        e.target.disabled = true; e.target.textContent = "Updating…";
+        try { paint(await api("/api/desktop/tvs/update", { method: "POST" })); } catch (err) { toast(err.message, 6000); load(); }
+      } }, "Update TVs now") : null,
+      r.app_version ? h("span", { class: "muted small" }, `This PC carries the TV app ${r.app_version}`) : null));
+  const load = () => api("/api/desktop/tvs").then(paint).catch((e) => box.replaceChildren(h("h2", {}, "TVs"), h("p", { class: "warn" }, e.message)));
+  load();
+  return box;
+}
+
 function peoplePanel(s) {
   const people = s.people || [];
   const songs = (n) => `${n.toLocaleString()} song${n === 1 ? "" : "s"}`;

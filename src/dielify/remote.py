@@ -143,6 +143,7 @@ class Device:
     received: float = field(default_factory=time.monotonic)
     paused_at: float = field(default_factory=time.monotonic)
     told_pause_at: float = 0.0  # when the hub last told it to pause (0 = it has since)
+    ip: str = ""  # where it connected from (TVs: the PC installs their updates there, tvupdate.py)
 
     def public(self) -> dict:
         st = dict(self.state)
@@ -324,7 +325,10 @@ async def remote(ws: WebSocket) -> None:
             return
         name = str(hello.get("name") or "")[:60] or ((platform.node() or "PC") if desktop else "Phone")
         kind = "pc" if desktop or hello.get("kind") == "pc" else "tv" if hello.get("kind") == "tv" else "phone"
-        d = Device(ws, profile, str(hello["device"])[:100], name, kind)
+        d = Device(ws, profile, str(hello["device"])[:100], name, kind, ip=ws.client.host if ws.client else "")
+        if kind == "tv":
+            from . import tvupdate
+            await asyncio.to_thread(tvupdate.remember, d.ip, name)
         if isinstance(hello.get("state"), dict):
             d.state = clean_state(hello["state"])
         await hub.join(d)
@@ -343,3 +347,8 @@ async def remote(ws: WebSocket) -> None:
     finally:
         if d is not None:
             await hub.leave(d)
+
+
+def tv_playing(ip: str) -> bool:
+    """Is the TV at this address playing music right now? (Its update waits until it isn't.)"""
+    return any(d.kind == "tv" and d.ip == ip and d.state.get("playing") for d in list(hub.devices.values()))

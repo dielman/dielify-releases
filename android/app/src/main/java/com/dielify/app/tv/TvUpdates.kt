@@ -37,7 +37,10 @@ fun TvUpdates(vm: AppViewModel) {
             UpdateState.NotSetUp -> "Test build: updates come over USB from the PC."
             UpdateState.Checking -> "Checking for updates…"
             UpdateState.UpToDate -> "Up to date"
-            is UpdateState.Available -> "Dielify ${s.release.version} is available" +
+            is UpdateState.Available -> if (!vm.updater.canInstall())
+                "Dielify ${s.release.version} is ready. Your PC installs it on this TV by itself (or press " +
+                    "Update TVs now on the PC: Settings > People & phones)."
+            else "Dielify ${s.release.version} is available" +
                 (if (s.release.fromPc) " from your PC" else "") + " (${s.release.size / 1_000_000} MB)"
             is UpdateState.Downloading -> "Downloading ${s.release.version}… ${(s.fraction * 100).toInt()}%"
             is UpdateState.Failed -> s.message
@@ -50,15 +53,16 @@ fun TvUpdates(vm: AppViewModel) {
                 else -> MaterialTheme.colorScheme.onSurfaceVariant
             })
         if (s != UpdateState.NotSetUp) {
-            TvButton(if (s is UpdateState.Available) "Update" else "Check for updates", Icons.Filled.SystemUpdate,
-                Modifier.focusRequester(button), primary = s is UpdateState.Available) {
+            // This TV may not be allowed to install apps (Josh's: a kids profile turns it off for the whole TV);
+            // then the PC installs updates (tvupdate.py) and the button only checks.
+            val canUpdateHere = s is UpdateState.Available && vm.updater.canInstall()
+            TvButton(if (canUpdateHere) "Update" else "Check for updates", Icons.Filled.SystemUpdate,
+                Modifier.focusRequester(button), primary = canUpdateHere) {
                 hadFocus[0] = true
                 when (s) {
                     is UpdateState.Available ->
-                        if (!vm.updater.canInstall()) {
-                            vm.messages.tryEmit("Allow Dielify to install updates, then come back and press Update again")
-                            context.startActivity(vm.updater.openInstallPermission())
-                        } else scope.launch { vm.updater.download(s.release)?.let { context.startActivity(it) } }
+                        if (canUpdateHere) scope.launch { vm.updater.download(s.release)?.let { context.startActivity(it) } }
+                        else scope.launch { vm.updater.check(force = true) }
                     UpdateState.Checking, is UpdateState.Downloading -> {}
                     else -> scope.launch { vm.updater.check(force = true) }
                 }

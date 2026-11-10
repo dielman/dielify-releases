@@ -62,6 +62,10 @@ def create_app(queue: DownloadQueue | None = None) -> FastAPI:
     # cover colours (fast, on this PC) and artist photos (one YouTube search each, at quiet moments)
     from .artwork import Worker as ArtworkWorker
     artwork_worker = ArtworkWorker(youtube.background)
+    # the PC installs app updates on TVs that can't install them themselves (tvupdate.py)
+    from .remote import tv_playing
+    from .tvupdate import Worker as TvUpdater
+    tv_updater = TvUpdater(tv_playing)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -76,9 +80,11 @@ def create_app(queue: DownloadQueue | None = None) -> FastAPI:
         kids_check.start()
         releases.start()
         artwork_worker.start()
+        tv_updater.start()
         # outside discovery (radio charts, ListenBrainz) is off: Josh didn't want single-song
         # shelves on Discover (8 Nov). The code and /api/discover/outside stay for now.
         yield
+        tv_updater.stop()
         artwork_worker.stop()
         releases.stop()
         kids_check.stop()

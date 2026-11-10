@@ -682,6 +682,20 @@ src/dielify/
     dielify.iss [InstallDelete].
     **Confirmed by Josh (10 Nov):** after installing the dist\ PC build that carries the app, his real TV's
     Check for updates says "Up to date" (from the PC, no GitHub error). TV app works with his remote.
+  - After publishing 0.9.10 (10 Nov): Josh's TV **can't install updates itself**: a Google Family Link kids
+    profile (user 12, profile owner com.google.android.gms kids) sets no_install_unknown_sources, and the TV's
+    Settings then shows "Install unknown apps: disabled by admin" even on Josh's own profile (user 0, which has no
+    restriction). I installed 0.9.10 on it over adb. Josh chose **"PC installs via USB"**: `tvupdate.py` (not
+    released yet; ships with the next release): TVs are remembered with their home-network address when they
+    connect for remote control (remote.Device.ip, kind tv) or are allowed in (pair approve) -> tvs.json in the data
+    folder; Worker (5 min after start, then every 6 h; 10 min retry while a TV plays) runs `adb connect ip:5555`,
+    reads versionCode (dumpsys package), `adb install -r` the app the PC carries if older, reopens TvActivity.
+    adb = the Android SDK on this PC (ANDROID_HOME / LOCALAPPDATA / <drive>:\Android\Sdk / PATH): Google's SDK
+    licence doesn't allow shipping it in the installer. PC Settings > People & phones > TVs (list, last result,
+    Update TVs now, Forget, Add a TV); GET /api/desktop/tvs, POST /api/desktop/tvs/update, DELETE
+    /api/desktop/tvs/{address}. The TV app's update screen says the PC installs updates when it can't. Needs the
+    TV's USB debugging left on (only this PC is allowed: Josh pressed Allow once). Checked against the real TV:
+    "Up to date (0.9.10)". 195 tests.
 
 ## Backlog (Josh, 8 Nov; after Phase 8 item 6)
 
