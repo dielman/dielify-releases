@@ -437,8 +437,8 @@ class YTMusicAdapter:
     def search(self, query: str, limit: int = 10, videos: bool = False) -> list[TrackInfo]:
         self._pace()
         try:
-            results = self._yt.search(query, filter="videos" if videos else "songs",
-                                      limit=limit)
+            results = self._again_if_empty(self._yt.search, query, filter="videos" if videos else "songs",
+                                           limit=limit)
         except Exception as e:
             raise YouTubeError(f"Search failed: {e}") from e
         out = []
@@ -461,6 +461,17 @@ class YTMusicAdapter:
         return out[:limit]
 
     # --- discovery (Phase 3) -------------------------------------------------------
+
+    def _again_if_empty(self, fn, *args, **kwargs):
+        """A ytmusicapi call that tries once more after YouTube's empty answer (JSONDecodeError).
+        Without it, a song looked up during one of those minutes was saved as a plain video:
+        no album, track number or year (Josh's log, 9 Nov: 33 song + 25 album lookups)."""
+        try:
+            return fn(*args, **kwargs)
+        except json.JSONDecodeError:
+            time.sleep(3)
+            self._pace()
+            return fn(*args, **kwargs)
 
     def _call(self, what: str, fn, *args, **kwargs):
         for attempt in (1, 2):
@@ -640,7 +651,7 @@ class YTMusicAdapter:
         """Full metadata for tagging: album, track number, year, best cover."""
         self._pace()
         try:
-            wp = self._yt.get_watch_playlist(videoId=video_id, limit=1)
+            wp = self._again_if_empty(self._yt.get_watch_playlist, videoId=video_id, limit=1)
             t = next((x for x in wp.get("tracks") or [] if x.get("videoId") == video_id), None)
         except Exception as e:  # ytmusicapi can trip over unusual videos (e.g. KeyError 'videoId')
             log.warning("Watch-playlist lookup failed for %s: %s", video_id, e)
@@ -670,7 +681,7 @@ class YTMusicAdapter:
     def _track_from_video(self, video_id: str) -> TrackInfo:
         self._pace()
         try:
-            vd = (self._yt.get_song(video_id) or {}).get("videoDetails") or {}
+            vd = (self._again_if_empty(self._yt.get_song, video_id) or {}).get("videoDetails") or {}
         except Exception as e:
             raise YouTubeError(f"Couldn't load video {video_id}: {e}") from e
         if not vd.get("title"):
@@ -687,7 +698,7 @@ class YTMusicAdapter:
     def _enrich_from_album(self, info: TrackInfo) -> None:
         self._pace()
         try:
-            alb = self._yt.get_album(info.album_id)
+            alb = self._again_if_empty(self._yt.get_album, info.album_id)
         except Exception as e:  # metadata is a nice-to-have; don't fail the download
             log.warning("Album lookup failed for %s: %s", info.album_id, e)
             return
@@ -758,8 +769,18 @@ class YTMusicAdapter:
             cookie_file = self._cookie_file(cookie_dir)
             if cookie_file:
                 opts["cookiefile"] = cookie_file
-            with yt_dlp.YoutubeDL(opts) as ydl:
-                info = ydl.extract_info(YTM_WATCH_URL.format(video_id), download=False)
+            for attempt in (1, 2):
+                try:
+                    with yt_dlp.YoutubeDL(opts) as ydl:
+                        info = ydl.extract_info(YTM_WATCH_URL.format(video_id), download=False)
+                    break
+                except yt_dlp.utils.DownloadError as e:
+                    # YouTube sometimes refuses one of yt-dlp's page requests (403) and the
+                    # audio formats go missing with it; asking again works (seen in Josh's log,
+                    # where downloads recovered on their retry but instant play gave up).
+                    if attempt == 2 or "Requested format is not available" not in str(e):
+                        raise
+                    log.info("No audio formats for %s this time, asking YouTube again", video_id)
             fmt = (info.get("requested_formats") or [info])[0]
             url = fmt.get("url") or info.get("url")
             if not url:

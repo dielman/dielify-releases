@@ -62,6 +62,9 @@ def create_app(queue: DownloadQueue | None = None) -> FastAPI:
     # cover colours (fast, on this PC) and artist photos (one YouTube search each, at quiet moments)
     from .artwork import Worker as ArtworkWorker
     artwork_worker = ArtworkWorker(youtube.background)
+    # songs saved without their album while YouTube sent empty answers (details.py)
+    from .details import Worker as DetailsWorker
+    details_worker = DetailsWorker(youtube.background)
     # the PC installs app updates on TVs that can't install them themselves (tvupdate.py)
     from .remote import tv_playing
     from .tvupdate import Worker as TvUpdater
@@ -80,12 +83,14 @@ def create_app(queue: DownloadQueue | None = None) -> FastAPI:
         kids_check.start()
         releases.start()
         artwork_worker.start()
+        details_worker.start()
         tv_updater.start()
         # outside discovery (radio charts, ListenBrainz) is off: Josh didn't want single-song
         # shelves on Discover (8 Nov). The code and /api/discover/outside stay for now.
         yield
         tv_updater.stop()
         artwork_worker.stop()
+        details_worker.stop()
         releases.stop()
         kids_check.stop()
         leveller.stop()
@@ -187,6 +192,14 @@ def _listen(addr: str, port: int) -> socket.socket:
     return sock
 
 
+def _not_a_dropped_connection(record: logging.LogRecord) -> bool:
+    """Windows' asyncio logs a full error with traceback each time a phone or TV drops a
+    connection (ConnectionResetError in _call_connection_lost). Nothing is wrong, and 63 of
+    them hid the real errors in Josh's log (10 Nov), so they're left out."""
+    exc = record.exc_info[1] if record.exc_info else None
+    return not (isinstance(exc, ConnectionResetError) and "_call_connection_lost" in record.getMessage())
+
+
 def setup_file_logging() -> Path:
     """Server requests -> %LOCALAPPDATA%\\Dielify\\logs\\server.log (no secrets)."""
     from .paths import app_data_dir
@@ -196,9 +209,10 @@ def setup_file_logging() -> Path:
     fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
     root = logging.getLogger()
     root.addHandler(fh)
+    logging.getLogger("asyncio").addFilter(_not_a_dropped_connection)
     if root.level > logging.WARNING or root.level == logging.NOTSET:
         root.setLevel(logging.WARNING)
-    for name in ("dielify.server", "dielify.subsonic_api", "dielify.downloads", "dielify.remote"):
+    for name in ("dielify.server", "dielify.subsonic_api", "dielify.downloads", "dielify.remote", "dielify.details"):
         logging.getLogger(name).setLevel(logging.INFO)
     return logs / "server.log"
 

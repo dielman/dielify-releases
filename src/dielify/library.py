@@ -298,6 +298,13 @@ CREATE TABLE IF NOT EXISTS cast_tokens (
     expires_at REAL NOT NULL
 );
 
+-- Songs saved without their album, looked up again once each (0.9.11, details.py).
+CREATE TABLE IF NOT EXISTS details_checked (
+    video_id    TEXT PRIMARY KEY,
+    checked_at  REAL NOT NULL,
+    result      TEXT NOT NULL
+);
+
 -- Cover colours (0.9.9, artwork.py): key t:<track id> (its cover) | a:<artist key> (photo).
 CREATE TABLE IF NOT EXISTS art_colors (
     key         TEXT PRIMARY KEY,
@@ -591,6 +598,14 @@ class Library:
             self._join(conn, track_id, added_by)
             self._prune(conn)
         return track_id
+
+    def moved(self, track_id: int, path: Path) -> None:
+        """A song's file got a new place and new tags (details.py): update its row in place,
+        so libraries, playlists and play counts stay with it. Nobody's library changes."""
+        rel = Path(path).relative_to(self.root).as_posix()
+        with connect() as conn:
+            self._upsert(conn, Path(path), rel, read_tags(Path(path)), track_id)
+            self._prune(conn)
 
     def _join(self, conn, track_id: int, added_by: str) -> bool:
         return conn.execute(

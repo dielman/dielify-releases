@@ -288,6 +288,17 @@ Also owed from earlier releases: Josh hasn't yet confirmed on his devices most o
   (server.LISTENING, home network first); the phone keeps any it doesn't know (Server.learnAddresses, after sign-in
   and whenever it finds the PC), so a phone signed in at home gets the Tailscale address without signing in again.
   Checked on the emulator. Works once both the PC and the phone run this version.
+- **Log check** (10 Nov, Josh's real server.log, read-only; built, not released):
+  - YouTube's empty answers (JSONDecodeError) are now asked again for song, video, album lookups and search, not
+    only the home feed. Before, a song looked up during one became a plain video: "Singles", no album, track number
+    or year (33 songs on 9 Nov, ~22 still like that). `details.py` repairs those: each "Singles" song with no year
+    and no track number is looked up once more at quiet moments (10 min after start, then every 6 h until done);
+    with an album now, tags + cover are rewritten and the file moves to its album folder, same track id (plays,
+    playlists, ratings kept). Real music videos stay; each song checked once (table details_checked).
+  - Instant play asks yt-dlp again when "Requested format is not available" (a 403 inside yt-dlp; downloads already
+    recovered on their retry, instant play gave a 502 after 35 s).
+  - Windows' "connection forcibly closed" asyncio errors (63, harmless: phones dropping connections) are left out
+    of the log. The yt-dlp "Unable to download API page: 403" warnings are harmless (downloads finished).
 - **Slimmer FFmpeg** (only with Josh's OK to download it; saves about 70 MB per update).
 
 ## Not on the road to 1.0

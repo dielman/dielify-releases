@@ -363,3 +363,68 @@ def test_backups_are_on_by_default_but_off_stays_off(tmp_path):
     settings_mod.set_value("backup_folder", "")
     assert backup.ensure_default() is None
     assert settings_mod.load().backup_folder == ""
+
+
+def test_instant_play_asks_youtube_again_when_formats_go_missing(monkeypatch):
+    """Josh's log, 10 Nov: a 403 inside yt-dlp left 'Requested format is not available';
+    downloads recovered on their retry, instant play failed. Now it asks once more."""
+    import yt_dlp
+    from dielify.yt_adapter import YTMusicAdapter
+    calls = []
+
+    class FakeYDL:
+        def __init__(self, opts): pass
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def extract_info(self, url, download=False):
+            calls.append(url)
+            if len(calls) == 1:
+                raise yt_dlp.utils.DownloadError("ERROR: [youtube] abc: Requested format is not available.")
+            return {"requested_formats": [{"url": "https://x/audio", "ext": "webm", "format_id": "774", "abr": 256}],
+                    "title": "Song"}
+
+    monkeypatch.setattr(yt_dlp, "YoutubeDL", FakeYDL)
+    a = YTMusicAdapter.__new__(YTMusicAdapter)
+    a._cookie_file = lambda d: None
+    info = a.stream_info("abcdefghijk")
+    assert info.url == "https://x/audio" and len(calls) == 2
+
+
+def test_a_song_looked_up_during_youtubes_empty_answers_keeps_its_album(monkeypatch):
+    """Josh's log, 9 Nov: an empty answer made the song a 'video' (no album/track/year)."""
+    import json
+    from dielify import yt_adapter
+    from dielify.yt_adapter import YTMusicAdapter
+    monkeypatch.setattr(yt_adapter.time, "sleep", lambda s: None)
+    tries = {"wp": 0}
+
+    class YT:
+        def get_watch_playlist(self, videoId, limit=1):
+            tries["wp"] += 1
+            if tries["wp"] == 1:
+                raise json.JSONDecodeError("Expecting value", "", 0)
+            return {"tracks": [{"videoId": videoId, "title": "Song", "artists": [{"name": "A"}],
+                                "album": {"name": "Alb", "id": "MPREb_x"}, "videoType": "MUSIC_VIDEO_TYPE_ATV"}]}
+
+        def get_album(self, browse_id):
+            return {"title": "Alb", "year": "2020", "artists": [{"name": "A"}], "tracks": []}
+
+    a = YTMusicAdapter.__new__(YTMusicAdapter)
+    a._yt = YT()
+    a._pace = lambda: None
+    info = a.get_track("abcdefghijk")
+    assert (info.album, info.year, info.is_video, tries["wp"]) == ("Alb", "2020", False, 2)
+
+
+def test_dropped_phone_connections_stay_out_of_the_log():
+    import logging
+    from dielify.server import _not_a_dropped_connection
+    try:
+        raise ConnectionResetError(10054, "An existing connection was forcibly closed by the remote host")
+    except ConnectionResetError:
+        import sys
+        exc = sys.exc_info()
+    noise = logging.LogRecord("asyncio", logging.ERROR, "", 0,
+                              "Exception in callback _ProactorBasePipeTransport._call_connection_lost()", None, exc)
+    real = logging.LogRecord("asyncio", logging.ERROR, "", 0, "Task exception was never retrieved", None, None)
+    assert not _not_a_dropped_connection(noise) and _not_a_dropped_connection(real)
