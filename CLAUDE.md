@@ -655,7 +655,15 @@ src/dielify/
     (kotlinx encodeDefaults = false), so Jam songs went without "type" and the PC answered 422: starting a Jam with
     a song playing and "Add to Jam" from phones failed. Fixed both sides: DownloadRequest.type defaults to "song"
     (fixes installed phones once the PC updates), JamSongIn.type has @EncodeDefault. Other request bodies checked:
-    their defaults match the PC's. Next: step 4, install on Josh's TV.
+    their defaults match the PC's.
+  - Step 4 (10 Nov): Josh's TV = **TCL Smart TV Pro (G05), Google TV on Android 11 (SDK 30)**, 1920x1080 @ 320 dpi,
+    192.168.1.26. No "Wireless debugging" on Android 11: with USB debugging on, `adb connect 192.168.1.26:5555`
+    works (Josh allowed this PC once). Its screencap prints two text lines before the PNG (strip to PNG).
+    Josh installed the dist\ PC build (0.9.9 number, TV support); the TV found the PC by mDNS on the real network
+    (firewall fine) and Josh signed it in from the PC. The signed release APK (dist\Dielify-0.9.9.apk, local build,
+    not the published one) is on the TV. **Crash found on the real TV:** KeyEvent.isMediaSessionKey is API 31+, so
+    the first remote key crashed the app on Android 11 (emulators were 36/37). Fixed with our own MEDIA_KEYS set;
+    lint showed no other NewApi problems. Test on the real TV (or an API 30 emulator), not only new emulators.
 
 ## Backlog (Josh, 8 Nov; after Phase 8 item 6)
 

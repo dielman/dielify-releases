@@ -124,7 +124,7 @@ fun TvApp(vm: AppViewModel) {
     androidx.compose.runtime.DisposableEffect(activity) {
         activity?.keyHook = { e ->
             lastKey = System.currentTimeMillis()
-            val media = android.view.KeyEvent.isMediaSessionKey(e.keyCode)
+            val media = e.keyCode in MEDIA_KEYS
             // the key that wakes the screen does nothing else (play/pause and skip still work)
             if (idle && !media) { if (e.action == android.view.KeyEvent.ACTION_UP) idle = false; true } else false
         }
@@ -136,6 +136,15 @@ fun TvApp(vm: AppViewModel) {
         TvShell(vm, nav, player.hasItem, snackbar)
     }
 }
+
+/** The remote's media keys (KeyEvent.isMediaSessionKey only exists from Android 12; this TCL TV runs 11). */
+private val MEDIA_KEYS = setOf(
+    android.view.KeyEvent.KEYCODE_MEDIA_PLAY, android.view.KeyEvent.KEYCODE_MEDIA_PAUSE,
+    android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, android.view.KeyEvent.KEYCODE_MEDIA_NEXT,
+    android.view.KeyEvent.KEYCODE_MEDIA_PREVIOUS, android.view.KeyEvent.KEYCODE_MEDIA_STOP,
+    android.view.KeyEvent.KEYCODE_MEDIA_FAST_FORWARD, android.view.KeyEvent.KEYCODE_MEDIA_REWIND,
+    android.view.KeyEvent.KEYCODE_HEADSETHOOK,
+)
 
 /** How long without a key press before the cover display, while music plays. */
 const val IDLE_S = 90
