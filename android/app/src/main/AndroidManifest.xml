@@ -53,6 +53,7 @@
             android:name=".tv.TvActivity"
             android:exported="true"
             android:launchMode="singleTask"
+            android:taskAffinity="com.dielify.tv"
             android:banner="@drawable/tv_banner"
             android:screenOrientation="landscape">
             <intent-filter>
