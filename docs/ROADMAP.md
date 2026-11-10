@@ -272,7 +272,7 @@ Also owed from earlier releases: Josh hasn't yet confirmed on his devices most o
 - **Security review** (done 10 Nov: docs/SECURITY-REVIEW-0.9.11.md, 2 fixes) of the multi-user and kids code (`/security-review` plus the
   cross-profile tests), and a check that the parent's YouTube login can't leak to a child
   device.
-- **Restore drill**: restore last night's backup onto a test copy.
+- **Restore drill** (done 10 Nov, passed: docs/RESTORE-DRILL-0.9.11.md; backups had been off): restore last night's backup onto a test copy.
 - **Help pages** in the app for a non-technical person: first setup, adding a person, kids
   controls.
 - **Slimmer FFmpeg** (only with Josh's OK to download it; saves about 70 MB per update).

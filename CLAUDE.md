@@ -732,6 +732,11 @@ src/dielify/
     (auth.is_desktop_token(token, client)); tests now use TestClient(client=("127.0.0.1", 50000)).
     tests/test_cross_people.py: a second household probes 23 id endpoints + Subsonic, kid vs parent. 202 tests.
     Accepted risks listed there (plain HTTP on home Wi-Fi, TV USB debugging, open cover provider).
+  - **Restore drill done 10 Nov: passed** (docs/RESTORE-DRILL-0.9.11.md, build/restore_drill.py: copies the newest
+    backup to a temp DIELIFY_HOME, backup.restore, integrity check, counts, every track's file, DPAPI sign-ins; prints
+    no secrets). Found first: **backups were off** on Josh's PC; he turned them on (E:\Music\Dielify-backups).
+    All 2,970 songs' files present, YouTube + 3 phone logins readable. Advice given: backups share drive E: with the
+    music; sign-ins only restore on the same Windows user.
 
 ## Backlog (Josh, 8 Nov; after Phase 8 item 6)
 
