@@ -132,7 +132,7 @@ src/dielify/
 | 6 | Android app | Find, request and listen on the road | **Done** 2026-11-08 — closed by Josh before the car test ("assume it works"); Android Auto untested |
 | 7 | Polish (scope set by Josh 8 Nov) | Backups to E:, signed phone release with in-app updates, download-next, playlists, music-video fix | **Done** 2026-11-08 — 0.6.0 published; phone self-update to be confirmed with the first Phase 8 release (Josh) |
 | 8 | Listening features (Josh, 8 Nov) | 1 instant play + download, 2 play history + stats, 4 two-way playlist sync, 3 Dielify-made genre/vibe playlists, 5 outside discovery, 6 remote control between devices | In progress (branch `phase-8`) |
-| 9 | Road to 1.0 (Josh, 9 Nov) | Releases 0.9.1-0.9.11 in `docs/ROADMAP.md`: household + kids accounts first, then discovery, library, sound, phone, together, TV, hardening | In progress: 0.9.11 published 10 Nov; next 1.0.0 |
+| 9 | Road to 1.0 (Josh, 9 Nov) | Releases 0.9.1-0.9.11 in `docs/ROADMAP.md`: household + kids accounts first, then discovery, library, sound, phone, together, TV, hardening | In progress: 0.9.12 published 11 Nov; next 1.0.0 |
 
 ## Current status
 
@@ -750,6 +750,12 @@ src/dielify/
   is refused asks a connected TV on >= 912 to update itself (remote message {"type":"update"} -> SelfUpdate.kt: check
   the PC, download, Android's install prompt, waits until TvActivity is on screen). Older TV apps get "update it once
   on the TV: Settings > Check for updates". The TV-side prompt is untested on a device. 217 tests.
+- **Published v0.9.12** (11 Nov; 217 tests; Josh: "Publish"): the cable-TV self-update above, plus the TV update
+  screen fix: a TV that never let Dielify install apps only showed "Check for updates" (canInstall() false on every
+  fresh TV, the button never opened the switch); now it shows Allow updates (ACTION_MANAGE_UNKNOWN_APP_SOURCES), and
+  AppUpdater.installBlocked() (DISALLOW_INSTALL_UNKNOWN_SOURCES[_GLOBALLY]) says when installs are off for the TV.
+  The EKO's Settings has no visible Unknown sources entry, so the Garage TV (0.9.10) needs 0.9.12 from the USB stick
+  once. Not yet tried on a TV.
 - **Garmin Edge 530 trial (11 Nov):** garmin/ = Connect IQ app (music controls + ride numbers from
   Activity.getActivityInfo); builds, 5 unit tests pass in the Edge 530 simulator (SDK 9.3.0 + device files + developer
   key in E:\Legit\Code\dielify-build-tools\garmin; device files downloaded by Josh's sign-in into Claude's

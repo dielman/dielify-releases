@@ -305,6 +305,13 @@ Also owed from earlier releases: Josh hasn't yet confirmed on his devices most o
   E:\Legit\Code\dielify-build-toolsfmpeg, used by packaging/build.py. ffmpeg.exe 228 -> 103 MB; installer 127 -> 95 MB.
   Checked: all 214 tests with it, a real Opus and AAC remux, ebur128 filter present.
 
+## 0.9.12: TV update fixes (published 11 Nov)
+
+- TVs on a cable (no adb over Ethernet) update themselves when the PC asks; TVs report their app version.
+- TV update screen: Allow updates button when the TV hasn't let Dielify install apps yet; says so when installs are
+  switched off for the whole TV.
+- Next: 1.0.0.
+
 ## Not on the road to 1.0
 
 Lyrics (removed in 0.9.9, Josh). Hi-res audio (YouTube's limit is ~256k), an AI DJ voice, karaoke voice removal, podcasts,
