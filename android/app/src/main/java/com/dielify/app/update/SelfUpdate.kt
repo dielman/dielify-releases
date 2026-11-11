@@ -30,6 +30,7 @@ object SelfUpdate {
             return
         }
         waiting = false
+        if (app.updater.installBlocked()) { Log.i(TAG, "Asked to update: installs are switched off on this TV"); return }
         val intent = if (!app.updater.canInstall()) app.updater.openInstallPermission()
         else app.updater.download(s.release) ?: return
         runCatching { context.startActivity(intent) }.onFailure { waiting = true; Log.w(TAG, "No install prompt: $it") }

@@ -149,6 +149,14 @@ class AppUpdater(private val context: Context, private val server: Server) {
     /** Android asks once whether Dielify may install updates. */
     fun canInstall(): Boolean = context.packageManager.canRequestPackageInstalls()
 
+    /** Installing apps is switched off on this device (e.g. a Family Link kids profile on a TV): no switch
+     * in Settings can allow it, so the PC (adb) or a USB stick has to install updates. */
+    fun installBlocked(): Boolean {
+        val um = context.getSystemService(android.os.UserManager::class.java) ?: return false
+        return um.hasUserRestriction(android.os.UserManager.DISALLOW_INSTALL_UNKNOWN_SOURCES) ||
+            um.hasUserRestriction(android.os.UserManager.DISALLOW_INSTALL_UNKNOWN_SOURCES_GLOBALLY)
+    }
+
     fun openInstallPermission(): Intent =
         Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${BuildConfig.APPLICATION_ID}"))
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
