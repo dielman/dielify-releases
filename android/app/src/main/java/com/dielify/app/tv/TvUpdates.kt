@@ -41,6 +41,10 @@ fun TvUpdates(vm: AppViewModel) {
     LifecycleResumeEffect(Unit) { resumed++; onPauseOrDispose {} }
     val allowed = remember(s, resumed) { vm.updater.canInstall() }
     val blocked = remember(s, resumed) { vm.updater.installBlocked() }
+    // set once Allow updates has opened TV Settings: still not allowed after that = the switch was greyed out
+    val askedOnce = remember { booleanArrayOf(false) }
+    // a check from before this TV signed in only asked GitHub; ask the PC again each time Settings opens
+    LaunchedEffect(Unit) { vm.updater.check(force = true) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         val line = when (s) {
             UpdateState.NotSetUp -> "Test build: updates come over USB from the PC."
@@ -50,6 +54,10 @@ fun TvUpdates(vm: AppViewModel) {
                 "Dielify ${s.release.version} is ready, but this TV doesn't let apps install updates (switched off " +
                     "for the whole TV, e.g. by a kids profile). Your PC installs it when the TV is on Wi-Fi " +
                     "(Settings > People & phones > Update TVs now); on a cable, install it from a USB stick."
+            else if (!allowed && askedOnce[0])
+                "Dielify ${s.release.version} is ready, but Dielify still isn't allowed to install it. If the switch " +
+                    "was greyed out (\"disabled by admin\", e.g. by a kids profile), this TV can't install updates itself: " +
+                    "your PC installs them when the TV is on Wi-Fi, otherwise use a USB stick."
             else if (!allowed)
                 "Dielify ${s.release.version} is ready from your PC. First let Dielify install updates: press " +
                     "Allow updates, switch Dielify on, then press Back."
@@ -77,7 +85,7 @@ fun TvUpdates(vm: AppViewModel) {
                         if (blocked) scope.launch { vm.updater.check(force = true) }
                         else if (vm.updater.canInstall())
                             scope.launch { vm.updater.download(s.release)?.let { context.startActivity(it) } }
-                        else runCatching { context.startActivity(vm.updater.openInstallPermission()) }.onFailure {
+                        else runCatching { askedOnce[0] = true; context.startActivity(vm.updater.openInstallPermission()) }.onFailure {
                             Toast.makeText(context, "Open the TV's Settings > Apps > Security & restrictions > " +
                                 "Unknown sources and switch Dielify on", Toast.LENGTH_LONG).show()
                         }
