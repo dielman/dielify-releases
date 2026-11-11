@@ -1,0 +1,17 @@
+<iq:manifest xmlns:iq="http://www.garmin.com/xml/connectiq" version="1">
+    <!-- Dielify for the Edge: music controls with ride numbers (trial). The id is also what the
+         Dielify phone app listens for (Garmin's companion SDK). -->
+    <iq:application entry="DielifyApp" id="6BDF56C1A2BF4FB2A8278F9FBAB88E5C" launcherIcon="@Drawables.LauncherIcon"
+                    minApiLevel="3.0.0" name="@Strings.AppName" type="watch-app">
+        <iq:products>
+            <iq:product id="edge530"/>
+        </iq:products>
+        <iq:permissions>
+            <iq:uses-permission id="Communications"/>
+        </iq:permissions>
+        <iq:languages>
+            <iq:language>eng</iq:language>
+        </iq:languages>
+        <iq:barrels/>
+    </iq:application>
+</iq:manifest>

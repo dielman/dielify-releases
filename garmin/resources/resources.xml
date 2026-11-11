@@ -1,0 +1,8 @@
+<resources>
+    <drawables>
+        <bitmap id="LauncherIcon" filename="images/icon.png" />
+    </drawables>
+    <strings>
+        <string id="AppName">Dielify</string>
+    </strings>
+</resources>
