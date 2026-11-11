@@ -149,6 +149,7 @@ class Device:
     paused_at: float = field(default_factory=time.monotonic)
     told_pause_at: float = 0.0  # when the hub last told it to pause (0 = it has since)
     ip: str = ""  # where it connected from (TVs: the PC installs their updates there, tvupdate.py)
+    version: int = 0  # the app's version code, from its hello (0 = an app from before 0.9.12)
 
     def public(self) -> dict:
         st = dict(self.state)
@@ -164,6 +165,7 @@ class Hub:
         self.active: dict[str, str] = {}  # profile -> device id
         self._tasks: set[asyncio.Task] = set()
         self.lock = asyncio.Lock()
+        self.loop: asyncio.AbstractEventLoop | None = None  # for calls from other threads (tvupdate)
 
     def of(self, profile: str) -> list[Device]:
         return [d for (p, _), d in self.devices.items() if p.lower() == profile.lower()]
@@ -219,6 +221,7 @@ class Hub:
         return True
 
     async def join(self, d: Device) -> None:
+        self.loop = asyncio.get_running_loop()
         old = self.devices.get((d.profile, d.device))
         self.devices[(d.profile, d.device)] = d
         if old is not None and old.ws is not d.ws:
@@ -368,6 +371,10 @@ async def remote(ws: WebSocket) -> None:
         name = str(hello.get("name") or "")[:60] or ((platform.node() or "PC") if desktop else "Phone")
         kind = "pc" if desktop or hello.get("kind") == "pc" else "tv" if hello.get("kind") == "tv" else "phone"
         d = Device(ws, profile, str(hello["device"])[:100], name, kind, ip=ws.client.host if ws.client else "")
+        try:
+            d.version = int(hello.get("version") or 0)
+        except (TypeError, ValueError):
+            pass
         if kind == "tv":
             from . import tvupdate
             await asyncio.to_thread(tvupdate.remember, d.ip, name)
@@ -389,6 +396,27 @@ async def remote(ws: WebSocket) -> None:
     finally:
         if d is not None:
             await hub.leave(d)
+
+
+# TVs that can update themselves when the PC asks (the "update" message, 0.9.12)
+SELF_UPDATE_FROM = 912
+
+
+def tv_at(ip: str) -> Device | None:
+    """The TV connected for remote control from this address, if any."""
+    return next((d for d in list(hub.devices.values()) if d.kind == "tv" and d.ip == ip), None)
+
+
+def ask_tv_to_update(ip: str) -> bool:
+    """Tell the TV at this address to update itself from the PC (it shows Android's install
+    prompt). For TVs the PC can't install on (e.g. on a cable: Android only allows network
+    debugging on Wi-Fi). Called from tvupdate's thread. False if no such TV can be asked."""
+    d = tv_at(ip)
+    if d is None or d.version < SELF_UPDATE_FROM or hub.loop is None:
+        return False
+    log.info("Remote: asking %s to update itself", d.name)
+    asyncio.run_coroutine_threadsafe(hub.send(d, {"type": "update"}), hub.loop)
+    return True
 
 
 def tv_playing(ip: str) -> bool:

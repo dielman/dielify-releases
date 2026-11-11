@@ -744,6 +744,18 @@ src/dielify/
   wizard + restore, Help pages, phones learn PC addresses, log fixes + details.py repair). The v0.9.11 tag on GitHub
   points at main's commit (gh created it there); moving it to 2101f20 needs a force-push that auto mode blocked.
 
+- **After 0.9.11 (11 Nov, not released):** Garage TV (EKO, on Ethernet) showed "Can't reach the TV" in Settings > TVs
+  while playing music: adb is refused on Ethernet (Android allows network debugging on Wi-Fi only). Fixed: TVs send
+  their app version in the remote hello (Device.version); tvupdate trusts it ("Up to date" with no adb), and when adb
+  is refused asks a connected TV on >= 912 to update itself (remote message {"type":"update"} -> SelfUpdate.kt: check
+  the PC, download, Android's install prompt, waits until TvActivity is on screen). Older TV apps get "update it once
+  on the TV: Settings > Check for updates". The TV-side prompt is untested on a device. 217 tests.
+- **Garmin Edge 530 trial (11 Nov):** garmin/ = Connect IQ app (music controls + ride numbers from
+  Activity.getActivityInfo); builds, 5 unit tests pass in the Edge 530 simulator (SDK 9.3.0 + device files + developer
+  key in E:\Legit\Code\dielify-build-tools\garmin; device files downloaded by Josh's sign-in into Claude's
+  redirected AppData). **Real Edge 530: Connect IQ apps can't open while a ride records**, so a separate controls
+  screen is out. Offered Josh: data field (song) + Bluetooth handlebar remote, or Dielify's own ride-recording app.
+
 ## Backlog (Josh, 8 Nov; after Phase 8 item 6)
 
 - **Published v0.8.11 (9 Nov; not yet confirmed by Josh on device): ratings + ban.** `ratings.py` (table

@@ -81,3 +81,31 @@ def test_pc_settings_and_pairing_remember_the_tv(fake):
         assert after["tvs"][0]["result"] == "Updated to 0.9.10"
         assert c.delete("/api/desktop/tvs/192.168.1.26", headers=desk(c)).status_code == 204
         assert c.get("/api/desktop/tvs", headers=desk(c)).json()["tvs"] == []
+
+
+def test_a_tv_on_a_cable_is_asked_to_update_itself(fake, monkeypatch):
+    """Josh's Garage TV (11 Nov): on Ethernet, Android allows no network debugging, so adb is
+    refused while the TV is on and playing. The PC asks it over Dielify's own connection."""
+    from types import SimpleNamespace
+    from dielify import remote
+    tvupdate.remember("192.168.1.95", "Garage TV")
+    fake.connect = "failed to connect to '192.168.1.95:5555': Connection refused"
+    asked = []
+    monkeypatch.setattr(remote, "ask_tv_to_update", lambda ip: asked.append(ip) or True)
+    monkeypatch.setattr(remote, "tv_at", lambda ip: SimpleNamespace(version=909))  # older than the PC's 910
+    assert tvupdate.update_all()["192.168.1.95"] == "Asked the TV to update itself: press Install on the TV"
+    assert asked == ["192.168.1.95"]
+
+    # a TV app from before it could do that: say how to update it once by hand
+    monkeypatch.setattr(remote, "ask_tv_to_update", lambda ip: False)
+    monkeypatch.setattr(remote, "tv_at", lambda ip: SimpleNamespace(version=0))
+    assert "Check for updates" in tvupdate.update_all()["192.168.1.95"]
+
+
+def test_a_tv_that_says_its_up_to_date_needs_no_adb(fake, monkeypatch):
+    from types import SimpleNamespace
+    from dielify import remote
+    tvupdate.remember("192.168.1.95", "Garage TV")
+    monkeypatch.setattr(remote, "tv_at", lambda ip: SimpleNamespace(version=910))   # the PC carries 910
+    assert tvupdate.update_all()["192.168.1.95"] == "Up to date (0.9.10)"
+    assert fake.calls == []

@@ -86,7 +86,7 @@ interface RemotePlayer {
  * the playback service runs (the app is open, or music is playing / was recently).
  * Reconnects by itself, finding the PC again if the network changed.
  */
-class RemoteClient(context: Context, private val server: Server) {
+class RemoteClient(private val context: Context, private val server: Server) {
     private val tv = context.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_LEANBACK)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val client = server.http.newBuilder().readTimeout(0, TimeUnit.SECONDS)
@@ -211,6 +211,7 @@ class RemoteClient(context: Context, private val server: Server) {
         override fun onOpen(webSocket: WebSocket, response: Response) {
             webSocket.send(buildJsonObject {
                 put("type", "hello"); put("device", deviceId); put("name", name); put("kind", if (tv) "tv" else "phone")
+                put("version", com.dielify.app.BuildConfig.VERSION_CODE)
             }.toString())
             _connected.value = true
             stateChanged()  // the player is read on the main thread
@@ -230,6 +231,8 @@ class RemoteClient(context: Context, private val server: Server) {
                     scope.launch { player?.run(c.command, c.from) }
                 }
                 "error" -> _errors.value = msg["message"]?.jsonPrimitive?.content
+                // the PC can't install on this TV (on a cable): it asks the TV to update itself
+                "update" -> if (tv) scope.launch { com.dielify.app.update.SelfUpdate.run(context.applicationContext) }
             }
         }
 

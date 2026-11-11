@@ -261,3 +261,20 @@ def test_parents_see_and_control_their_kids_devices():
         assert "isn't connected" in err["message"]
         for ws in (parent, kid):
             ws.__exit__(None, None, None)
+
+
+def test_the_pc_can_ask_a_tv_to_update_itself():
+    """0.9.12: TVs say their app version; the PC can tell a new enough TV to update itself."""
+    with make_client() as c:
+        tv = c.websocket_connect("/api/remote", headers=login(c, device="Garage TV"))
+        tv.__enter__()
+        tv.send_json({"type": "hello", "device": "tv-9", "name": "Garage TV", "kind": "tv", "version": 912})
+        devices(tv)
+        found = remote.tv_at(remote.hub.find(next(iter(remote.hub.devices))[0], "tv-9").ip)
+        assert found is not None and found.version == 912
+        assert remote.ask_tv_to_update(found.ip)
+        while True:
+            msg = tv.receive_json()
+            if msg["type"] == "update":
+                break
+        tv.__exit__(None, None, None)

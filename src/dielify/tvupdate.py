@@ -128,16 +128,28 @@ def update_tv(ip: str, adb: str | None = None, app: dict | None = None) -> str:
     """Bring one TV up to the app this PC carries. Returns what happened, in words."""
     adb = adb or find_adb()
     app = app or appshare.available()
-    if adb is None:
-        return "The Android tools aren't on this PC (adb), so it can't update TVs"
     if app is None:
         return "This PC has no TV app to install"
+    from . import remote
+    tv = remote.tv_at(ip)
+    if tv is not None and tv.version >= app["version_code"]:  # it told us its version itself
+        result = f"Up to date ({app['version']})"
+        _note(ip, version_code=tv.version, result=result, checked=time.time())
+        return result
     target = f"{ip}:{ADB_PORT}"
-    rc, out = _run(adb, "connect", target, timeout=20)
+    rc, out = _run(adb, "connect", target, timeout=20) if adb else (127, "")
     if "unauthorized" in out or "failed to authenticate" in out:
         result = "The TV hasn't allowed this PC yet: press Allow on the TV, then try again"
     elif rc != 0 or not ("connected" in out):
-        result = "Can't reach the TV: is it on, with USB debugging turned on (Developer options)?"
+        # No installs over the network (on a cable, where Android allows no network debugging,
+        # or debugging is off). A TV that's open in Dielify can update itself instead.
+        if remote.ask_tv_to_update(ip):
+            result = "Asked the TV to update itself: press Install on the TV"
+        elif tv is not None:
+            result = ("This TV can't take installs from the PC (on a cable, Android allows none). Update it once on "
+                      "the TV: Dielify > Settings > Check for updates. After that the PC asks it to update itself")
+        else:
+            result = "The TV isn't connected: open Dielify on it (and turn on USB debugging in Developer options "                      "if it's on Wi-Fi)"
     else:
         have = installed_code(adb, target)
         if have is None:
@@ -188,7 +200,7 @@ class Worker:
         while not self._stop.wait(wait):
             wait = CHECK_EVERY_S
             try:
-                if appshare.available() and known() and find_adb():
+                if appshare.available() and known():  # adb, or the TV updating itself
                     results = update_all(self.playing)
                     if any(r.startswith("Playing") for r in results.values()):
                         wait = 10 * 60

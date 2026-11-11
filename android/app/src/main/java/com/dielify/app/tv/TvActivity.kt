@@ -1,5 +1,7 @@
 package com.dielify.app.tv
 
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -69,6 +71,17 @@ class TvActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent { DielifyTheme { androidx.compose.material3.Surface(Modifier.fillMaxSize(), color = Bg) { TvApp(vm) } } }
+    }
+
+    // An update the PC asked for opens its install prompt only while Dielify is on screen.
+    override fun onResume() {
+        super.onResume()
+        lifecycleScope.launch { com.dielify.app.update.SelfUpdate.onScreen(this@TvActivity) }
+    }
+
+    override fun onPause() {
+        com.dielify.app.update.SelfUpdate.visible = false
+        super.onPause()
     }
 }
 
