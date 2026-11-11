@@ -841,6 +841,11 @@ src/dielify/
 
 ## Decisions log
 
+- 2026-11-11 (Josh): **Garmin dropped** ("forget it"). Facts found: Edge 530 = Connect IQ 3.3, no touchscreen (7
+  buttons), no built-in music controls; data fields only talk to the phone from API 5.0; Connect IQ apps can't open
+  during a recorded ride; Grit/Flow/jumps/ClimbPro aren't available to apps. garmin/ stays in the repo, unused. The
+  trial Dielify.prg is still in the Edge's Garmin\Apps folder.
+
 - 2026-11-10 (Josh): **FFmpeg essentials build** in the installer (dielify-build-toolsfmpeg beside the repo,
   picked up by packaging/build.py; installer 127 -> 95 MB).
 
