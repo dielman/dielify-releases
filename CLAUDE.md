@@ -755,7 +755,14 @@ src/dielify/
   fresh TV, the button never opened the switch); now it shows Allow updates (ACTION_MANAGE_UNKNOWN_APP_SOURCES), and
   AppUpdater.installBlocked() (DISALLOW_INSTALL_UNKNOWN_SOURCES[_GLOBALLY]) says when installs are off for the TV.
   The EKO's Settings has no visible Unknown sources entry, so the Garage TV (0.9.10) needs 0.9.12 from the USB stick
-  once. Not yet tried on a TV.
+  once. **TV test 11 Nov (Google TV emulator + test copy serving signed 0.9.13/0.9.14 test builds): passed.** Fresh
+  0.9.12 -> Allow updates -> TV's Install unknown apps list -> switch -> Back -> Update -> 0.9.13; test PC with no adb
+  (find_adb patched, loopback counted as home) -> "Asked the TV to update itself" -> install prompt on the TV by itself
+  -> remote Left + OK -> 0.9.14 (first remote key only focuses the prompt). Real TCL got 0.9.12 from Josh's PC over adb
+  by itself (17:10). TCL fact: the kids profile's restriction is on user 12 only, user 0 shows none, so
+  installBlocked() can't see it; after Allow updates it now explains a greyed-out switch (656ae3a, unreleased). Also
+  unreleased: TV Settings re-checks the PC on open. Noticed, not fixed: RemoteClient keeps its back-off (up to 60 s)
+  after a TV signs in; a TV with a dead key locks 127.0.0.1 out of the test copy (10 failures / 15 min).
 - **Garmin Edge 530 trial (11 Nov):** garmin/ = Connect IQ app (music controls + ride numbers from
   Activity.getActivityInfo); builds, 5 unit tests pass in the Edge 530 simulator (SDK 9.3.0 + device files + developer
   key in E:\Legit\Code\dielify-build-tools\garmin; device files downloaded by Josh's sign-in into Claude's
