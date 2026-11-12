@@ -132,7 +132,7 @@ src/dielify/
 | 6 | Android app | Find, request and listen on the road | **Done** 2026-11-08 — closed by Josh before the car test ("assume it works"); Android Auto untested |
 | 7 | Polish (scope set by Josh 8 Nov) | Backups to E:, signed phone release with in-app updates, download-next, playlists, music-video fix | **Done** 2026-11-08 — 0.6.0 published; phone self-update to be confirmed with the first Phase 8 release (Josh) |
 | 8 | Listening features (Josh, 8 Nov) | 1 instant play + download, 2 play history + stats, 4 two-way playlist sync, 3 Dielify-made genre/vibe playlists, 5 outside discovery, 6 remote control between devices | In progress (branch `phase-8`) |
-| 9 | Road to 1.0 (Josh, 9 Nov) | Releases 0.9.1-0.9.11 in `docs/ROADMAP.md`: household + kids accounts first, then discovery, library, sound, phone, together, TV, hardening | In progress: 0.9.12 published 11 Nov; next 1.0.0 |
+| 9 | Road to 1.0 (Josh, 9 Nov) | Releases 0.9.1-0.9.11 in `docs/ROADMAP.md`: household + kids accounts first, then discovery, library, sound, phone, together, TV, hardening | In progress: 0.9.13 published 12 Nov; next 1.0.0 |
 
 ## Current status
 
@@ -763,7 +763,9 @@ src/dielify/
   installBlocked() can't see it; after Allow updates it now explains a greyed-out switch (656ae3a, unreleased). Also
   unreleased: TV Settings re-checks the PC on open. Noticed, not fixed: RemoteClient keeps its back-off (up to 60 s)
   after a TV signs in; a TV with a dead key locks 127.0.0.1 out of the test copy (10 failures / 15 min).
-- **Playlists from a link (Josh, 12 Nov; built, not released):** `linkimport.py` + POST /api/playlists/from-link {url}
+- **Published v0.9.13** (12 Nov; 237 tests; installer 95 MB, APK 8.8 MB; not yet tried by Josh): playlists from a link
+  (below) + the TV update screen fixes (656ae3a).
+- **Playlists from a link (Josh, 12 Nov; in 0.9.13):** `linkimport.py` + POST /api/playlists/from-link {url}
   (202, job) and GET /api/playlists/from-link/{id}. Links: Spotify playlist/album (open.spotify.com, /intl-xx/,
   /embed/, spotify:playlist:, spotify.link short links followed), YouTube / YouTube Music playlist (list=, not RD
   mixes) or album (/browse/MPREb_). Makes a Dielify-only playlist at once, fills it in a background thread (batches of

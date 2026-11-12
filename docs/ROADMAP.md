@@ -312,7 +312,7 @@ Also owed from earlier releases: Josh hasn't yet confirmed on his devices most o
   switched off for the whole TV.
 - Next: 1.0.0.
 
-## Next release (not published yet)
+## 0.9.13: Playlists from a link (published 12 Nov)
 
 - Playlists from a link (Josh, 12 Nov): Spotify or YouTube playlist / album link -> a Dielify playlist (PC "From a
   link", phone "Link" button and Share > Dielify). Spotify: first 100 songs.
