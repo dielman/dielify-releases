@@ -763,6 +763,18 @@ src/dielify/
   installBlocked() can't see it; after Allow updates it now explains a greyed-out switch (656ae3a, unreleased). Also
   unreleased: TV Settings re-checks the PC on open. Noticed, not fixed: RemoteClient keeps its back-off (up to 60 s)
   after a TV signs in; a TV with a dead key locks 127.0.0.1 out of the test copy (10 failures / 15 min).
+- **Playlists from a link (Josh, 12 Nov; built, not released):** `linkimport.py` + POST /api/playlists/from-link {url}
+  (202, job) and GET /api/playlists/from-link/{id}. Links: Spotify playlist/album (open.spotify.com, /intl-xx/,
+  /embed/, spotify:playlist:, spotify.link short links followed), YouTube / YouTube Music playlist (list=, not RD
+  mixes) or album (/browse/MPREb_). Makes a Dielify-only playlist at once, fills it in a background thread (batches of
+  10), songs download as usual. Spotify = public embed page, no account, **first 100 songs only** (checked: All Out 80s
+  has 150, page gives 100; longer would need Josh's own Spotify developer app); each song via discovery.find_song
+  (artist must match, cached 30 days). Live check: Today's Top Hits first 15 all matched correctly. 3 lookups failing in
+  a row = "YouTube Music isn't answering", job fails (keeps what it found; no empty playlist left). Kids: YouTube links
+  to the parent's own playlists refused (_parents_own_playlist). PC: Library > Playlists "From a link" dialog with
+  progress + not-found list. Phone: "Link" button + share target (ACTION_SEND text/plain: Share > Dielify from the
+  Spotify / YouTube app starts the import at once), ImportLinkDialog. Checked on the test copy (PC in the browser,
+  phone emulator incl. share). 237 tests.
 - **Garmin Edge 530 trial (11 Nov):** garmin/ = Connect IQ app (music controls + ride numbers from
   Activity.getActivityInfo); builds, 5 unit tests pass in the Edge 530 simulator (SDK 9.3.0 + device files + developer
   key in E:\Legit\Code\dielify-build-tools\garmin; device files downloaded by Josh's sign-in into Claude's

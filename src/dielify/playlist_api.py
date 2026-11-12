@@ -56,6 +56,25 @@ class ImportPlaylist(BaseModel):
     yt_id: str = Field(min_length=2, max_length=80)
 
 
+class LinkIn(BaseModel):
+    url: str = Field(min_length=5, max_length=500, description="A Spotify or YouTube (Music) playlist or album link")
+
+
+class ImportJob(BaseModel):
+    id: str
+    url: str
+    source: str = Field(description="spotify | youtube")
+    state: str = Field(description="working | done | failed")
+    name: str = Field(description="The new playlist's name (empty until the link has been read)")
+    playlist_id: int | None = Field(description="The new playlist (set as soon as it exists; it fills while working)")
+    total: int = Field(description="Songs in the original")
+    checked: int = Field(description="Songs looked at so far")
+    added: int = Field(description="Songs put in the new playlist")
+    missing: list[str] = Field(description="\"Artist – Title\" of songs YouTube Music doesn't have")
+    error: str | None = None
+    note: str | None = Field(None, description="Something to tell the person, e.g. Spotify's 100-song limit")
+
+
 class RenamePlaylist(BaseModel):
     name: str = Field(min_length=1, max_length=150)
 
@@ -175,6 +194,34 @@ def import_playlist(body: ImportPlaylist, request: Request, s: Session = Depends
     """Start syncing one of your YouTube Music playlists (its songs are downloaded)."""
     _not_kid(s)
     return _detail(s, _guard(lambda: _engine(request).import_youtube(s.user.profile, body.yt_id)))
+
+
+@router.post("/playlists/from-link", response_model=ImportJob, status_code=202)
+def import_from_link(body: LinkIn, request: Request, s: Session = Depends(session)) -> ImportJob:
+    """Make a Dielify playlist from a Spotify or YouTube playlist / album link. Returns at once;
+    poll GET /playlists/from-link/{id} (the playlist fills while it works). Spotify: first 100 songs,
+    each looked up on YouTube Music."""
+    from . import linkimport
+    from .custom_api import _parents_own_playlist, youtube
+    try:
+        link = linkimport.parse(body.url)
+    except ValueError as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e)) from e
+    except Exception as e:  # noqa: BLE001 - a short link that couldn't be followed
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Couldn't open that link") from e
+    if s.kid and link.source == "youtube" and link.kind == "playlist" and _parents_own_playlist(s, link.id):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Not available in your account")
+    j = linkimport.Importer(youtube.call, _engine(request)).start(s.user.profile, link, body.url.strip())
+    return ImportJob(**linkimport.as_dict(j))
+
+
+@router.get("/playlists/from-link/{job_id}", response_model=ImportJob)
+def import_progress(job_id: str, s: Session = Depends(session)) -> ImportJob:
+    from . import linkimport
+    j = linkimport.job(job_id, s.user.profile)
+    if j is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No such import")
+    return ImportJob(**linkimport.as_dict(j))
 
 
 @router.post("/playlists/smart", response_model=PlaylistDetail, status_code=201)

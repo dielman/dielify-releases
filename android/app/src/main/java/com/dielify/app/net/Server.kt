@@ -321,6 +321,9 @@ class Server(private val context: Context, private val accounts: AccountStore) {
     suspend fun createPlaylist(name: String, onYoutube: Boolean): PlaylistDetail =
         json.decodeFromString(send("POST", "api/playlists",
             json.encodeToString(NewPlaylist.serializer(), NewPlaylist(name, onYoutube))))
+    suspend fun importFromLink(url: String): ImportJob =
+        json.decodeFromString(send("POST", "api/playlists/from-link", json.encodeToString(LinkIn.serializer(), LinkIn(url))))
+    suspend fun importProgress(id: String): ImportJob = get("api/playlists/from-link/$id")
     suspend fun importPlaylist(ytId: String): PlaylistDetail =
         json.decodeFromString(send("POST", "api/playlists/import",
             json.encodeToString(ImportPlaylist.serializer(), ImportPlaylist(ytId))))

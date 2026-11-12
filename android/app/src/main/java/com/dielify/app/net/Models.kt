@@ -271,6 +271,24 @@ data class MixStatus(
 @Serializable data class NewPlaylist(val name: String, @SerialName("on_youtube") val onYoutube: Boolean)
 @Serializable data class ImportPlaylist(@SerialName("yt_id") val ytId: String)
 @Serializable data class RenamePlaylist(val name: String)
+@Serializable data class LinkIn(val url: String)
+
+/** A playlist being made from a Spotify / YouTube link (POST api/playlists/from-link). */
+@Serializable
+data class ImportJob(
+    val id: String,
+    val url: String = "",
+    val source: String = "",
+    val state: String = "working",   // working | done | failed
+    val name: String = "",
+    @SerialName("playlist_id") val playlistId: Long? = null,
+    val total: Int = 0,
+    val checked: Int = 0,
+    val added: Int = 0,
+    val missing: List<String> = emptyList(),
+    val error: String? = null,
+    val note: String? = null,
+)
 
 @Serializable
 data class SongIn(

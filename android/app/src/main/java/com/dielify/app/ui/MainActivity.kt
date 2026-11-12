@@ -62,8 +62,15 @@ class MainActivity : ComponentActivity() {
         openPairLink(intent)
     }
 
-    /** A TV's QR code scanned with the phone's own camera app: dielify://pair/<code>. */
+    /** A TV's QR code scanned with the phone's own camera app: dielify://pair/<code>. Or a playlist
+     * shared from the Spotify / YouTube app ("Share" > Dielify): make a Dielify playlist of it. */
     private fun openPairLink(intent: android.content.Intent?) {
+        if (intent?.action == android.content.Intent.ACTION_SEND) {
+            val text = intent.getStringExtra(android.content.Intent.EXTRA_TEXT) ?: return
+            val link = Regex("""(https?://\S+|spotify:(?:playlist|album):\w+)""").find(text)?.value ?: text.trim()
+            vm.importLink.value = link
+            return
+        }
         val uri = intent?.data ?: return
         if (uri.scheme == "dielify" && uri.host == "pair") vm.open(Screen.PairTv(uri.lastPathSegment))
     }
@@ -104,6 +111,7 @@ fun App(vm: AppViewModel) {
         }
     }
     AddToPlaylistDialog(vm)
+    ImportLinkDialog(vm)
     DevicePicker(vm)
     UpNextSheet(vm)
     CompositionLocalProvider(LocalSnackbar provides snackbar) { Box(Modifier.fillMaxSize()) {

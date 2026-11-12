@@ -66,6 +66,7 @@ const ICONS = {
   personAdd: "M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z",
   play: "M8 5v14l11-7z",
   add: "M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z",
+  link: "M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z",
   tv: "M21 3H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h5v2h8v-2h5c1.1 0 1.99-.9 1.99-2L23 5c0-1.1-.9-2-2-2zm0 14H3V5h18v12z",
   radio: "M3.24 6.15C2.51 6.43 2 7.17 2 8v12c0 1.1.89 2 2 2h16c1.11 0 2-.9 2-2V8c0-1.11-.89-2-2-2H8.3l8.26-3.34L15.88 1 3.24 6.15zM7 20c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm13-8h-2v-2h-2v2H4V8h16v4z",
   person: "M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z",
@@ -278,6 +279,7 @@ async function viewLibrary(tab = libTab) {
             : "Your genre, decade and vibe mixes appear here once your library has enough songs."),
         blendBox,
         h("div", { class: "row" }, h("h2", { style: "flex:1" }, "Your playlists"),
+          h("button", { onclick: () => importLink() }, icon("link", "ico lead"), "From a link"),
           h("button", { onclick: () => smartEditor() }, icon("add", "ico lead"), "Smart playlist"),
           h("button", { class: "primary", onclick: () => newPlaylist([]) }, "New playlist")),
         playlists.length ? h("div", { class: "grid" }, playlists.map(playlistCard))
@@ -907,6 +909,61 @@ async function newPlaylist(items) {
   if (d && items.length) await playlistAction(() => api(`/api/playlists/${d.playlist.id}/songs`, { method: "POST", body: { songs: items.map(songIn) } }),
     `Added to “${name}”`);
   if (d && view === "library") viewLibrary("playlists");
+}
+
+// A Dielify playlist from a Spotify or YouTube link: the server reads it, makes the playlist at once
+// and fills it in the background (Spotify songs are looked up on YouTube Music one by one).
+function importLink() {
+  const close = () => { stopped = true; box.remove(); };
+  let stopped = false;
+  const url = h("input", { type: "url", placeholder: "https://open.spotify.com/playlist/…", style: "width:100%" });
+  const status = h("div", { class: "muted small", style: "margin-top:10px" });
+  const extra = h("div", {});
+  const go = h("button", { class: "primary" }, "Import");
+  const cancel = h("button", { onclick: close }, "Close");
+  const show = (j) => {
+    const from = j.source === "spotify" ? "Spotify" : "YouTube";
+    if (j.state === "working") {
+      status.textContent = !j.total ? `Reading the ${from} link…`
+        : j.source === "spotify" ? `Finding the songs on YouTube Music: ${j.checked} of ${j.total} (${j.added} added)…`
+        : `Adding ${j.total} songs…`;
+      return;
+    }
+    if (j.state === "failed") { status.textContent = j.error || "That didn't work"; go.disabled = false; return; }
+    status.textContent = `“${j.name}”: ${j.added} of ${j.total} songs added. Songs not in your library are downloading.`;
+    extra.replaceChildren(
+      j.note ? h("p", { class: "muted small" }, j.note + ".") : "",
+      j.missing.length ? h("details", { style: "margin-top:8px" },
+        h("summary", {}, `${j.missing.length} not on YouTube Music`),
+        h("ul", { class: "small" }, j.missing.map((m) => h("li", {}, m)))) : "");
+    go.textContent = "Open the playlist";
+    go.disabled = false;
+    go.onclick = () => { close(); viewPlaylist(j.playlist_id); };
+  };
+  go.onclick = async () => {
+    const link = url.value.trim();
+    if (!link) return url.focus();
+    go.disabled = true;
+    status.textContent = "Reading the link…";
+    try {
+      let j = await api("/api/playlists/from-link", { method: "POST", body: { url: link } });
+      while (j.state === "working" && !stopped) {
+        show(j);
+        await new Promise((r) => setTimeout(r, 1000));
+        j = await api(`/api/playlists/from-link/${j.id}`);
+      }
+      if (!stopped) show(j);
+      if (view === "library") viewLibrary("playlists");
+    } catch (e) { status.textContent = e.message; go.disabled = false; }
+  };
+  url.addEventListener("keydown", (e) => { if (e.key === "Enter" && !go.disabled && go.textContent === "Import") go.onclick(); });
+  const box = h("div", { class: "modal", onclick: (e) => { if (e.target === box) close(); } },
+    h("div", { class: "panel" }, h("h2", {}, "Playlist from a link"),
+      h("p", { class: "muted small" }, "Paste a Spotify or YouTube playlist or album link. Dielify makes its own playlist of those songs, and the ones you don't have download. From Spotify it takes the first 100 songs."),
+      url, status, extra,
+      h("div", { class: "row", style: "margin-top:14px" }, go, cancel)));
+  document.body.append(box);
+  url.focus();
 }
 
 // "Add to playlist" chooser (a small pop-up over the current screen)

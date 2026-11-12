@@ -312,6 +312,12 @@ Also owed from earlier releases: Josh hasn't yet confirmed on his devices most o
   switched off for the whole TV.
 - Next: 1.0.0.
 
+## Next release (not published yet)
+
+- Playlists from a link (Josh, 12 Nov): Spotify or YouTube playlist / album link -> a Dielify playlist (PC "From a
+  link", phone "Link" button and Share > Dielify). Spotify: first 100 songs.
+- TV update screen: re-checks the PC when Settings opens; explains a greyed-out install switch.
+
 ## Not on the road to 1.0
 
 Lyrics (removed in 0.9.9, Josh). Hi-res audio (YouTube's limit is ~256k), an AI DJ voice, karaoke voice removal, podcasts,

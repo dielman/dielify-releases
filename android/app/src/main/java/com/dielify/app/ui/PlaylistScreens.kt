@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DownloadForOffline
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Shuffle
@@ -104,6 +105,10 @@ fun PlaylistsTab(vm: AppViewModel) {
             item {
                 Row(Modifier.fillMaxWidth().padding(16.dp, 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("Your playlists", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                    OutlinedButton(onClick = { vm.importLink.value = "" }) {
+                        Icon(Icons.Filled.Link, null); Spacer(Modifier.width(4.dp)); Text("Link")
+                    }
+                    Spacer(Modifier.width(8.dp))
                     FilledTonalButton(onClick = { creating = true }) { Icon(Icons.Filled.Add, null); Text("New") }
                 }
             }
@@ -341,6 +346,87 @@ fun AddToPlaylistDialog(vm: AppViewModel) {
         },
         confirmButton = {},
         dismissButton = { TextButton(onClick = close) { Text("Cancel") } },
+    )
+}
+
+/** A Dielify playlist from a Spotify or YouTube link: typed here, or shared to Dielify from the Spotify /
+ * YouTube app. The PC makes the playlist at once and fills it while this shows how far it got. */
+@Composable
+fun ImportLinkDialog(vm: AppViewModel) {
+    val shared by vm.importLink.collectAsStateWithLifecycle()
+    val start = shared ?: return
+    var url by remember(start) { mutableStateOf(start) }
+    var job by remember(start) { mutableStateOf<com.dielify.app.net.ImportJob?>(null) }
+    var error by remember(start) { mutableStateOf<String?>(null) }
+    var busy by remember(start) { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val close = { vm.importLink.value = null }
+    fun go() {
+        busy = true; error = null; job = null
+        scope.launch {
+            try {
+                var j = vm.server.importFromLink(url.trim())
+                while (j.state == "working") {
+                    job = j
+                    kotlinx.coroutines.delay(1_000)
+                    j = vm.server.importProgress(j.id)
+                }
+                job = j
+                if (j.state == "failed") { error = j.error ?: "That didn't work"; busy = false }
+                vm.playlistsVersion.value++
+            } catch (e: Exception) {
+                error = e.message ?: "That didn't work"; busy = false
+            }
+        }
+    }
+    // shared from another app: start straight away
+    LaunchedEffect(start) { if (start.isNotBlank()) go() }
+    val j = job
+    AlertDialog(
+        onDismissRequest = close,
+        title = { Text("Playlist from a link") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (j == null || j.state == "failed") {
+                    Text("Paste a Spotify or YouTube playlist or album link, or share one to Dielify from the Spotify or " +
+                        "YouTube app. From Spotify it takes the first 100 songs.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    OutlinedTextField(url, { url = it }, label = { Text("Link") }, singleLine = true, enabled = !busy)
+                }
+                val err = error
+                when {
+                    err != null -> Text(err, color = MaterialTheme.colorScheme.error)
+                    j == null -> if (busy) Text("Reading the link…")
+                    j.state == "working" -> {
+                        Text(if (j.total == 0) "Reading the link…"
+                            else if (j.source == "spotify") "Finding the songs on YouTube Music: ${j.checked} of ${j.total} (${j.added} added)…"
+                            else "Adding ${j.total} songs…")
+                        if (j.total > 0) androidx.compose.material3.LinearProgressIndicator(
+                            progress = { j.checked.toFloat() / j.total }, modifier = Modifier.fillMaxWidth())
+                    }
+                    j.state == "done" -> {
+                        Text("\"${j.name}\": ${j.added} of ${j.total} songs added. Songs not in your library are downloading on the PC.")
+                        j.note?.let {
+                            Text("$it.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        if (j.missing.isNotEmpty()) {
+                            Text("Not on YouTube Music (${j.missing.size}):", fontWeight = FontWeight.Medium)
+                            LazyColumn(Modifier.heightIn(max = 160.dp)) {
+                                items(j.missing) { Text(it, style = MaterialTheme.typography.bodySmall) }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            val pid = j?.playlistId
+            if (j != null && j.state == "done" && pid != null) TextButton(onClick = {
+                close(); vm.open(Screen.PlaylistPage(pid, j.name))
+            }) { Text("Open the playlist") }
+            else TextButton(enabled = !busy && url.isNotBlank(), onClick = { go() }) { Text("Import") }
+        },
+        dismissButton = { TextButton(onClick = close) { Text("Close") } },
     )
 }
 

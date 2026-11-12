@@ -453,6 +453,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Songs waiting for the "Add to playlist" picker (shown over any screen). */
     val addToPlaylist = MutableStateFlow<List<SongIn>?>(null)
 
+    /** A Spotify / YouTube link to make a playlist from (shared to Dielify, or typed): shows ImportLinkDialog. */
+    val importLink = MutableStateFlow<String?>(null)
+
     /** Bumped when playlists change, so open lists reload. */
     val playlistsVersion = MutableStateFlow(0)
 

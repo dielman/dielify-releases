@@ -47,6 +47,12 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="dielify" android:host="pair" />
             </intent-filter>
+            <!-- A playlist link shared from the Spotify / YouTube app: becomes a Dielify playlist (12 Nov 2026) -->
+            <intent-filter android:label="Make a Dielify playlist">
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
         </activity>
         <!-- Google TV: its own front door with TV screens (tv/TvActivity.kt) -->
         <activity
