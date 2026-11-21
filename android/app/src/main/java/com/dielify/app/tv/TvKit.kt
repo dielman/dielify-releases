@@ -1,5 +1,7 @@
 package com.dielify.app.tv
 
+import androidx.compose.foundation.horizontalScroll
+
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -169,7 +171,9 @@ fun TvSongRow(n: Int?, title: String, sub: String, length: String, onClick: () -
 /** A row of buttons under a page header. */
 @Composable
 fun TvActions(content: @Composable RowScope.() -> Unit) {
-    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically, content = content)
+    // scrolls sideways when the buttons don't fit (the remote's focus brings each one into view)
+    Row(androidx.compose.ui.Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically, content = content)
 }
 
 /** Centered message (loading, nothing here, errors). */

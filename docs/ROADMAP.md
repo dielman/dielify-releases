@@ -325,6 +325,7 @@ Also owed from earlier releases: Josh hasn't yet confirmed on his devices most o
   replaced by worse ones, and full-quality copies replace the lower ones when Premium is back.
 - Notifications section (PC side bar, phone top-bar bell).
 - Downloads: Clear failed.
+- Artist pages for YouTube Music artists (phone, TV, PC): top songs, radio, never play, follow, albums, fans also like.
 
 ## Not on the road to 1.0
 

@@ -98,6 +98,7 @@ sealed interface TvPage {
     data class Playlist(val id: Long, val name: String) : TvPage
     data class YtAlbum(val id: String, val name: String) : TvPage
     data class YtPlaylist(val id: String, val name: String) : TvPage
+    data class YtArtist(val id: String, val name: String) : TvPage  // a YouTube Music artist (21 Nov)
 }
 
 /** The TV's own little navigation: a stack of pages, Back pops. */
@@ -225,6 +226,7 @@ private fun TvPageContent(vm: AppViewModel, nav: TvNav) {
         is TvPage.Playlist -> TvPlaylist(vm, nav, p)
         is TvPage.YtAlbum -> TvYtCollection(vm, nav, p.name) { vm.server.ytAlbum(p.id) }
         is TvPage.YtPlaylist -> TvYtCollection(vm, nav, p.name) { vm.server.ytPlaylist(p.id) }
+        is TvPage.YtArtist -> TvYtArtist(vm, nav, p)
     }
 }
 

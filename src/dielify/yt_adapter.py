@@ -534,9 +534,17 @@ class YTMusicAdapter:
                     it.subtitle = r.get("type") or kind
                     out.append(it)
             return out
+        songs = [s for s in _items((raw.get("songs") or {}).get("results")) if s.type in ("song", "video")]
+        for s in songs:
+            s.type = "song"
+        related = [a for a in (to_item(r) for r in (raw.get("related") or {}).get("results") or [])
+                   if a is not None and a.type == "artist"]
         return {"name": raw.get("name") or "", "description": raw.get("description") or None,
                 "thumbnail": _best_thumb(raw.get("thumbnails")),
-                "albums": releases("albums", "Album"), "singles": releases("singles", "Single")}
+                "albums": releases("albums", "Album"), "singles": releases("singles", "Single"),
+                "songs": songs, "related": related,
+                "songs_playlist": (raw.get("songs") or {}).get("browseId"),
+                "has_radio": bool(raw.get("radioId") or raw.get("shuffleId"))}
 
     def search_items(self, query: str, kind: str = "song", limit: int = 20) -> list[YTItem]:
         if kind not in ITEM_TYPES:

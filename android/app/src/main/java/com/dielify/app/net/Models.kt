@@ -273,6 +273,24 @@ data class MixStatus(
 @Serializable data class RenamePlaylist(val name: String)
 @Serializable data class LinkIn(val url: String)
 
+/** A YouTube Music artist's page (api/yt/artist/{id}). */
+@Serializable
+data class YtArtist(
+    val id: String,
+    val name: String = "",
+    val description: String? = null,
+    val thumbnail: String? = null,
+    @SerialName("top_songs") val topSongs: List<Item> = emptyList(),
+    @SerialName("all_songs_playlist") val allSongsPlaylist: String? = null,
+    val albums: List<Item> = emptyList(),
+    val singles: List<Item> = emptyList(),
+    val related: List<Item> = emptyList(),
+    @SerialName("has_radio") val hasRadio: Boolean = false,
+    val rating: Int = 0,
+    val followed: Boolean = false,
+    @SerialName("library_artist_id") val libraryArtistId: Long? = null,
+)
+
 /** Something the household should know (api/notifications), e.g. YouTube Music Premium lapsed. */
 @Serializable
 data class Notice(

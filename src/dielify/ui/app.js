@@ -366,6 +366,38 @@ async function viewArtist(id) {
   } catch (e) { failed(e); }
 }
 
+// A YouTube Music artist (Josh, 21 Nov 2026: clicking one only started their radio): top songs,
+// radio, like / less / never play, follow, albums, singles, fans also like.
+async function viewYtArtist(id, name = "Artist") {
+  enter(`ytartist:${id}`, name, () => viewYtArtist(id, name), true);
+  show(h("h1", {}, name), skeleton("list"));
+  try {
+    const a = await api(`/api/yt/artist/${encodeURIComponent(id)}`);
+    if (!here || here.key !== `ytartist:${id}`) return;  // moved on while it loaded
+    const about = a.description ? h("div", { class: "about" }, h("h2", {}, "About"),
+      h("p", { class: "bio clamp" }, a.description),
+      a.description.length > 280 ? h("button", { class: "link", onclick: (e) => {
+        const p = e.target.previousSibling; p.classList.toggle("clamp"); e.target.textContent = p.classList.contains("clamp") ? "More" : "Less";
+      } }, "More") : null) : null;
+    const songs = a.top_songs;
+    show(backButton("Discover", () => go("discover")),
+      h("div", { class: "hero round" }, art(a.thumbnail, "👤", ""),
+        h("div", {}, h("div", { class: "muted small" }, "Artist"), h("h1", {}, a.name),
+          h("div", { class: "row" },
+            songs.length ? ibtn("play", "Play top songs", { class: "primary", onclick: () => playList(songs.map(ytAsTrack), 0) }) : null,
+            a.has_radio ? ibtn("radio", "Artist radio", { onclick: () => startRadio({ artist_id: a.id }, `${a.name} radio`) }) : null,
+            followButton(a.name, a.id), artistThumbs(a.name),
+            a.library_artist_id ? h("button", { onclick: () => viewArtist(a.library_artist_id) }, "In your library") : null))),
+      songs.length ? h("div", { class: "row" }, h("h2", { style: "flex:1" }, "Top songs"),
+        a.all_songs_playlist ? h("button", { class: "link", onclick: () => viewCollection("playlist", a.all_songs_playlist) }, "See all") : null) : null,
+      songs.length ? ytTrackTable(songs) : null,
+      a.albums.length ? [h("h2", {}, "Albums"), h("div", { class: "grid" }, a.albums.map((x) => ytCard(x)))] : null,
+      a.singles.length ? [h("h2", {}, "Singles and EPs"), h("div", { class: "grid" }, a.singles.map((x) => ytCard(x)))] : null,
+      about,
+      a.related.length ? [h("h2", {}, "Fans also like"), h("div", { class: "grid" }, a.related.map((x) => ytCard(x)))] : null);
+  } catch (e) { failed(e); }
+}
+
 // Follow: their new releases show in Discover's "New for you".
 function followButton(name, channelId = null) {
   const b = h("button", {});
@@ -528,7 +560,7 @@ function ytCard(item, from, list) {  // also used as .map(ytCard): (item, index,
   const open = () => {
     if (item.type === "album" || item.type === "playlist") return viewCollection(item.type, item.id, origin);
     if (item.type === "song" || item.type === "video") return songActions(item, Array.isArray(list) ? list : [item]);
-    if (item.type === "artist") return startRadio({ artist_id: item.id }, `${item.title} radio`);
+    if (item.type === "artist") return viewYtArtist(item.id, item.title);
   };
   return h("div", { class: "card", onclick: open, title: `${item.title}${sub ? " — " + sub : ""}` },
     art(item.thumbnail, item.type === "artist" ? "👤" : "♪"),
@@ -609,7 +641,7 @@ async function viewYtSearch(q, type = "song") {
   try {
     await refreshStatus();
     if (status.offline) return show(h("h1", {}, "Search"), offlineNotice());
-    const tabs = h("div", { class: "tabs" }, ["song", "album", "playlist", "video"].map((t) =>
+    const tabs = h("div", { class: "tabs" }, ["song", "artist", "album", "playlist", "video"].map((t) =>
       h("button", { class: t === type ? "active" : "", onclick: () => viewYtSearch(q, t) }, t[0].toUpperCase() + t.slice(1) + "s")));
     const cached = searchCache.get(`${type}:${q}`);
     let items;
@@ -2121,8 +2153,10 @@ function artistThumbs(name) {
         async () => { await rate("artist", { name }, v === UP ? 0 : UP); paint(); }, { class: `ib${v === UP ? " on" : ""}` }),
       ib("thumbDown", v === DOWN ? "Less of this artist (click to undo)" : "Less of this artist (hold to ban)",
         async () => { if (!heldA) { await rate("artist", { name }, v === DOWN ? 0 : DOWN); paint(); } }, { class: `ib${v === DOWN ? " on" : ""}` }),
-      v === BAN ? h("span", { class: "muted small" }, " Banned · ",
-        h("button", { class: "link", onclick: async () => { await rate("artist", { name }, 0, `Unbanned ${name}`); paint(); } }, "unban")) : "");
+      v === BAN ? h("span", { class: "muted small" }, " Never played · ",
+        h("button", { class: "link", onclick: async () => { await rate("artist", { name }, 0, `${name} can play again`); paint(); } }, "undo"))
+        : h("button", { class: "link small", style: "margin-left:8px", title: "Never play this artist anywhere in Dielify",
+          onclick: async () => { await rate("artist", { name }, BAN, `${name} won't play any more`); paint(); } }, "Never play"));
     const down = box.children[1];
     let t = null, heldA = false;
     down.addEventListener("pointerdown", () => { heldA = false; t = setTimeout(async () => { heldA = true; await rate("artist", { name }, BAN, `Banned ${name}`); paint(); }, 700); });

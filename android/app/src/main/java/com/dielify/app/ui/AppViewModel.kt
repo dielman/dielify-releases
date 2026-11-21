@@ -44,6 +44,7 @@ sealed interface Screen {
     data class SimilarPage(val videoId: String, val name: String) : Screen
     data class SavedAlbumPage(val album: String, val artist: String) : Screen
     data object StatsPage : Screen
+    data class YtArtistPage(val id: String, val name: String) : Screen  // a YouTube Music artist (21 Nov)
     data object NotificationsPage : Screen  // things to know, e.g. Premium lapsed (21 Nov)
     data class PlaylistPage(val id: Long, val name: String) : Screen
     data object JamPage : Screen
@@ -212,7 +213,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             item.isSong -> playItems(queue, item)
             item.type == "album" -> open(Screen.YtAlbumPage(item.id, item.title))
             item.type == "playlist" -> open(Screen.YtPlaylistPage(item.id, item.title))
-            item.type == "artist" -> { searchRequest.value = item.title; selectTab(Tab.Search) }
+            item.type == "artist" -> open(Screen.YtArtistPage(item.id, item.title))
         }
     }
 

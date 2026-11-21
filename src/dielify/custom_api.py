@@ -9,6 +9,7 @@ for that device; send it as "Authorization: Bearer <token>" on every other call.
 
 from __future__ import annotations
 
+import re
 import logging
 import threading
 import time
@@ -549,6 +550,45 @@ def yt_stream(video_id: str, request: Request, s: Session = Depends(media_sessio
 def yt_album(browse_id: str, s: Session = Depends(session)) -> Collection:
     info, tracks = youtube.call(s.user.profile, "album", browse_id)
     return _collection(s, info, tracks)
+
+
+class YtArtist(BaseModel):
+    """A YouTube Music artist's page (Josh, 21 Nov: tapping an artist only searched their name)."""
+    id: str = Field(description="YouTube Music channel id (use with POST /radio artist_id)")
+    name: str
+    description: str | None = None
+    thumbnail: str | None = None
+    top_songs: list[Item] = Field(description="Their top songs, as YouTube Music shows them (about 5)")
+    all_songs_playlist: str | None = Field(None, description="All their songs: open with /yt/playlist/{id}")
+    albums: list[Item]
+    singles: list[Item]
+    related: list[Item] = Field(description="Fans also like (artists)")
+    has_radio: bool = Field(description="YouTube Music has a radio for them")
+    rating: int = Field(description="Your rating of the artist: 1 up, -1 down, -2 never play, 0 none")
+    followed: bool = Field(description="You follow them (their new releases show in New for you)")
+    library_artist_id: int | None = Field(None, description="The same artist in your library, if there")
+
+
+@router.get("/yt/artist/{channel_id}", response_model=YtArtist, tags=["youtube"])
+def yt_artist(channel_id: str, s: Session = Depends(session)) -> YtArtist:
+    from . import ratings, releases
+    if not re.match(r"^[A-Za-z0-9_-]{2,64}$", channel_id):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "That isn't an artist")
+    page = youtube.call(s.user.profile, "artist_page", channel_id)
+    name = page["name"]
+    r = _ratings(s)
+    lookups = 6 if s.kid else 0
+    mine = next((a for a in s.lib.artists() if a["name"].casefold() == name.casefold()), None) if name else None
+    return YtArtist(
+        id=channel_id, name=name, description=page.get("description"), thumbnail=page.get("thumbnail"),
+        top_songs=_items(page.get("songs") or [], s.lib, lookups=lookups),
+        albums=_items(page.get("albums") or [], s.lib, lookups=lookups),
+        singles=_items(page.get("singles") or [], s.lib, lookups=lookups),
+        related=_items(page.get("related") or [], s.lib),
+        has_radio=bool(page.get("has_radio")), all_songs_playlist=page.get("songs_playlist"),
+        rating=r.artists.get(ratings.artist_key(name), 0) if name else 0,
+        followed=releases.is_followed(s.lib.profile, name) if name else False,
+        library_artist_id=mine["id"] if mine else None)
 
 
 @router.get("/yt/playlist/{playlist_id}", response_model=Collection, tags=["youtube"])

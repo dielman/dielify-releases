@@ -802,6 +802,17 @@ src/dielify/
   failed: POST /api/downloads/clear-failed. PC: Notifications in the side bar (badge, viewNotices), "Clear failed" in
   Downloads > Finished. Phone: bell in the top bar (badge) -> NotificationsScreen, "Clear failed" in Downloads.
   Checked on the test copy (PC in the browser, phone emulator). 246 tests.
+- **YouTube artist pages (Josh, 21 Nov; built, not released):** tapping a YouTube artist only searched their name
+  (phone, TV) or started their radio (PC). Now GET /api/yt/artist/{channel_id} (YtArtist: description, thumbnail,
+  top_songs (~5, YouTube's page) + all_songs_playlist (VLOLAK... "See all", opens as a playlist, 60 for Drake),
+  albums, singles, related = fans also like, has_radio, rating, followed, library_artist_id); yt_adapter.artist_page
+  adds songs / related / songs_playlist / has_radio (checked live on Drake). Phone: Screen.YtArtistPage /
+  YtArtistScreen (Play top songs, Artist radio, Follow, thumbs, In your library, About, Top songs + See all, Albums,
+  Singles, Fans also like). TV: TvPage.YtArtist / TvYtArtist (Play, Radio, Like, Never play / Allow again; top songs,
+  All top songs, shelves) and an "Artists on YouTube Music" shelf in TV search; TvActions rows now scroll sideways
+  when buttons don't fit. PC: viewYtArtist, Artists tab in YouTube search (it had none). Artist thumbs on all pages
+  now show a plain "Never play" (ban) button; holding thumbs-down still bans too. Checked on the test copy: PC in the
+  browser, phone + Google TV emulators. 247 tests.
 - **Garmin Edge 530 trial (11 Nov):** garmin/ = Connect IQ app (music controls + ride numbers from
   Activity.getActivityInfo); builds, 5 unit tests pass in the Edge 530 simulator (SDK 9.3.0 + device files + developer
   key in E:\Legit\Code\dielify-build-tools\garmin; device files downloaded by Josh's sign-in into Claude's

@@ -132,7 +132,8 @@ fun ArtistThumbs(vm: AppViewModel, name: String) {
         ThumbDownButton(v == Ratings.DOWN, "Less of this artist (hold to ban)",
             onTap = { rate(if (v == Ratings.DOWN) 0 else Ratings.DOWN) },
             onHold = { rate(Ratings.BAN, "Banned $name") })
-        if (v == Ratings.BAN) TextButton(onClick = { rate(0, "Unbanned $name") }) { Text("Banned · unban") }
+        if (v == Ratings.BAN) TextButton(onClick = { rate(0, "Unbanned $name") }) { Text("Never played · undo") }
+        else TextButton(onClick = { rate(Ratings.BAN, "$name won't play any more") }) { Text("Never play") }
     }
 }
 

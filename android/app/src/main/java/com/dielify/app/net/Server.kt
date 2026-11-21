@@ -361,6 +361,7 @@ class Server(private val context: Context, private val accounts: AccountStore) {
         send("POST", "api/downloads/clear-failed")
     }
     suspend fun notifications(): Notices = get("api/notifications")
+    suspend fun ytArtist(id: String): YtArtist = get("api/yt/artist/$id")
     suspend fun readNotifications() {
         send("POST", "api/notifications/read")
     }

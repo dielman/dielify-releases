@@ -21,6 +21,11 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Radio
+import androidx.compose.material.icons.filled.ThumbUp
+import androidx.compose.material.icons.filled.Block
+import com.dielify.app.dielify
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -95,7 +100,7 @@ fun ItemCard(nav: TvNav, vm: AppViewModel, it: Item) =
         when (it.type) {
             "album" -> nav.open(TvPage.YtAlbum(it.id, it.title))
             "playlist" -> nav.open(TvPage.YtPlaylist(it.id, it.title))
-            "artist" -> nav.place(TvPage.Search).also { _ -> vm.searchRequest.value = it.title }
+            "artist" -> nav.open(TvPage.YtArtist(it.id, it.title))
             else -> nav.playAnd { vm.playItems(listOf(it), it) }
         }
     }) { Thumb(it.thumbnail, null, round = it.type == "artist", modifier = Modifier.fillMaxSize()) }
@@ -340,6 +345,59 @@ fun TvYtCollection(vm: AppViewModel, nav: TvNav, name: String, load: suspend () 
     }
 }
 
+/** A YouTube Music artist (Josh, 21 Nov 2026): top songs, radio, like / never play, albums, fans also like. */
+@Composable
+fun TvYtArtist(vm: AppViewModel, nav: TvNav, p: TvPage.YtArtist) {
+    val ratings = androidx.compose.ui.platform.LocalContext.current.dielify.ratings
+    val all by ratings.all.collectAsStateWithLifecycle()
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    TvLoaded(p, { vm.server.ytArtist(p.id) }) { a ->
+        val v = all.let { ratings.artistValue(a.name) }
+        fun rate(value: Int, msg: String) = scope.launch {
+            runCatching { ratings.rate("artist", a.name, value) }.onSuccess { vm.messages.tryEmit(msg) }
+        }
+        LazyColumn(contentPadding = PaddingValues(bottom = TvPadV * 2)) {
+            item {
+                TvHeader(a.name, a.description?.take(180)?.let { if (a.description.length > 180) "$it…" else it } ?: "Artist", null,
+                    { Thumb(a.thumbnail, null, round = true, modifier = Modifier.fillMaxSize()) }) {
+                    TvActions {
+                        FocusFirst { m ->
+                            TvButton("Play", Icons.Filled.PlayArrow, m, primary = true) {
+                                if (a.topSongs.isNotEmpty()) nav.playAnd { vm.playItems(a.topSongs, a.topSongs.first()) }
+                            }
+                        }
+                        if (a.hasRadio) TvButton("Radio", Icons.Filled.Radio) {
+                            nav.playAnd { vm.startRadio(com.dielify.app.net.RadioIn(artistId = a.id), "${a.name} radio") }
+                        }
+                        TvButton(if (v == com.dielify.app.net.Ratings.UP) "Liked" else "Like", Icons.Filled.ThumbUp) {
+                            if (v == com.dielify.app.net.Ratings.UP) rate(0, "Not liked any more") else rate(com.dielify.app.net.Ratings.UP, "Liked ${a.name}")
+                        }
+                        TvButton(if (v == com.dielify.app.net.Ratings.BAN) "Allow again" else "Never play", Icons.Filled.Block) {
+                            if (v == com.dielify.app.net.Ratings.BAN) rate(0, "${a.name} can play again")
+                            else rate(com.dielify.app.net.Ratings.BAN, "${a.name} won't play any more")
+                        }
+                    }
+                }
+            }
+            if (a.topSongs.isNotEmpty()) item {
+                Text("Top songs", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(start = TvPadH, bottom = 6.dp))
+            }
+            itemsIndexed(a.topSongs, key = { i, it -> "s$i${it.id}" }) { i, it -> ItemRow(vm, nav, a.topSongs, i, it) }
+            a.allSongsPlaylist?.let { pl ->
+                item {
+                    Box(Modifier.padding(start = TvPadH, top = 8.dp)) {
+                        TvButton("All top songs", Icons.Filled.PlayArrow) { nav.open(TvPage.YtPlaylist(pl, "${a.name}: top songs")) }
+                    }
+                }
+            }
+            item { Spacer(Modifier.height(24.dp)) }
+            item { TvShelf("Albums", a.albums, { it.id }) { ItemCard(nav, vm, it) } }
+            item { TvShelf("Singles and EPs", a.singles, { it.id }) { ItemCard(nav, vm, it) } }
+            item { TvShelf("Fans also like", a.related, { it.id }) { ItemCard(nav, vm, it) } }
+        }
+    }
+}
+
 // --- Search -----------------------------------------------------------------------------------
 
 @Composable
@@ -362,9 +420,14 @@ fun TvSearch(vm: AppViewModel, nav: TvNav) {
                 val lib = async { vm.server.search(query) }
                 val songs = async { runCatching { vm.server.ytSearch(query, "song") }.getOrDefault(emptyList()) }
                 val albums = async { runCatching { vm.server.ytSearch(query, "album") }.getOrDefault(emptyList()) }
-                Triple(lib.await(), songs.await(), albums.await())
+                val artists = async { runCatching { vm.server.ytSearch(query, "artist") }.getOrDefault(emptyList()) }
+                listOf(lib.await(), songs.await(), albums.await(), artists.await())
             }
-        }) { (lib, songs, albums) ->
+        }) { found ->
+            @Suppress("UNCHECKED_CAST") val lib = found[0] as com.dielify.app.net.LibrarySearch
+            @Suppress("UNCHECKED_CAST") val songs = found[1] as List<Item>
+            @Suppress("UNCHECKED_CAST") val albums = found[2] as List<Item>
+            @Suppress("UNCHECKED_CAST") val artists = found[3] as List<Item>
             LazyColumn(contentPadding = PaddingValues(top = 20.dp, bottom = TvPadV * 2)) {
                 item { TvShelf("Your albums", lib.albums, { it.id }) { AlbumCard(vm, nav, it) } }
                 item {
@@ -377,6 +440,7 @@ fun TvSearch(vm: AppViewModel, nav: TvNav) {
                 if (lib.tracks.isNotEmpty()) item { Text("Your songs", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(start = TvPadH, bottom = 6.dp)) }
                 itemsIndexed(lib.tracks.take(20), key = { _, t -> "t${t.id}" }) { i, t -> TrackRow(vm, nav, lib.tracks, i, t) }
                 item { Spacer(Modifier.height(24.dp)) }
+                item { TvShelf("Artists on YouTube Music", artists, { it.id }) { ItemCard(nav, vm, it) } }
                 item { TvShelf("Albums on YouTube Music", albums, { it.id }) { ItemCard(nav, vm, it) } }
                 if (songs.isNotEmpty()) item { Text("Songs on YouTube Music", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(start = TvPadH, bottom = 6.dp)) }
                 itemsIndexed(songs, key = { i, it -> "y$i${it.id}" }) { i, it -> ItemRow(vm, nav, songs, i, it) }
