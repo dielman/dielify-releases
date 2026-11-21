@@ -777,6 +777,14 @@ src/dielify/
   progress + not-found list. Phone: "Link" button + share target (ACTION_SEND text/plain: Share > Dielify from the
   Spotify / YouTube app starts the import at once), ImportLinkDialog. Checked on the test copy (PC in the browser,
   phone emulator incl. share). 237 tests.
+- **Android Auto shuffle + repeat (Josh, 21 Nov: missing in the car; built, not released):** AA only draws play/
+  pause/next/prev itself; extra buttons must be offered by the app. PlaybackService: media button preferences =
+  Shuffle + Repeat CommandButtons with custom SessionCommands com.dielify.SHUFFLE / com.dielify.REPEAT (onConnect adds
+  them for every controller, onCustomCommand toggles; repeat cycles off -> all -> one), refreshed from the widget
+  listener on shuffle/repeat changes and device swaps. **Slot must be SLOT_OVERFLOW:** with SLOT_FORWARD/BACK_SECONDARY
+  Media3 published no custom actions to the platform session (dumpsys media_session: custom actions=[]). Checked on the
+  phone emulator: custom actions "Shuffle off"/"Repeat off" published; pressing them on the system media player gave
+  "Shuffle on"/"Repeat all". Not seen in a car yet.
 - **Garmin Edge 530 trial (11 Nov):** garmin/ = Connect IQ app (music controls + ride numbers from
   Activity.getActivityInfo); builds, 5 unit tests pass in the Edge 530 simulator (SDK 9.3.0 + device files + developer
   key in E:\Legit\Code\dielify-build-tools\garmin; device files downloaded by Josh's sign-in into Claude's

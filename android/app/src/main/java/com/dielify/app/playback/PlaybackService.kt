@@ -287,6 +287,7 @@ class PlaybackService : MediaLibraryService() {
         session = MediaLibrarySession.Builder(this, shown, Callback())
             .setBitmapLoader(bitmaps!!)
             .setSessionActivity(open)
+            .setMediaButtonPreferences(modeButtons(shown))
             .build()
         setMediaNotificationProvider(
             DefaultMediaNotificationProvider.Builder(this).build().apply { setSmallIcon(R.drawable.ic_notification) }
@@ -307,14 +308,52 @@ class PlaybackService : MediaLibraryService() {
     private val widgetListener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) {
             if (events.containsAny(Player.EVENT_MEDIA_METADATA_CHANGED, Player.EVENT_IS_PLAYING_CHANGED,
-                    Player.EVENT_MEDIA_ITEM_TRANSITION, Player.EVENT_PLAYBACK_STATE_CHANGED, Player.EVENT_DEVICE_INFO_CHANGED)) refreshWidget()
+                    Player.EVENT_MEDIA_ITEM_TRANSITION, Player.EVENT_PLAYBACK_STATE_CHANGED, Player.EVENT_DEVICE_INFO_CHANGED,
+                    Player.EVENT_SHUFFLE_MODE_ENABLED_CHANGED, Player.EVENT_REPEAT_MODE_CHANGED)) refreshWidget()
         }
     }
 
     /** The player the app, notification and widget control right now (this phone, a speaker or another device). */
     fun shownPlayer(): Player? = session?.player
 
+    // --- shuffle + repeat buttons ------------------------------------------------------------
+    // Android Auto draws play/pause/next/previous by itself; anything else (shuffle, repeat) only
+    // shows when the app offers it as a button of its own (Josh, 21 Nov: missing in the car).
+    // They also show on the phone's media notification.
+
+    private var shownModes: Pair<Boolean, Int>? = null
+
+    private fun modeButtons(p: Player): List<androidx.media3.session.CommandButton> {
+        val shuffle = p.shuffleModeEnabled
+        val repeat = p.repeatMode
+        shownModes = shuffle to repeat
+        val b = androidx.media3.session.CommandButton.Builder(
+            if (shuffle) androidx.media3.session.CommandButton.ICON_SHUFFLE_ON else androidx.media3.session.CommandButton.ICON_SHUFFLE_OFF)
+            .setDisplayName(if (shuffle) "Shuffle on" else "Shuffle off")
+            .setSessionCommand(SHUFFLE_COMMAND)
+            .setSlots(androidx.media3.session.CommandButton.SLOT_OVERFLOW)
+            .build()
+        val r = androidx.media3.session.CommandButton.Builder(when (repeat) {
+            Player.REPEAT_MODE_ALL -> androidx.media3.session.CommandButton.ICON_REPEAT_ALL
+            Player.REPEAT_MODE_ONE -> androidx.media3.session.CommandButton.ICON_REPEAT_ONE
+            else -> androidx.media3.session.CommandButton.ICON_REPEAT_OFF
+        })
+            .setDisplayName(when (repeat) { Player.REPEAT_MODE_ALL -> "Repeat all"; Player.REPEAT_MODE_ONE -> "Repeat one"; else -> "Repeat off" })
+            .setSessionCommand(REPEAT_COMMAND)
+            .setSlots(androidx.media3.session.CommandButton.SLOT_OVERFLOW)
+            .build()
+        return listOf(b, r)
+    }
+
+    private fun refreshModeButtons() {
+        val s = session ?: return
+        val p = s.player
+        if (shownModes == (p.shuffleModeEnabled to p.repeatMode)) return
+        s.setMediaButtonPreferences(modeButtons(p))
+    }
+
     private fun refreshWidget() {
+        refreshModeButtons()
         val p = session?.player ?: return
         val meta = p.mediaMetadata
         val title = meta.title?.toString()
@@ -740,6 +779,37 @@ class PlaybackService : MediaLibraryService() {
     }
 
     private inner class Callback : MediaLibrarySession.Callback {
+        /** Every controller (the car, the notification, this app) may use the shuffle + repeat buttons. */
+        override fun onConnect(session: MediaSession, controller: MediaSession.ControllerInfo): MediaSession.ConnectionResult {
+            val commands = MediaSession.ConnectionResult.DEFAULT_SESSION_AND_LIBRARY_COMMANDS.buildUpon()
+                .add(SHUFFLE_COMMAND).add(REPEAT_COMMAND).build()
+            return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
+                .setAvailableSessionCommands(commands).build()
+        }
+
+        override fun onCustomCommand(
+            session: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            customCommand: androidx.media3.session.SessionCommand,
+            args: android.os.Bundle,
+        ): ListenableFuture<androidx.media3.session.SessionResult> {
+            val p = session.player
+            when (customCommand.customAction) {
+                SHUFFLE_COMMAND.customAction ->
+                    if (p.isCommandAvailable(Player.COMMAND_SET_SHUFFLE_MODE)) p.shuffleModeEnabled = !p.shuffleModeEnabled
+                REPEAT_COMMAND.customAction ->
+                    if (p.isCommandAvailable(Player.COMMAND_SET_REPEAT_MODE)) p.repeatMode = when (p.repeatMode) {
+                        Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
+                        Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
+                        else -> Player.REPEAT_MODE_OFF
+                    }
+                else -> return Futures.immediateFuture(
+                    androidx.media3.session.SessionResult(androidx.media3.session.SessionError.ERROR_NOT_SUPPORTED))
+            }
+            refreshModeButtons()
+            return Futures.immediateFuture(androidx.media3.session.SessionResult(androidx.media3.session.SessionResult.RESULT_SUCCESS))
+        }
+
         /**
          * While the session controls another device, play/pause/stop only count from this
          * app, the notification / lock screen (System UI) and Android Auto. Anything else
@@ -972,6 +1042,8 @@ class PlaybackService : MediaLibraryService() {
         const val YT_ALBUM = "yt-album:"
         const val YT_PLAYLIST = "yt-playlist:"
         const val PHONE_ALBUM = "phone-album:"
+        val SHUFFLE_COMMAND = androidx.media3.session.SessionCommand("com.dielify.SHUFFLE", android.os.Bundle.EMPTY)
+        val REPEAT_COMMAND = androidx.media3.session.SessionCommand("com.dielify.REPEAT", android.os.Bundle.EMPTY)
         val TRUSTED_CONTROLLERS = setOf("com.android.systemui", "com.google.android.projection.gearhead")
         const val BUFFER_MS = 15 * 60_000
     }
