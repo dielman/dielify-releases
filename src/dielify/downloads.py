@@ -28,7 +28,9 @@ FINISHED = ("done", "failed", "cancelled")
 MAX_ATTEMPTS = 3
 RETRY_DELAYS_S = (30, 120)  # wait before the 2nd and 3rd attempt
 SIGNIN_CHECK_S = 600        # re-confirm the YouTube sign-in at most this often
-NEXT_ORDER = "CASE WHEN priority > 0 THEN 0 ELSE 1 END, priority, id"  # "next" first, in order
+# "next" first (in the order marked), then normal, then upgrades to full quality (priority -1)
+NEXT_ORDER = "CASE WHEN priority > 0 THEN 0 WHEN priority < 0 THEN 2 ELSE 1 END, priority, id"
+UPGRADE = "upgrade"  # request_type of a full-quality copy replacing a lower one (upgrades.py)
 SIGNIN_WAIT_S = 300         # while signed out (or offline), check again this often, ONCE
                             # per profile, not once per waiting download
 
@@ -39,11 +41,14 @@ class _Cancelled(Exception):
 
 def _default_adapter(profile: str) -> YTMusicAdapter:
     from .library import signin_of
-    auth = credstore.load(signin_of(profile))  # a child downloads with the parent's sign-in
+    account = signin_of(profile)
+    auth = credstore.load(account)  # a child downloads with the parent's sign-in
     if auth is None:
         raise NotSignedIn(f"Profile '{profile}' is not signed in to YouTube Music on the PC "
                           "(run: dielify auth login)")
-    return YTMusicAdapter(auth=auth, request_delay_s=settings_mod.load().request_delay_s)
+    adapter = YTMusicAdapter(auth=auth, request_delay_s=settings_mod.load().request_delay_s)
+    adapter.account = account  # reports whether YouTube still offers Premium formats (premium.py)
+    return adapter
 
 
 class DownloadQueue:
@@ -198,6 +203,32 @@ class DownloadQueue:
         with connect() as conn:
             return conn.execute("DELETE FROM downloads WHERE profile = ? AND status IN ('done', 'cancelled')",
                                 (profile,)).rowcount
+
+    def clear_failed(self, profile: str) -> int:
+        """Take failed downloads off the list (Josh, 21 Nov: they stayed stuck there)."""
+        with connect() as conn:
+            return conn.execute("DELETE FROM downloads WHERE profile = ? AND status = 'failed'",
+                                (profile,)).rowcount
+
+    def enqueue_upgrades(self, profile: str, tracks: list[dict]) -> int:
+        """Download songs again at full quality to replace lower-quality copies (upgrades.py).
+        They wait behind everything else (priority -1) and are marked "upgrade"."""
+        now, n = time.time(), 0
+        with connect() as conn:
+            for t in tracks:
+                if conn.execute("SELECT 1 FROM downloads WHERE profile = ? AND video_id = ? AND status IN "
+                                "('approval', 'queued', 'downloading', 'processing')",
+                                (profile, t["video_id"])).fetchone():
+                    continue
+                conn.execute(
+                    "INSERT INTO downloads (profile, video_id, title, artist, request_type, request_title, "
+                    "request_id, status, priority, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                    (profile, t["video_id"], t["title"], t.get("artist"), UPGRADE, "Upgrade to full quality",
+                     uuid.uuid4().hex[:12], "queued", -1, now, now))
+                n += 1
+        if n:
+            self._wake.set()
+        return n
 
     def get(self, profile: str, job_id: int) -> dict | None:
         with connect() as conn:
@@ -368,9 +399,16 @@ class DownloadQueue:
         try:
             s = settings_mod.load()
             lib = library_for(profile, s)
-            res = download_track(adapter, job["video_id"], s, profile, self._progress_hook(job_id))
-            track = lib.track_by_video(job["video_id"])
-            track_id = track["id"] if track else lib.index_file(res.path)
+            res = download_track(adapter, job["video_id"], s, profile, self._progress_hook(job_id),
+                                 overwrite=job["request_type"] == UPGRADE)
+            if res.track_id is not None:  # an upgrade: the song's own row, nobody's library changes
+                track_id = res.track_id
+            else:
+                track = lib.track_by_video(job["video_id"])
+                track_id = track["id"] if track else lib.index_file(res.path)
+            if job["request_type"] == UPGRADE:
+                with connect() as conn:
+                    conn.execute("UPDATE tracks SET upgrade_tried_at = ? WHERE id = ?", (time.time(), track_id))
             if job_id in self._cancel:  # cancelled at the very end: keep the file, report it
                 log.info("Job %d finished after cancel was requested", job_id)
             self._set(job_id, status="done", progress=1.0, track_id=track_id, error=None,

@@ -141,6 +141,7 @@ fun App(vm: AppViewModel) {
             is Screen.SimilarPage -> SimilarScreen(vm, screen)
             is Screen.SavedAlbumPage -> SavedAlbumScreen(vm, screen)
             Screen.StatsPage -> StatsScreen(vm)
+            Screen.NotificationsPage -> NotificationsScreen(vm)
             is Screen.PlaylistPage -> PlaylistScreen(vm, screen)
             is Screen.JamPage -> JamScreen(vm)
             is Screen.PairTv -> PairTvScreen(vm, screen.code)

@@ -44,6 +44,7 @@ sealed interface Screen {
     data class SimilarPage(val videoId: String, val name: String) : Screen
     data class SavedAlbumPage(val album: String, val artist: String) : Screen
     data object StatsPage : Screen
+    data object NotificationsPage : Screen  // things to know, e.g. Premium lapsed (21 Nov)
     data class PlaylistPage(val id: Long, val name: String) : Screen
     data object JamPage : Screen
     data class PairTv(val code: String? = null) : Screen  // sign a TV in (0.9.10)
@@ -575,6 +576,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     suspend fun refreshDownloadCount() {
         runCatching { server.activeDownloads() }.onSuccess { _activeDownloads.value = it.activeTotal ?: 0 }
+        if (System.currentTimeMillis() - noticesCheckedAt > 60_000) refreshNotices()
+    }
+
+    /** Unread notifications (the bell's dot in the top bar). */
+    val unreadNotices = MutableStateFlow(0)
+    private var noticesCheckedAt = 0L
+
+    suspend fun refreshNotices() {
+        noticesCheckedAt = System.currentTimeMillis()
+        runCatching { server.notifications() }.onSuccess { unreadNotices.value = it.unread }
     }
 
     fun setDownloadCount(n: Int) {

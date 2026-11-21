@@ -785,6 +785,23 @@ src/dielify/
   Media3 published no custom actions to the platform session (dumpsys media_session: custom actions=[]). Checked on the
   phone emulator: custom actions "Shuffle off"/"Repeat off" published; pressing them on the system media player gave
   "Shuffle on"/"Repeat all". Not seen in a car yet.
+- **Premium lapse + Notifications + Clear failed (Josh, 21 Nov; built, not released):** Josh's rules: downloads
+  NEVER stop when Premium lapses (standard quality ~128-160 kbps); a lower-quality copy never replaces a higher one;
+  when Premium is back, lower-quality songs are re-downloaded at full quality and replace the old files. `premium.py`
+  (table premium_state): every download / instant play reports whether YouTube offered itag 774/141
+  (yt_adapter._note_premium, only with cookies + adapter.account = sign-in owner, set in downloads._default_adapter and
+  custom_api._YouTube._call); 3 misses in a row -> re-check an earlier Premium song (ref_video), gone = lapsed; no
+  ref -> 8 misses; first Premium sighting ends it. Lapse -> warning notice "YouTube Music Premium has lapsed"
+  (parents only); back -> info notice + upgrades kick. `notices.py` (tables notices, notices_read): GET
+  /api/notifications, POST /api/notifications/read, DELETE /api/notifications/{key} (info only). `upgrades.py`: every
+  6 h + on Premium back, while premium_state.premium = 1, tracks with bitrate_kbps < 200 (LOW_KBPS) and a video id,
+  not tried in 30 days (tracks.upgrade_tried_at, migration adds it) -> queue.enqueue_upgrades (request_type
+  "upgrade", priority -1; NEXT_ORDER now puts priority < 0 after normal). downloader.download_track(overwrite):
+  replaces the song's own file (found by video id in the store), keeps it if the new copy is more than 16 kbps lower
+  (SAME_QUALITY_KBPS), replaced files keep their track row via Library.moved (no one's library changes). Clear
+  failed: POST /api/downloads/clear-failed. PC: Notifications in the side bar (badge, viewNotices), "Clear failed" in
+  Downloads > Finished. Phone: bell in the top bar (badge) -> NotificationsScreen, "Clear failed" in Downloads.
+  Checked on the test copy (PC in the browser, phone emulator). 246 tests.
 - **Garmin Edge 530 trial (11 Nov):** garmin/ = Connect IQ app (music controls + ride numbers from
   Activity.getActivityInfo); builds, 5 unit tests pass in the Edge 530 simulator (SDK 9.3.0 + device files + developer
   key in E:\Legit\Code\dielify-build-tools\garmin; device files downloaded by Josh's sign-in into Claude's
@@ -869,6 +886,11 @@ src/dielify/
 - Wake-on-LAN wanted?
 
 ## Decisions log
+
+- 2026-11-21 (Josh): **if YouTube Music Premium lapses, keep downloading at the lower quality**, with a notice in
+  Notifications. Never replace a higher-quality file with a lower one; when Premium is back, re-download the
+  lower-quality songs and replace them. (Decision 1's ToS premise was an active subscription; Josh chose this
+  knowingly after being told downloads without Premium fall outside what YouTube allows.)
 
 - 2026-11-11 (Josh): **Garmin dropped** ("forget it"). Facts found: Edge 530 = Connect IQ 3.3, no touchscreen (7
   buttons), no built-in music controls; data fields only talk to the phone from API 5.0; Connect IQ apps can't open

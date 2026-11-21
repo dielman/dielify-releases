@@ -380,6 +380,10 @@ MIX_LIMIT = 100  # songs loaded from a YouTube mix (they are endless)
 SONG_MIX = "RDAMVM"  # + video id: YouTube Music's mix of that song
 
 class YTMusicAdapter:
+    # whose YouTube sign-in this is (the store owner), so what YouTube offers can be reported
+    # to premium.py; None = don't report (CLI, tests)
+    account: str | None = None
+
     def __init__(self, auth: dict | None = None, request_delay_s: float = 1.5,
                  language: str = "en"):
         from ytmusicapi import YTMusic
@@ -756,6 +760,24 @@ class YTMusicAdapter:
             os.chmod(cookie_file, 0o600)
         return cookie_file
 
+    def _note_premium(self, info: dict, video_id: str, cookie_file: str | None) -> None:
+        """Tell premium.py whether YouTube offered the Premium formats for this song. Never stops
+        anything: a lapsed Premium only means standard quality (and a notice)."""
+        if not (self.account and cookie_file and info.get("formats")):
+            return
+        from . import premium
+        try:
+            check = premium.observe(self.account, premium.has_premium_formats(info["formats"]), video_id)
+            if check:  # looks lapsed: does a song that had Premium formats still have them?
+                import yt_dlp
+                opts = {"quiet": True, "no_warnings": True, "noplaylist": True, "cookiefile": cookie_file,
+                        "logger": _YdlLogger(), "format": "bestaudio"}
+                with yt_dlp.YoutubeDL(opts) as ydl:
+                    ref = ydl.extract_info(YTM_WATCH_URL.format(check), download=False)
+                premium.confirm(self.account, premium.has_premium_formats(ref.get("formats") or []))
+        except Exception as e:  # noqa: BLE001 - only a report; the download itself goes on
+            log.info("Couldn't check Premium for %s: %s", video_id, e)
+
     def stream_info(self, video_id: str, quality: str = "auto",
                     preferred_format: str = "auto") -> "StreamInfo":
         """Where to fetch a song's audio right now (for playing before it's downloaded).
@@ -781,6 +803,7 @@ class YTMusicAdapter:
                     if attempt == 2 or "Requested format is not available" not in str(e):
                         raise
                     log.info("No audio formats for %s this time, asking YouTube again", video_id)
+            self._note_premium(info, video_id, cookie_file)
             fmt = (info.get("requested_formats") or [info])[0]
             url = fmt.get("url") or info.get("url")
             if not url:
@@ -831,6 +854,7 @@ class YTMusicAdapter:
 
             with yt_dlp.YoutubeDL(opts) as ydl:
                 info = ydl.extract_info(YTM_WATCH_URL.format(video_id), download=True)
+            self._note_premium(info, video_id, cookie_file)
             path = Path(info["requested_downloads"][0]["filepath"])
             if not path.exists():
                 raise YouTubeError("yt-dlp reported success but no file was written")

@@ -357,6 +357,16 @@ class Server(private val context: Context, private val accounts: AccountStore) {
     suspend fun clearFinishedDownloads() {
         send("POST", "api/downloads/clear-finished")
     }
+    suspend fun clearFailedDownloads() {
+        send("POST", "api/downloads/clear-failed")
+    }
+    suspend fun notifications(): Notices = get("api/notifications")
+    suspend fun readNotifications() {
+        send("POST", "api/notifications/read")
+    }
+    suspend fun dismissNotification(key: String) {
+        send("DELETE", "api/notifications/" + android.net.Uri.encode(key))
+    }
 
     suspend fun cancelDownload(id: Long) {
         send("DELETE", "api/downloads/$id")

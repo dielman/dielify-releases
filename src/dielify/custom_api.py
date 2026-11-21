@@ -282,6 +282,7 @@ class _YouTube:
             if profile not in self._adapters:
                 s = settings_mod.load()
                 adapter = YTMusicAdapter(auth=credstore.load(profile), request_delay_s=s.request_delay_s)
+                adapter.account = profile  # instant play reports Premium formats too (premium.py)
                 self._adapters[profile] = (adapter, threading.Lock())
             adapter, lock = self._adapters[profile]
         try:
@@ -635,6 +636,51 @@ def download_next(job_id: int, request: Request, s: Session = Depends(session)) 
 
 class Cleared(BaseModel):
     removed: int
+
+
+@router.post("/downloads/clear-failed", response_model=Cleared, tags=["downloads"])
+def clear_failed_downloads(request: Request, s: Session = Depends(session)) -> Cleared:
+    """Take failed downloads off the list (request the song again to retry it)."""
+    return Cleared(removed=_queue(request).clear_failed(s.user.profile))
+
+
+class Notification(BaseModel):
+    key: str
+    level: str = Field(description="warning (stays while it's true) | info (can be dismissed)")
+    title: str
+    body: str
+    created_at: float
+    read: bool
+    can_dismiss: bool
+
+
+class Notifications(BaseModel):
+    notifications: list[Notification]
+    unread: int
+
+
+@router.get("/notifications", response_model=Notifications, tags=["notifications"])
+def list_notifications(s: Session = Depends(session)) -> Notifications:
+    """Things the household should know (e.g. YouTube Music Premium lapsed). Kids see only
+    notices meant for everyone."""
+    from . import notices
+    items = [Notification(**n) for n in notices.for_person(s.user.profile)]
+    return Notifications(notifications=items, unread=sum(not n.read for n in items))
+
+
+@router.post("/notifications/read", status_code=204, tags=["notifications"])
+def read_notifications(s: Session = Depends(session)) -> Response:
+    from . import notices
+    notices.mark_read(s.user.profile)
+    return Response(status_code=204)
+
+
+@router.delete("/notifications/{key}", status_code=204, tags=["notifications"])
+def dismiss_notification(key: str, s: Session = Depends(session)) -> Response:
+    from . import notices
+    if not notices.dismiss(s.user.profile, key):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Nothing to dismiss")
+    return Response(status_code=204)
 
 
 @router.post("/downloads/clear-finished", response_model=Cleared, tags=["downloads"])

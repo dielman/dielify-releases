@@ -214,6 +214,11 @@ main > button:first-child + :not(.hero) { margin-top: 52px; }
 .setting .value { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .ok { color: var(--ok); }
 .warn { color: var(--warn); }
+.notice { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md); padding: 14px 16px; margin: 0 0 12px; max-width: 760px; }
+.notice.warning { border-left: 3px solid var(--warn); }
+.notice.unread .notice-head b::after { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); margin-left: 8px; vertical-align: middle; }
+.notice-head { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+.notice p { margin: 8px 0 0; line-height: 1.5; }
 .secret { font-family: Consolas, monospace; font-size: 16px; background: var(--surface-2); padding: 6px 10px; border-radius: var(--r-sm); user-select: all; }
 .settings-tabs { position: sticky; top: -72px; z-index: 3; background: var(--bg); padding: 4px 0 12px; }
 

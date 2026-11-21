@@ -176,6 +176,7 @@ fun TopActions(vm: AppViewModel) {
     LinkLabel(vm)
     CastButton()
     JamButton(vm)
+    NoticeBell(vm)
     IconButton(onClick = { vm.open(Screen.StatsPage) }) { Icon(Icons.Filled.Insights, "Your stats") }
     IconButton(onClick = { vm.open(Screen.Settings) }) { Icon(Icons.Filled.Settings, "Settings") }
 }

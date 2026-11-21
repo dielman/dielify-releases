@@ -273,6 +273,19 @@ data class MixStatus(
 @Serializable data class RenamePlaylist(val name: String)
 @Serializable data class LinkIn(val url: String)
 
+/** Something the household should know (api/notifications), e.g. YouTube Music Premium lapsed. */
+@Serializable
+data class Notice(
+    val key: String,
+    val level: String = "info",   // warning (stays while true) | info (can be dismissed)
+    val title: String = "",
+    val body: String = "",
+    @SerialName("created_at") val createdAt: Double = 0.0,
+    val read: Boolean = false,
+    @SerialName("can_dismiss") val canDismiss: Boolean = false,
+)
+@Serializable data class Notices(val notifications: List<Notice> = emptyList(), val unread: Int = 0)
+
 /** A playlist being made from a Spotify / YouTube link (POST api/playlists/from-link). */
 @Serializable
 data class ImportJob(

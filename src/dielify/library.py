@@ -323,6 +323,32 @@ CREATE TABLE IF NOT EXISTS device_tokens (
     created_at   REAL NOT NULL,
     last_used_at REAL
 );
+
+-- Notifications (notices.py, 21 Nov 2026): things a household should know, e.g. Premium lapsed.
+CREATE TABLE IF NOT EXISTS notices (
+    key          TEXT PRIMARY KEY,
+    store        TEXT NOT NULL COLLATE NOCASE,
+    parents_only INTEGER NOT NULL DEFAULT 1,
+    level        TEXT NOT NULL,
+    title        TEXT NOT NULL,
+    body         TEXT NOT NULL,
+    created_at   REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS notices_read (
+    profile TEXT NOT NULL COLLATE NOCASE,
+    key     TEXT NOT NULL,
+    read_at REAL NOT NULL,
+    PRIMARY KEY (profile, key)
+);
+-- Is the YouTube account still Premium (premium.py)? premium NULL = not known yet.
+CREATE TABLE IF NOT EXISTS premium_state (
+    account    TEXT PRIMARY KEY COLLATE NOCASE,
+    premium    INTEGER,
+    misses     INTEGER NOT NULL DEFAULT 0,
+    ref_video  TEXT,
+    changed_at REAL,
+    checked_at REAL
+);
 """
 
 CONTENT_TYPES = {".m4a": "audio/mp4", ".opus": "audio/ogg", ".ogg": "audio/ogg",
@@ -354,6 +380,9 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE playlists ADD COLUMN kind TEXT NOT NULL DEFAULT 'user'")
         conn.execute("ALTER TABLE playlists ADD COLUMN mix_key TEXT")
         conn.execute("ALTER TABLE playlists ADD COLUMN description TEXT")
+    tcols = {r[1] for r in conn.execute("PRAGMA table_info(tracks)")}
+    if "upgrade_tried_at" not in tcols:  # 21 Nov 2026: when a full-quality copy was last tried (upgrades.py)
+        conn.execute("ALTER TABLE tracks ADD COLUMN upgrade_tried_at REAL")
     if "rules" not in pcols:  # 0.9.6: smart playlists (smart.py)
         conn.execute("ALTER TABLE playlists ADD COLUMN rules TEXT")
     if "shared" not in pcols:  # 0.9.8: shared household playlists (playlists.py)

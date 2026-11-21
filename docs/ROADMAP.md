@@ -318,6 +318,14 @@ Also owed from earlier releases: Josh hasn't yet confirmed on his devices most o
   link", phone "Link" button and Share > Dielify). Spotify: first 100 songs.
 - TV update screen: re-checks the PC when Settings opens; explains a greyed-out install switch.
 
+## Next release (not published yet)
+
+- Android Auto: shuffle and repeat buttons.
+- YouTube Music Premium lapse: downloads carry on at standard quality, a notice says so, better copies are never
+  replaced by worse ones, and full-quality copies replace the lower ones when Premium is back.
+- Notifications section (PC side bar, phone top-bar bell).
+- Downloads: Clear failed.
+
 ## Not on the road to 1.0
 
 Lyrics (removed in 0.9.9, Josh). Hi-res audio (YouTube's limit is ~256k), an AI DJ voice, karaoke voice removal, podcasts,

@@ -580,7 +580,13 @@ fun DownloadsScreen(vm: AppViewModel) {
                                 try { vm.server.clearFinishedDownloads() } catch (e: ApiError) { vm.messages.tryEmit(e.message ?: "Couldn't clear") }
                                 tick++
                             }
-                        }, modifier = Modifier.padding(end = 8.dp)) { Text("Clear finished") }
+                        }) { Text("Clear finished") }
+                        if (finished.any { it.status == "failed" }) TextButton(onClick = {
+                            scope.launch {
+                                try { vm.server.clearFailedDownloads() } catch (e: ApiError) { vm.messages.tryEmit(e.message ?: "Couldn't clear") }
+                                tick++
+                            }
+                        }, modifier = Modifier.padding(end = 8.dp)) { Text("Clear failed") }
                     }
                 }
                 items(finished, key = { "f${it.id}" }) { d ->

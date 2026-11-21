@@ -54,6 +54,7 @@ const ICONS = {
   library: "M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9h-4v4h-2v-4H9V9h4V5h2v4h4v2z",
   groups: "M12 12.75c1.63 0 3.07.39 4.24.9 1.08.48 1.76 1.56 1.76 2.73V18H6v-1.61c0-1.18.68-2.26 1.76-2.73 1.17-.52 2.61-.91 4.24-.91zM4 13c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm1.13 1.1c-.37-.06-.74-.1-1.13-.1-.99 0-1.93.21-2.78.58C.48 14.9 0 15.62 0 16.43V18h4.5v-1.61c0-.83.23-1.61.63-2.29zM20 13c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm4 3.43c0-.81-.48-1.53-1.22-1.85-.85-.37-1.79-.58-2.78-.58-.39 0-.76.04-1.13.1.4.68.63 1.46.63 2.29V18H24v-1.57zM12 6c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3z",
   insights: "M21 8c-1.45 0-2.26 1.44-1.93 2.51l-3.55 3.56c-.3-.09-.74-.09-1.04 0l-2.55-2.55C12.27 10.45 11.46 9 10 9c-1.45 0-2.27 1.44-1.93 2.52l-4.56 4.55C2.44 15.74 1 16.55 1 18c0 1.1.9 2 2 2 1.45 0 2.26-1.44 1.93-2.51l4.55-4.56c.3.09.74.09 1.04 0l2.55 2.55C12.73 16.55 13.54 18 15 18c1.45 0 2.27-1.44 1.93-2.52l3.56-3.55c1.07.33 2.51-.48 2.51-1.93 0-1.1-.9-2-2-2z",
+  notifications: "M12 22c1.1 0 2-.9 2-2h-4c0 1.1.89 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z",
   help: "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z",
   settings: "M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.488.488 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z",
   search: "M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z",
@@ -221,7 +222,7 @@ function go(v, ...args) {
   backStack.length = 0;  // a new section: nothing to go back to
   document.querySelectorAll("#nav button").forEach((b) => b.classList.toggle("active", b.dataset.view === v));
   $("search-input").placeholder = v === "discover" ? "Search YouTube Music" : "Search your library";
-  ({ library: viewLibrary, discover: viewDiscover, downloads: viewDownloads, stats: viewStats, settings: viewSettings, jam: viewJam, help: viewHelp })[v](...args);
+  ({ library: viewLibrary, discover: viewDiscover, downloads: viewDownloads, stats: viewStats, settings: viewSettings, jam: viewJam, help: viewHelp, notices: viewNotices })[v](...args);
 }
 $("search").addEventListener("submit", (e) => {
   e.preventDefault();
@@ -683,7 +684,13 @@ async function renderDownloads(active) {
     toast(`Cleared ${r.removed} finished download${r.removed === 1 ? "" : "s"}`);
     pollDownloads();
   } }, "Clear finished");
-  const done = finished.length ? [h("h2", {}, "Finished", clear), finished.map((d) => h("div", { class: "job" }, who(d),
+  const anyFailed = finished.some((d) => d.status === "failed");
+  const clearFailed = anyFailed ? h("button", { style: "margin-left:8px; font-size:13px", onclick: async () => {
+    const r = await api("/api/downloads/clear-failed", { method: "POST" });
+    toast(`Cleared ${r.removed} failed download${r.removed === 1 ? "" : "s"}`);
+    pollDownloads();
+  } }, "Clear failed") : null;
+  const done = finished.length ? [h("h2", {}, "Finished", clear, clearFailed), finished.map((d) => h("div", { class: "job" }, who(d),
     h("div", { class: `small status-${d.status}` }, label[d.status]),
     d.track_id ? ib("play", "Play", async () => playList([await api(`/api/library/tracks/${d.track_id}`)], 0)) : h("span")))] : null;
 
@@ -691,6 +698,34 @@ async function renderDownloads(active) {
   const keep = main.scrollTop;  // re-drawn every 1.5 s: don't jump back to the top
   show(h("h1", {}, "Downloads"), asks, summary, now, line, done);
   main.scrollTop = keep;
+}
+
+// --- notifications (21 Nov 2026): things the household should know, e.g. YouTube Premium lapsed ---
+async function pollNotices() {
+  try {
+    const r = await api("/api/notifications");
+    $("note-badge").hidden = !r.unread;
+    $("note-badge").textContent = r.unread;
+    return r;
+  } catch { return null; }
+}
+setInterval(pollNotices, 60000);
+setTimeout(pollNotices, 2000);
+
+async function viewNotices() {
+  enter("notices", "Notifications", viewNotices);
+  const r = await pollNotices();
+  if (view !== "notices") return;
+  const when = (t) => new Date(t * 1000).toLocaleString([], { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+  const list = r && r.notifications.length ? r.notifications.map((n) => h("div", { class: `notice ${n.level}${n.read ? "" : " unread"}` },
+    h("div", { class: "notice-head" }, h("b", {}, n.title), h("span", { class: "muted small" }, when(n.created_at))),
+    h("p", {}, n.body),
+    n.can_dismiss ? h("button", { onclick: async () => {
+      try { await api(`/api/notifications/${encodeURIComponent(n.key)}`, { method: "DELETE" }); viewNotices(); } catch (e) { toast(e.message, 6000); }
+    } }, "Dismiss") : h("p", { class: "muted small" }, "This stays here while it's true.")))
+    : [h("p", { class: "muted" }, "Nothing to tell you right now.")];
+  show(h("h1", {}, "Notifications"), list);
+  if (r && r.unread) { await api("/api/notifications/read", { method: "POST" }).catch(() => {}); pollNotices(); }
 }
 
 // --- playlists ---------------------------------------------------------------------------------

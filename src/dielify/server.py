@@ -69,6 +69,9 @@ def create_app(queue: DownloadQueue | None = None) -> FastAPI:
     from .remote import tv_playing
     from .tvupdate import Worker as TvUpdater
     tv_updater = TvUpdater(tv_playing)
+    # songs below Premium quality get a full-quality copy while the account is Premium (upgrades.py)
+    from .upgrades import Worker as Upgrader
+    upgrader = Upgrader(queue)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -85,9 +88,11 @@ def create_app(queue: DownloadQueue | None = None) -> FastAPI:
         artwork_worker.start()
         details_worker.start()
         tv_updater.start()
+        upgrader.start()
         # outside discovery (radio charts, ListenBrainz) is off: Josh didn't want single-song
         # shelves on Discover (8 Nov). The code and /api/discover/outside stay for now.
         yield
+        upgrader.stop()
         tv_updater.stop()
         artwork_worker.stop()
         details_worker.stop()
