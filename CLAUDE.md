@@ -132,7 +132,7 @@ src/dielify/
 | 6 | Android app | Find, request and listen on the road | **Done** 2026-11-08 — closed by Josh before the car test ("assume it works"); Android Auto untested |
 | 7 | Polish (scope set by Josh 8 Nov) | Backups to E:, signed phone release with in-app updates, download-next, playlists, music-video fix | **Done** 2026-11-08 — 0.6.0 published; phone self-update to be confirmed with the first Phase 8 release (Josh) |
 | 8 | Listening features (Josh, 8 Nov) | 1 instant play + download, 2 play history + stats, 4 two-way playlist sync, 3 Dielify-made genre/vibe playlists, 5 outside discovery, 6 remote control between devices | In progress (branch `phase-8`) |
-| 9 | Road to 1.0 (Josh, 9 Nov) | Releases 0.9.1-0.9.11 in `docs/ROADMAP.md`: household + kids accounts first, then discovery, library, sound, phone, together, TV, hardening | In progress: 0.9.13 published 12 Nov; next 1.0.0 |
+| 9 | Road to 1.0 (Josh, 9 Nov) | Releases 0.9.1-0.9.11 in `docs/ROADMAP.md`: household + kids accounts first, then discovery, library, sound, phone, together, TV, hardening | In progress: 0.9.14 published 21 Nov; next 1.0.0 |
 
 ## Current status
 
@@ -813,6 +813,8 @@ src/dielify/
   when buttons don't fit. PC: viewYtArtist, Artists tab in YouTube search (it had none). Artist thumbs on all pages
   now show a plain "Never play" (ban) button; holding thumbs-down still bans too. Checked on the test copy: PC in the
   browser, phone + Google TV emulators. 247 tests.
+- **Published v0.9.14** (21 Nov; Josh: "Publish"; 247 tests; not yet tried by Josh): Android Auto shuffle + repeat,
+  Premium lapse handling + Notifications + Clear failed, YouTube artist pages (all described above).
 - **Garmin Edge 530 trial (11 Nov):** garmin/ = Connect IQ app (music controls + ride numbers from
   Activity.getActivityInfo); builds, 5 unit tests pass in the Edge 530 simulator (SDK 9.3.0 + device files + developer
   key in E:\Legit\Code\dielify-build-tools\garmin; device files downloaded by Josh's sign-in into Claude's

@@ -318,7 +318,7 @@ Also owed from earlier releases: Josh hasn't yet confirmed on his devices most o
   link", phone "Link" button and Share > Dielify). Spotify: first 100 songs.
 - TV update screen: re-checks the PC when Settings opens; explains a greyed-out install switch.
 
-## Next release (not published yet)
+## 0.9.14: Artist pages, Premium lapse, Notifications (published 21 Nov)
 
 - Android Auto: shuffle and repeat buttons.
 - YouTube Music Premium lapse: downloads carry on at standard quality, a notice says so, better copies are never
